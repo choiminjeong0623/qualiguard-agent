@@ -47,9 +47,24 @@ public class IncidentAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(IncidentAnalyzer.class);
     private static final Set<String> DECISIONS = Set.of("NCR_DRAFT", "SENSOR_CHECK", "OBSERVE");
 
-    public record Outcome(Integer analysisId, String equipmentId, String decision, String causeCode, Integer confidence,
-            String ncrNo, boolean mergedIntoExistingNcr, List<String> anomalyIds, long latencyMs,
-            List<String> toolTrace, AnalysisResult result, String error) {
+    /**
+     * 분석 결과.
+     *
+     * @param triggerType      ALARM(경보로 시작) / RECHECK(관찰 판단 뒤 새 경보 없이 재확인)
+     * @param asOfShot         데이터 조회 기준 shot
+     * @param parentAnalysisId 재확인의 바탕이 된 관찰 분석 (경보 분석은 null)
+     */
+    public record Outcome(Integer analysisId, String equipmentId, String triggerType, Long asOfShot,
+            Integer parentAnalysisId, String decision, String causeCode, Integer confidence, String ncrNo,
+            boolean mergedIntoExistingNcr, List<String> anomalyIds, long latencyMs, List<String> toolTrace,
+            AnalysisResult result, String error) {
+    }
+
+    /** 분석 1건의 입력. 경보 분석과 재확인이 같은 실행 경로(execute)를 쓴다. */
+    private record Job(String trigger, String equipmentId, String seedAnomalyId, String seedTs,
+            List<Map<String, Object>> alarms, List<String> anomalyIds, boolean ownsAlarmStatus,
+            Map<String, Object> seedEvidence, String asOf, Long asOfShot, String previousBefore,
+            Integer parentId, String tag, Map<String, Object> recheckInfo) {
     }
 
     private final JdbcTemplate jdbc;
@@ -107,7 +122,7 @@ public class IncidentAnalyzer {
         long seedShot = ((Number) seed.get("shot_no")).longValue();
         String seedTs = (String) seed.get("detected_at");
 
-        // ── 1) 사건 묶기 ─────────────────────────────────────────────
+        // ── 사건 묶기 ────────────────────────────────────────────────
         List<Map<String, Object>> anomalies = jdbc.queryForList("""
                 SELECT anomaly_id, rule_code, rule_name, sensor_key, sensor_name, shot_no, observed,
                        lower_limit, upper_limit, message, CONVERT(VARCHAR(33), detected_at, 127) AS detected_at
@@ -123,16 +138,138 @@ public class IncidentAnalyzer {
                 seedTs, replay ? 0 : props.incidentMinutes(), seedTs);
         List<String> anomalyIds = anomalies.stream().map(a -> (String) a.get("anomaly_id")).toList();
         // 조회 기준 시점: 운영은 사건의 마지막 경보 시각, 재생은 시작 경보 시각 (그 이후 데이터는 보지 않는다)
-        String asOf = replay || anomalies.isEmpty()
-                ? seedTs
-                : (String) anomalies.get(anomalies.size() - 1).get("detected_at");
+        Map<String, Object> last = anomalies.isEmpty() ? null : anomalies.get(anomalies.size() - 1);
+        String asOf = replay || last == null ? seedTs : (String) last.get("detected_at");
+        long asOfShot = replay || last == null ? seedShot : ((Number) last.get("shot_no")).longValue();
         setStatus(anomalyIds, "ANALYZING");
 
-        Map<String, Object> seedEvidence = readMap((String) seed.get("evidence_json"));
-        List<Map<String, Object>> previous = previousJudgements(equipmentId, seedTs, tag);
-        String userPrompt = buildUserPrompt(equipmentId, anomalies, seedEvidence, previous);
+        return execute(new Job("ALARM", equipmentId, seedAnomalyId, seedTs, anomalies, anomalyIds, true,
+                readMap((String) seed.get("evidence_json")), asOf, asOfShot, seedTs, null, tag, null));
+    }
 
-        // ── 2) 에이전트 분석 ─────────────────────────────────────────
+    /**
+     * 관찰(OBSERVE) 판단 뒤 새 경보 없이 일정 shot 이 지났을 때 다시 분석한다.
+     * 모든 관찰 판단에 똑같이 적용하는 규칙이며, 그 시점(asOfShot)까지의 데이터만 쓴다.
+     *
+     * @param parentAnalysisId 관찰 판단을 낸 분석
+     * @param asOfShot         재확인 기준 shot (null 이면 관찰 기준 shot + recheck-shots)
+     * @throws IllegalArgumentException 분석이 없거나 관찰 판단이 아닐 때
+     * @throws IllegalStateException    재확인 횟수 상한에 닿았거나 그 shot 의 데이터가 아직 없을 때
+     */
+    public synchronized Outcome recheck(int parentAnalysisId, Long asOfShot) {
+        Map<String, Object> parent;
+        try {
+            parent = jdbc.queryForMap("""
+                    SELECT g.analysis_id, g.equipment_id, g.seed_anomaly_id, g.anomaly_ids, g.decision, g.run_tag,
+                           COALESCE(g.as_of_shot, s.shot_no) AS base_shot,
+                           CONVERT(VARCHAR(33), COALESCE(g.as_of, s.detected_at), 127) AS base_ts,
+                           CONVERT(VARCHAR(33), s.detected_at, 127) AS seed_ts
+                    FROM dbo.agent_analysis AS g
+                    JOIN dbo.anomaly_event AS s ON s.anomaly_id = g.seed_anomaly_id
+                    WHERE g.analysis_id = ?
+                    """, parentAnalysisId);
+        } catch (EmptyResultDataAccessException e) {
+            throw new IllegalArgumentException("분석 기록을 찾을 수 없습니다: " + parentAnalysisId);
+        }
+        if (!"OBSERVE".equals(parent.get("decision"))) {
+            throw new IllegalArgumentException("관찰(OBSERVE) 판단만 재확인할 수 있습니다: " + parent.get("decision"));
+        }
+        int depth = recheckDepth(parentAnalysisId);
+        if (depth >= props.recheckMax()) {
+            throw new IllegalStateException("새 경보 없는 재확인이 이미 " + depth + "회입니다 (상한 " + props.recheckMax() + ")");
+        }
+        String equipmentId = (String) parent.get("equipment_id");
+        long baseShot = ((Number) parent.get("base_shot")).longValue();
+        long target = asOfShot != null ? asOfShot : baseShot + props.recheckShots();
+        if (target <= baseShot) {
+            throw new IllegalArgumentException("재확인 shot 은 관찰 기준 shot(" + baseShot + ")보다 뒤여야 합니다");
+        }
+        List<String> shotTs = jdbc.queryForList("""
+                SELECT TOP 1 CONVERT(VARCHAR(33), shot_ts, 127) FROM dbo.process_shot
+                WHERE equipment_id = ? AND shot_no = ? AND shot_ts > CAST(? AS DATETIMEOFFSET(3))
+                ORDER BY shot_ts
+                """, String.class, equipmentId, target, parent.get("base_ts"));
+        if (shotTs.isEmpty()) {
+            throw new IllegalStateException(equipmentId + " shot " + target + " 데이터가 아직 없습니다");
+        }
+        String asOf = shotTs.get(0);
+
+        String ids = (String) parent.get("anomaly_ids");
+        List<String> anomalyIds = ids == null || ids.isBlank() ? List.of() : List.of(ids.split(","));
+        // 관찰 판단을 낸 경보들 (재확인에서 새로 생긴 경보는 없음)
+        List<Map<String, Object>> observedAlarms = anomalyIds.isEmpty() ? List.of() : jdbc.queryForList(
+                "SELECT anomaly_id, rule_code, rule_name, sensor_key, sensor_name, shot_no, message "
+                        + "FROM dbo.anomaly_event WHERE anomaly_id IN ("
+                        + anomalyIds.stream().map(x -> "?").collect(Collectors.joining(",")) + ") "
+                        + "ORDER BY detected_at, anomaly_id",
+                anomalyIds.toArray());
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("observedAtShot", baseShot);
+        info.put("currentShot", target);
+        info.put("shotsSinceObservation", target - baseShot);
+        info.put("recheckCount", depth + 1);
+        return execute(new Job("RECHECK", equipmentId, (String) parent.get("seed_anomaly_id"),
+                (String) parent.get("seed_ts"), observedAlarms, anomalyIds, false, null, asOf, target, asOf,
+                parentAnalysisId, (String) parent.get("run_tag"), info));
+    }
+
+    /**
+     * 운영용: 새 경보 없이 recheck-shots 가 지난 관찰 판단을 하나 골라 재확인한다.
+     * 그 설비에 더 최근 분석이 있으면(새 경보가 났으면) 그 분석이 이어받으므로 재확인하지 않는다.
+     */
+    public Optional<Outcome> recheckNextDue() {
+        if (props.recheckShots() <= 0 || props.recheckMax() <= 0) {
+            return Optional.empty();
+        }
+        List<Integer> due = jdbc.queryForList("""
+                SELECT g.analysis_id
+                FROM dbo.agent_analysis AS g
+                JOIN dbo.anomaly_event AS s ON s.anomaly_id = g.seed_anomaly_id
+                WHERE g.decision = 'OBSERVE' AND g.run_tag IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM dbo.agent_analysis AS h
+                                  WHERE h.equipment_id = g.equipment_id AND h.run_tag IS NULL
+                                    AND h.analysis_id > g.analysis_id AND h.decision <> 'FAILED')
+                  AND (SELECT COUNT(*) FROM dbo.agent_analysis AS f
+                        WHERE f.parent_analysis_id = g.analysis_id AND f.decision = 'FAILED') < 2
+                  AND EXISTS (SELECT 1 FROM dbo.process_shot AS p
+                              WHERE p.equipment_id = g.equipment_id
+                                AND p.shot_no = COALESCE(g.as_of_shot, s.shot_no) + ?
+                                AND p.shot_ts > COALESCE(g.as_of, s.detected_at))
+                ORDER BY g.analysis_id
+                """, Integer.class, props.recheckShots());
+        for (Integer id : due) {
+            if (recheckDepth(id) < props.recheckMax()) {
+                return Optional.of(recheck(id, null));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** 이 분석까지 새 경보 없이 이어진 재확인 횟수. */
+    private int recheckDepth(int analysisId) {
+        int depth = 0;
+        Integer cur = analysisId;
+        while (cur != null && depth < 100) {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                    "SELECT trigger_type, parent_analysis_id FROM dbo.agent_analysis WHERE analysis_id = ?", cur);
+            if (rows.isEmpty() || !"RECHECK".equals(rows.get(0).get("trigger_type"))) {
+                break;
+            }
+            depth++;
+            cur = (Integer) rows.get(0).get("parent_analysis_id");
+        }
+        return depth;
+    }
+
+    /** 공통 실행: 프롬프트 → 에이전트 분석 → 결과 저장. */
+    private Outcome execute(Job job) {
+        String equipmentId = job.equipmentId();
+        List<String> anomalyIds = job.anomalyIds();
+        String tag = job.tag();
+        List<Map<String, Object>> previous = previousJudgements(equipmentId, job.previousBefore(), tag);
+        String userPrompt = buildUserPrompt(job, previous);
+
+        // ── 에이전트 분석 ─────────────────────────────────────────────
         List<String> trace = Collections.synchronizedList(new ArrayList<>());
         long t0 = System.nanoTime();
         AnalysisResult result;
@@ -142,7 +279,7 @@ public class IncidentAnalyzer {
             ChatResponse response = chatClient().prompt()
                     .system(AgentPrompts.SYSTEM)
                     .user(userPrompt)
-                    .tools(new QualityTools(jdbc, trace, asOf))
+                    .tools(new QualityTools(jdbc, trace, job.asOf(), t0))
                     .call()
                     .chatResponse();
             String text = allText(response);
@@ -167,17 +304,18 @@ public class IncidentAnalyzer {
             }
         } catch (RuntimeException e) {
             long ms = elapsedMs(t0);
-            setStatus(anomalyIds, "NEW");   // 다시 분석할 수 있게 되돌린다
+            if (job.ownsAlarmStatus()) {
+                setStatus(anomalyIds, "NEW");   // 다시 분석할 수 있게 되돌린다
+            }
             String error = causeChain(e);
-            Integer id = insertAnalysis(equipmentId, seedAnomalyId, anomalyIds, "FAILED", null, null, null,
-                    trace, ms, null, error, tag);
-            log.error("[에이전트] 분석 실패 — {} 경보 {}건: {}", equipmentId, anomalyIds.size(), error, e);
-            return new Outcome(id, equipmentId, "FAILED", null, null, null, false, anomalyIds, ms, trace, null,
-                    error);
+            Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error);
+            log.error("[에이전트] 분석 실패 — {} {} 경보 {}건: {}", equipmentId, job.trigger(), anomalyIds.size(), error, e);
+            return new Outcome(id, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), "FAILED", null, null,
+                    null, false, anomalyIds, ms, trace, null, error);
         }
         long ms = elapsedMs(t0);
 
-        // ── 3) 결과 저장 (하나의 트랜잭션) ────────────────────────────
+        // ── 결과 저장 (하나의 트랜잭션) ──────────────────────────────
         String decision = result.decision().toUpperCase(Locale.ROOT);
         String causeCode = result.causeCode() == null ? "UNKNOWN" : result.causeCode().toUpperCase(Locale.ROOT);
         int confidence = result.confidence() == null ? 0 : Math.max(0, Math.min(100, result.confidence()));
@@ -219,11 +357,11 @@ public class IncidentAnalyzer {
                             OUTPUT INSERTED.ncr_id
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', 'AGENT', CAST(? AS DATETIMEOFFSET(3)), ?, ?)
                             """, Integer.class,
-                            ncrNo, equipmentId, seedAnomalyId, topDefectType(seedEvidence),
-                            relatedSensors(anomalies), truncate(result.title(), 200),
+                            ncrNo, equipmentId, job.seedAnomalyId(), defectType(job),
+                            relatedSensors(job.alarms()), truncate(result.title(), 200),
                             truncate(result.phenomenon(), 1000), truncate(result.suspectedCause(), 1000),
                             evidenceText(result), truncate(result.recommendedAction(), 1000),
-                            seedTs, causeCode, confidence);
+                            job.seedTs(), causeCode, confidence);
                 }
                 for (String id : anomalyIds) {
                     jdbc.update("""
@@ -232,20 +370,36 @@ public class IncidentAnalyzer {
                             """, ncrId, id, ncrId, id);
                 }
                 setStatus(anomalyIds, "NCR_DRAFTED");
-            } else {
+            } else if (job.ownsAlarmStatus()) {
                 setStatus(anomalyIds, "DISMISSED");
             }
-            Integer analysisId = insertAnalysis(equipmentId, seedAnomalyId, anomalyIds, decision, causeCode,
-                    confidence, resultJson, trace, ms, ncrId, null, tag);
-            return new Outcome(analysisId, equipmentId, decision, causeCode, confidence, ncrNo, merged,
-                    anomalyIds, ms, trace, result, null);
+            Integer analysisId = insertAnalysis(job, decision, causeCode, confidence, resultJson, trace, ms, ncrId,
+                    null);
+            return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
+                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null);
         });
 
-        log.info("[에이전트] {} 경보 {}건 → {} / {} (확신도 {}) {}{} — 도구 {}회, {}ms",
-                equipmentId, anomalyIds.size(), decision, causeCode, confidence,
+        log.info("[에이전트] {} {} (shot {}) 경보 {}건 → {} / {} (확신도 {}) {}{} — 도구 {}회, {}ms",
+                equipmentId, job.trigger(), job.asOfShot(), anomalyIds.size(), decision, causeCode, confidence,
                 outcome.ncrNo() == null ? "" : outcome.ncrNo(),
                 outcome.mergedIntoExistingNcr() ? "(기존 초안에 연결)" : "", trace.size(), ms);
         return outcome;
+    }
+
+    /** 초안의 불량 유형: 경보 근거가 있으면 그것을, 재확인이면 기준 시점까지 최근 50 shot 의 최다 불량 유형. */
+    private String defectType(Job job) {
+        if (job.seedEvidence() != null) {
+            return topDefectType(job.seedEvidence());
+        }
+        List<String> rows = jdbc.queryForList("""
+                SELECT TOP 1 defect_type FROM (
+                    SELECT TOP 50 defect_type FROM dbo.process_shot
+                    WHERE equipment_id = ? AND shot_ts <= CAST(? AS DATETIMEOFFSET(3))
+                    ORDER BY shot_ts DESC) AS r
+                WHERE defect_type IS NOT NULL
+                GROUP BY defect_type ORDER BY COUNT(*) DESC
+                """, String.class, job.equipmentId(), job.asOf());
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     // ── 보조 ─────────────────────────────────────────────────────────
@@ -264,26 +418,29 @@ public class IncidentAnalyzer {
     }
 
     /**
-     * 같은 설비에서 현재 시작 경보보다 먼저 난 경보를 시작점으로 한 분석 중,
+     * 같은 설비에서 기준 시각(before)보다 앞선 시점을 기준으로 한 분석 중,
      * merge-minutes 이내이고 run_tag 가 같은(운영은 NULL) 최근 3건의 판단을 읽는다.
+     * 예전 기록처럼 as_of 가 없으면 시작 경보 시각을 기준 시점으로 본다.
      */
-    private List<Map<String, Object>> previousJudgements(String equipmentId, String seedTs, String tag) {
+    private List<Map<String, Object>> previousJudgements(String equipmentId, String before, String tag) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT TOP 3 s.shot_no, g.decision, g.cause_code, g.confidence, g.result_json
+                SELECT TOP 3 COALESCE(g.as_of_shot, s.shot_no) AS shot_no, g.trigger_type, g.decision, g.cause_code,
+                       g.confidence, g.result_json
                 FROM dbo.agent_analysis AS g
                 JOIN dbo.anomaly_event AS s ON s.anomaly_id = g.seed_anomaly_id
                 WHERE g.equipment_id = ?
                   AND g.decision <> 'FAILED'
-                  AND s.detected_at < CAST(? AS DATETIMEOFFSET(3))
-                  AND s.detected_at >= DATEADD(MINUTE, -?, CAST(? AS DATETIMEOFFSET(3)))
+                  AND COALESCE(g.as_of, s.detected_at) < CAST(? AS DATETIMEOFFSET(3))
+                  AND COALESCE(g.as_of, s.detected_at) >= DATEADD(MINUTE, -?, CAST(? AS DATETIMEOFFSET(3)))
                   AND ((? IS NULL AND g.run_tag IS NULL) OR g.run_tag = ?)
-                ORDER BY s.detected_at DESC, g.analysis_id DESC
-                """, equipmentId, seedTs, props.mergeMinutes(), seedTs, tag, tag);
+                ORDER BY COALESCE(g.as_of, s.detected_at) DESC, g.analysis_id DESC
+                """, equipmentId, before, props.mergeMinutes(), before, tag, tag);
         List<Map<String, Object>> out = new ArrayList<>();
         for (Map<String, Object> r : rows) {
             Map<String, Object> result = readMap((String) r.get("result_json"));
             Map<String, Object> m = new LinkedHashMap<>();
-            m.put("seedShotNo", r.get("shot_no"));
+            m.put("shotNo", r.get("shot_no"));
+            m.put("trigger", r.get("trigger_type") == null ? "ALARM" : r.get("trigger_type"));
             m.put("decision", r.get("decision"));
             m.put("causeCode", r.get("cause_code"));
             m.put("confidence", r.get("confidence") == null ? null : ((Number) r.get("confidence")).intValue());
@@ -294,10 +451,9 @@ public class IncidentAnalyzer {
         return out;
     }
 
-    private String buildUserPrompt(String equipmentId, List<Map<String, Object>> anomalies,
-            Map<String, Object> seedEvidence, List<Map<String, Object>> previous) {
+    private String buildUserPrompt(Job job, List<Map<String, Object>> previous) {
         List<Map<String, Object>> alarmList = new ArrayList<>();
-        for (Map<String, Object> a : anomalies) {
+        for (Map<String, Object> a : job.alarms()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("shotNo", a.get("shot_no"));
             m.put("rule", a.get("rule_name"));
@@ -307,15 +463,26 @@ public class IncidentAnalyzer {
             alarmList.add(m);
         }
         Map<String, Object> incident = new LinkedHashMap<>();
-        incident.put("equipmentId", equipmentId);
-        incident.put("alarms", alarmList);
-        incident.put("firstAlarmEvidence", seedEvidence);
-        StringBuilder sb = new StringBuilder("다음 경보 사건을 조사하고 분석 결과를 작성해 주세요.\n")
-                .append("firstAlarmEvidence.sensorZScores 는 각 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ 떨어졌는지입니다.\n");
+        incident.put("equipmentId", job.equipmentId());
+        StringBuilder sb = new StringBuilder();
+        if (job.recheckInfo() == null) {
+            incident.put("alarms", alarmList);
+            incident.put("firstAlarmEvidence", job.seedEvidence());
+            sb.append("다음 경보 사건을 조사하고 분석 결과를 작성해 주세요.\n")
+                    .append("firstAlarmEvidence.sensorZScores 는 각 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ 떨어졌는지입니다.\n");
+        } else {
+            incident.put("recheck", job.recheckInfo());
+            incident.put("observedAlarms", alarmList);
+            sb.append("재확인 요청입니다. 앞선 관찰(OBSERVE) 판단 이후 새 경보 없이 ")
+                    .append(job.recheckInfo().get("shotsSinceObservation"))
+                    .append(" shot 이 지났습니다. 지금(shot ").append(job.asOfShot())
+                    .append(") 시점의 데이터로 다시 조사하고 분석 결과를 작성해 주세요.\n")
+                    .append("observedAlarms 는 관찰 판단을 낸 경보입니다.\n");
+        }
         if (!previous.isEmpty()) {
             incident.put("previousJudgements", previous);
             sb.append("previousJudgements 는 같은 설비에서 앞서 내린 판단입니다(최근 순). ")
-                    .append("seedShotNo 는 그 분석의 시작 경보 shot 입니다.\n");
+                    .append("shotNo 는 그 판단의 기준 shot, trigger 는 경보(ALARM)·재확인(RECHECK) 구분입니다.\n");
         }
         return sb.append('\n').append(objectMapper.writeValueAsString(incident)).toString();
     }
@@ -332,18 +499,19 @@ public class IncidentAnalyzer {
                 args.toArray());
     }
 
-    private Integer insertAnalysis(String equipmentId, String seedId, List<String> anomalyIds, String decision,
-            String causeCode, Integer confidence, String resultJson, List<String> trace, long ms, Integer ncrId,
-            String error, String runTag) {
+    private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,
+            String resultJson, List<String> trace, long ms, Integer ncrId, String error) {
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
-                    confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag)
+                    confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag,
+                    trigger_type, as_of, as_of_shot, parent_analysis_id)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?)
                 """, Integer.class,
-                equipmentId, seedId, String.join(",", anomalyIds), decision, causeCode, confidence, resultJson,
-                String.join("\n", trace), model, (int) ms, ncrId, error == null ? null : truncate(error, 1000),
-                runTag);
+                job.equipmentId(), job.seedAnomalyId(), String.join(",", job.anomalyIds()), decision, causeCode,
+                confidence, resultJson, String.join("\n", trace), model, (int) ms, ncrId,
+                error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
+                job.parentId());
     }
 
     @SuppressWarnings("unchecked")

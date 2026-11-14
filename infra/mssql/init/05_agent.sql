@@ -57,6 +57,20 @@ IF COL_LENGTH(N'dbo.agent_analysis', N'run_tag') IS NULL
     ALTER TABLE dbo.agent_analysis ADD run_tag VARCHAR(60) NULL;
 GO
 
+-- 관찰(OBSERVE) 뒤 재확인: 분석이 무엇으로 시작됐는지, 어느 시점까지의 데이터로 판단했는지
+IF COL_LENGTH(N'dbo.agent_analysis', N'trigger_type') IS NULL
+    ALTER TABLE dbo.agent_analysis ADD trigger_type VARCHAR(10) NULL;      -- ALARM(경보) / RECHECK(관찰 뒤 재확인)
+GO
+IF COL_LENGTH(N'dbo.agent_analysis', N'as_of') IS NULL
+    ALTER TABLE dbo.agent_analysis ADD as_of DATETIMEOFFSET(3) NULL;       -- 데이터 조회 기준 시점
+GO
+IF COL_LENGTH(N'dbo.agent_analysis', N'as_of_shot') IS NULL
+    ALTER TABLE dbo.agent_analysis ADD as_of_shot BIGINT NULL;             -- 기준 시점의 shot 번호
+GO
+IF COL_LENGTH(N'dbo.agent_analysis', N'parent_analysis_id') IS NULL
+    ALTER TABLE dbo.agent_analysis ADD parent_analysis_id INT NULL;        -- 재확인의 바탕이 된 관찰 분석
+GO
+
 -- ── 에이전트 초안 번호 (AI-연도-0001) ──────────────────────────────
 IF OBJECT_ID(N'dbo.seq_ncr_draft', N'SO') IS NULL
     CREATE SEQUENCE dbo.seq_ncr_draft AS INT START WITH 1 INCREMENT BY 1;

@@ -25,11 +25,18 @@ public class QualityTools {
     private final JdbcTemplate jdbc;
     private final List<String> trace;
     private final String asOf;
+    private final long startNanos;
 
     public QualityTools(JdbcTemplate jdbc, List<String> trace, String asOf) {
+        this(jdbc, trace, asOf, System.nanoTime());
+    }
+
+    /** startNanos: 분석 시작 시각. 도구마다 "분석 시작 후 몇 ms 에 불렸는지"를 trace 에 남겨 LLM 왕복 시간을 볼 수 있게 한다. */
+    public QualityTools(JdbcTemplate jdbc, List<String> trace, String asOf, long startNanos) {
         this.jdbc = jdbc;
         this.trace = trace;
         this.asOf = asOf;
+        this.startNanos = startNanos;
     }
 
     @Tool(description = "설비 센서의 최근 추이를 구간별 평균·최소·최대·표준편차·불량 수와 검사 규격(lsl/target/usl)으로 조회한다. "
@@ -82,7 +89,7 @@ public class QualityTools {
     // ── 공통 ──────────────────────────────────────────────────────────
 
     private List<Map<String, Object>> call(String tool, String sql, Object... args) {
-        trace.add(tool + argsText(args));
+        trace.add(tool + argsText(args) + " @" + (System.nanoTime() - startNanos) / 1_000_000 + "ms");
         try {
             List<Map<String, Object>> rows = jdbc.queryForList(sql, args);
             List<Map<String, Object>> out = new ArrayList<>(rows.size());
