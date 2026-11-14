@@ -1,0 +1,12 @@
+# 의사결정 기록 (ADR)
+
+중요한 설계 결정마다 **배경 → 선택지 → 결정 → 결과**를 남깁니다. 나중에 "왜 이렇게 만들었는지"를 코드만 보고는 알기 어렵기 때문입니다.
+
+| 번호 | 제목 | 상태 |
+|---|---|---|
+| [ADR-001](ADR-001-shot-level-message.md) | MQTT 메시지를 shot 단위로 묶는다 | 채택 |
+| [ADR-002](ADR-002-synthetic-data.md) | 합성 데이터를 주력으로, 공개 데이터는 보조로 쓴다 | 채택 |
+| [ADR-003](ADR-003-local-sql-server.md) | SQL Server를 로컬 컨테이너로 운영한다 | 채택 |
+| [ADR-004](ADR-004-paho-direct-client.md) | MQTT 수신에 Paho 클라이언트를 직접 사용한다 | 채택 (초기 결정 대체) |
+| [ADR-005](ADR-005-spc-detect-llm-reason.md) | 탐지는 SPC, 판단은 LLM이 맡는다 | 채택 |
+| [ADR-006](ADR-006-kafka-streams-state.md) | 이상 탐지 상태를 Kafka Streams 저장소에 두고 exactly-once로 처리한다 | 채택 |
