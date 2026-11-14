@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: qms-app
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all                       # 리더와 복제본 모두 기록해야 성공으로 본다
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true      # 재시도 중 같은 메시지가 두 번 기록되지 않게 한다
+        linger.ms: 5
+
+server:
+  port: 8080
+
+qg:
+  mqtt:
+    url: tcp://localhost:1883
+    client-id: qg-bridge              # 고정 ID + 지속 세션 → 브리지가 꺼진 동안의 메시지를 브로커가 보관
+    topics:
+      - factory/+/+/telemetry         # + 는 한 단계 와일드카드 (라인, 설비)
+    qos: 1
+    session-expiry-seconds: 3600
+  bridge:
+    dedup-cache-size: 100000          # 최근 messageId 보관 개수 (중복 수신 거르기)
+    kafka-send-timeout-seconds: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+
+logging:
+  level:
+    com.qualiguard: INFO
