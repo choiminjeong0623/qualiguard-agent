@@ -16,7 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 분석 1건마다 새로 만들어 쓰며, 호출된 도구와 인자를 trace 에 순서대로 기록한다.
  * (어떤 근거를 보고 판단했는지 사람이 나중에 확인할 수 있게 하기 위함)
  *
- * asOf: 사건의 마지막 경보 시각. 공정 데이터 조회는 이 시점까지로 제한한다.
+ * asOf: 조회 기준 시점 (운영은 사건의 마지막 경보 시각, 시간 순 재생은 시작 경보 시각). 공정 데이터 조회는 이 시점까지로 제한한다.
  * 지난 경보를 나중에 분석해도 "경보 당시에 볼 수 있었던 데이터"로만 판단하게 하기 위함이며,
  * 모델이 바꿀 수 없도록 도구 인자로 노출하지 않는다.
  */
@@ -38,8 +38,8 @@ public class QualityTools {
     public List<Map<String, Object>> getSensorTrend(
             @ToolParam(description = "설비 ID, 예: IMM-01") String equipmentId,
             @ToolParam(description = "센서 키, 예: barrelTemp") String sensorKey,
-            @ToolParam(description = "최근 몇 shot 을 볼지 (권장 200~400)") Integer lastShots,
-            @ToolParam(description = "몇 shot 씩 묶을지 (권장 20)") Integer bucketSize) {
+            @ToolParam(description = "최근 몇 shot 을 볼지 (넓은 추이 300, 최근 변화 60)") Integer lastShots,
+            @ToolParam(description = "몇 shot 씩 묶을지 (넓은 추이 20, 최근 변화 5)") Integer bucketSize) {
         return call("getSensorTrend", "EXEC dbo.usp_GetSensorTrend ?, ?, ?, ?, ?",
                 equipmentId, sensorKey, orDefault(lastShots, 300), orDefault(bucketSize, 20), asOf);
     }
