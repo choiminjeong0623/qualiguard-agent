@@ -25,6 +25,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-integration'
 	implementation 'org.springframework.boot:spring-boot-starter-kafka'
 	implementation 'org.apache.kafka:kafka-streams'
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+	runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
+	implementation 'org.springframework.ai:spring-ai-starter-model-google-genai'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.integration:spring-integration-http'
@@ -44,4 +47,11 @@ tasks.named('test') {
 // 8GB RAM 환경: 개발 중 bootRun의 힙을 384MB로 제한
 tasks.named('bootRun') {
 	jvmArgs = ['-Xms128m', '-Xmx384m']
+}
+
+// Spring AI 버전 관리 (Spring Boot 4 기반 2.0 계열)
+dependencyManagement {
+	imports {
+		mavenBom 'org.springframework.ai:spring-ai-bom:2.0.2'
+	}
 }
