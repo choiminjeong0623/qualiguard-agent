@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   GET  /api/agent/anomalies?equipmentId=IMM-01&status=NEW   경보 목록
  *   POST /api/agent/analyze-next                              가장 오래된 미처리 사건 1건 분석
  *   POST /api/agent/analyze/{anomalyId}                       지정 경보를 시작점으로 분석
+ *        ?replay=true&tag=...                                 시간 순 재생: 시작 경보 시각까지의 경보·데이터만 사용,
+ *                                                             tag 는 평가 실행 구분(이전 판단도 같은 tag 에서만 찾음)
  *   GET  /api/agent/analyses?top=20                           분석 기록
  */
 @RestController
@@ -53,9 +55,11 @@ public class AgentController {
     }
 
     @PostMapping("/analyze/{anomalyId}")
-    public ResponseEntity<?> analyze(@PathVariable String anomalyId) {
+    public ResponseEntity<?> analyze(@PathVariable String anomalyId,
+            @RequestParam(defaultValue = "false") boolean replay,
+            @RequestParam(required = false) String tag) {
         try {
-            return ResponseEntity.ok(analyzer.analyze(anomalyId));
+            return ResponseEntity.ok(analyzer.analyze(anomalyId, replay, tag));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

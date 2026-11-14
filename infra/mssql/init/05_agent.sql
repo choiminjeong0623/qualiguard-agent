@@ -52,6 +52,11 @@ CREATE TABLE dbo.agent_analysis (
 );
 GO
 
+-- 시간 순 재생 평가에서 실행을 구분하는 표시 (운영 분석은 NULL)
+IF COL_LENGTH(N'dbo.agent_analysis', N'run_tag') IS NULL
+    ALTER TABLE dbo.agent_analysis ADD run_tag VARCHAR(60) NULL;
+GO
+
 -- ── 에이전트 초안 번호 (AI-연도-0001) ──────────────────────────────
 IF OBJECT_ID(N'dbo.seq_ncr_draft', N'SO') IS NULL
     CREATE SEQUENCE dbo.seq_ncr_draft AS INT START WITH 1 INCREMENT BY 1;

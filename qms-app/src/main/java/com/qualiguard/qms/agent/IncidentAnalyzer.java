@@ -31,6 +31,9 @@ import tools.jackson.databind.ObjectMapper;
  *
  * 1) 사건 묶기: 시작 경보(seed)와 같은 설비에서 일정 shot·시간 안에 난 미처리 경보를 하나의 사건으로 묶는다.
  *    경보마다 LLM 을 부르지 않기 위해서다 (비용 절감, 같은 원인의 중복 보고서 방지).
+ *    시간 순 재생(replay)에서는 묶는 범위와 데이터 조회 기준 시점을 모두 "시작 경보 시각"으로 제한한다.
+ *    지난 데이터를 다시 돌려도 그 순간 실제로 알 수 있었던 경보·데이터만 쓰게 하기 위함이다 (장애 분석 04).
+ *    같은 설비의 이전 판단(같은 run_tag, merge-minutes 이내 최근 3건)을 previousJudgements 로 함께 넘긴다.
  * 2) 분석: 에이전트가 도구(저장 프로시저)로 근거를 모아 AnalysisResult 를 돌려준다.
  * 3) 저장:
  *    - NCR_DRAFT    → 부적합 초안 생성. 같은 설비·같은 원인의 최근 초안이 있으면 새로 만들지 않고 그 초안에 경보를 연결
@@ -78,11 +81,18 @@ public class IncidentAnalyzer {
                         WHERE g.seed_anomaly_id = a.anomaly_id AND g.decision = 'FAILED') < 2
                 ORDER BY a.detected_at, a.anomaly_id
                 """, String.class);
-        return ids.isEmpty() ? Optional.empty() : Optional.of(analyze(ids.get(0)));
+        return ids.isEmpty() ? Optional.empty() : Optional.of(analyze(ids.get(0), false, null));
     }
 
-    /** 지정한 경보를 시작점으로 사건을 분석한다 (평가·재분석용: 이미 처리된 경보도 시작점이 될 수 있다). */
-    public synchronized Outcome analyze(String seedAnomalyId) {
+    /**
+     * 지정한 경보를 시작점으로 사건을 분석한다 (평가·재분석용: 이미 처리된 경보도 시작점이 될 수 있다).
+     *
+     * @param replay true 면 시간 순 재생: 시작 경보 시각까지 발생한 경보·데이터만 쓴다.
+     *               false(운영)면 시작 경보 이후 묶음 범위 안의 미처리 경보까지 함께 묶는다.
+     * @param runTag 평가 실행 구분 표시 (운영은 null). 이전 판단은 같은 runTag 의 분석에서만 찾는다.
+     */
+    public synchronized Outcome analyze(String seedAnomalyId, boolean replay, String runTag) {
+        String tag = runTag == null || runTag.isBlank() ? null : truncate(runTag.strip(), 60);
         Map<String, Object> seed;
         try {
             seed = jdbc.queryForMap("""
@@ -108,15 +118,19 @@ public class IncidentAnalyzer {
                   AND detected_at BETWEEN CAST(? AS DATETIMEOFFSET(3))
                                       AND DATEADD(MINUTE, ?, CAST(? AS DATETIMEOFFSET(3)))
                 ORDER BY detected_at, anomaly_id
-                """, equipmentId, seedAnomalyId, seedShot, seedShot + props.incidentShotWindow(),
-                seedTs, props.incidentMinutes(), seedTs);
+                """, equipmentId, seedAnomalyId, seedShot,
+                replay ? seedShot : seedShot + props.incidentShotWindow(),
+                seedTs, replay ? 0 : props.incidentMinutes(), seedTs);
         List<String> anomalyIds = anomalies.stream().map(a -> (String) a.get("anomaly_id")).toList();
-        // 조회 기준 시점 = 사건의 마지막 경보 시각 (그 이후 데이터는 보지 않는다)
-        String asOf = anomalies.isEmpty() ? seedTs : (String) anomalies.get(anomalies.size() - 1).get("detected_at");
+        // 조회 기준 시점: 운영은 사건의 마지막 경보 시각, 재생은 시작 경보 시각 (그 이후 데이터는 보지 않는다)
+        String asOf = replay || anomalies.isEmpty()
+                ? seedTs
+                : (String) anomalies.get(anomalies.size() - 1).get("detected_at");
         setStatus(anomalyIds, "ANALYZING");
 
         Map<String, Object> seedEvidence = readMap((String) seed.get("evidence_json"));
-        String userPrompt = buildUserPrompt(equipmentId, anomalies, seedEvidence);
+        List<Map<String, Object>> previous = previousJudgements(equipmentId, seedTs, tag);
+        String userPrompt = buildUserPrompt(equipmentId, anomalies, seedEvidence, previous);
 
         // ── 2) 에이전트 분석 ─────────────────────────────────────────
         List<String> trace = Collections.synchronizedList(new ArrayList<>());
@@ -156,7 +170,7 @@ public class IncidentAnalyzer {
             setStatus(anomalyIds, "NEW");   // 다시 분석할 수 있게 되돌린다
             String error = causeChain(e);
             Integer id = insertAnalysis(equipmentId, seedAnomalyId, anomalyIds, "FAILED", null, null, null,
-                    trace, ms, null, error);
+                    trace, ms, null, error, tag);
             log.error("[에이전트] 분석 실패 — {} 경보 {}건: {}", equipmentId, anomalyIds.size(), error, e);
             return new Outcome(id, equipmentId, "FAILED", null, null, null, false, anomalyIds, ms, trace, null,
                     error);
@@ -174,12 +188,23 @@ public class IncidentAnalyzer {
             boolean merged = false;
             Integer ncrId = null;
             if (decision.equals("NCR_DRAFT")) {
-                List<Map<String, Object>> open = jdbc.queryForList("""
-                        SELECT TOP 1 ncr_id, ncr_no FROM dbo.ncr
-                        WHERE equipment_id = ? AND status = 'DRAFT' AND created_by = 'AGENT' AND cause_code = ?
-                          AND created_at >= DATEADD(MINUTE, -?, SYSDATETIMEOFFSET())
-                        ORDER BY created_at DESC
-                        """, equipmentId, causeCode, props.mergeMinutes());
+                // 운영: 최근 merge-minutes 안의 같은 설비·같은 원인 초안에 연결
+                // 재생: 같은 run_tag 실행에서 만든 초안에만 연결 (다른 평가 실행의 초안과 섞이지 않게)
+                List<Map<String, Object>> open = tag == null
+                        ? jdbc.queryForList("""
+                                SELECT TOP 1 ncr_id, ncr_no FROM dbo.ncr
+                                WHERE equipment_id = ? AND status = 'DRAFT' AND created_by = 'AGENT' AND cause_code = ?
+                                  AND created_at >= DATEADD(MINUTE, -?, SYSDATETIMEOFFSET())
+                                ORDER BY created_at DESC
+                                """, equipmentId, causeCode, props.mergeMinutes())
+                        : jdbc.queryForList("""
+                                SELECT TOP 1 n.ncr_id, n.ncr_no FROM dbo.ncr AS n
+                                WHERE n.equipment_id = ? AND n.status = 'DRAFT' AND n.created_by = 'AGENT'
+                                  AND n.cause_code = ?
+                                  AND EXISTS (SELECT 1 FROM dbo.agent_analysis AS g
+                                              WHERE g.ncr_id = n.ncr_id AND g.run_tag = ?)
+                                ORDER BY n.created_at DESC
+                                """, equipmentId, causeCode, tag);
                 if (!open.isEmpty()) {
                     ncrId = ((Number) open.get(0).get("ncr_id")).intValue();
                     ncrNo = (String) open.get(0).get("ncr_no");
@@ -211,7 +236,7 @@ public class IncidentAnalyzer {
                 setStatus(anomalyIds, "DISMISSED");
             }
             Integer analysisId = insertAnalysis(equipmentId, seedAnomalyId, anomalyIds, decision, causeCode,
-                    confidence, resultJson, trace, ms, ncrId, null);
+                    confidence, resultJson, trace, ms, ncrId, null, tag);
             return new Outcome(analysisId, equipmentId, decision, causeCode, confidence, ncrNo, merged,
                     anomalyIds, ms, trace, result, null);
         });
@@ -238,8 +263,39 @@ public class IncidentAnalyzer {
         return c;
     }
 
+    /**
+     * 같은 설비에서 현재 시작 경보보다 먼저 난 경보를 시작점으로 한 분석 중,
+     * merge-minutes 이내이고 run_tag 가 같은(운영은 NULL) 최근 3건의 판단을 읽는다.
+     */
+    private List<Map<String, Object>> previousJudgements(String equipmentId, String seedTs, String tag) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT TOP 3 s.shot_no, g.decision, g.cause_code, g.confidence, g.result_json
+                FROM dbo.agent_analysis AS g
+                JOIN dbo.anomaly_event AS s ON s.anomaly_id = g.seed_anomaly_id
+                WHERE g.equipment_id = ?
+                  AND g.decision <> 'FAILED'
+                  AND s.detected_at < CAST(? AS DATETIMEOFFSET(3))
+                  AND s.detected_at >= DATEADD(MINUTE, -?, CAST(? AS DATETIMEOFFSET(3)))
+                  AND ((? IS NULL AND g.run_tag IS NULL) OR g.run_tag = ?)
+                ORDER BY s.detected_at DESC, g.analysis_id DESC
+                """, equipmentId, seedTs, props.mergeMinutes(), seedTs, tag, tag);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            Map<String, Object> result = readMap((String) r.get("result_json"));
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("seedShotNo", r.get("shot_no"));
+            m.put("decision", r.get("decision"));
+            m.put("causeCode", r.get("cause_code"));
+            m.put("confidence", r.get("confidence") == null ? null : ((Number) r.get("confidence")).intValue());
+            m.put("reasoningSummary", result.get("reasoningSummary"));
+            m.put("watchItems", result.get("watchItems"));
+            out.add(m);
+        }
+        return out;
+    }
+
     private String buildUserPrompt(String equipmentId, List<Map<String, Object>> anomalies,
-            Map<String, Object> seedEvidence) {
+            Map<String, Object> seedEvidence, List<Map<String, Object>> previous) {
         List<Map<String, Object>> alarmList = new ArrayList<>();
         for (Map<String, Object> a : anomalies) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -254,9 +310,14 @@ public class IncidentAnalyzer {
         incident.put("equipmentId", equipmentId);
         incident.put("alarms", alarmList);
         incident.put("firstAlarmEvidence", seedEvidence);
-        return "다음 경보 사건을 조사하고 분석 결과를 작성해 주세요.\n"
-                + "firstAlarmEvidence.sensorZScores 는 각 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ 떨어졌는지입니다.\n\n"
-                + objectMapper.writeValueAsString(incident);
+        StringBuilder sb = new StringBuilder("다음 경보 사건을 조사하고 분석 결과를 작성해 주세요.\n")
+                .append("firstAlarmEvidence.sensorZScores 는 각 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ 떨어졌는지입니다.\n");
+        if (!previous.isEmpty()) {
+            incident.put("previousJudgements", previous);
+            sb.append("previousJudgements 는 같은 설비에서 앞서 내린 판단입니다(최근 순). ")
+                    .append("seedShotNo 는 그 분석의 시작 경보 shot 입니다.\n");
+        }
+        return sb.append('\n').append(objectMapper.writeValueAsString(incident)).toString();
     }
 
     private void setStatus(List<String> anomalyIds, String status) {
@@ -273,15 +334,16 @@ public class IncidentAnalyzer {
 
     private Integer insertAnalysis(String equipmentId, String seedId, List<String> anomalyIds, String decision,
             String causeCode, Integer confidence, String resultJson, List<String> trace, long ms, Integer ncrId,
-            String error) {
+            String error, String runTag) {
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
-                    confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message)
+                    confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, Integer.class,
                 equipmentId, seedId, String.join(",", anomalyIds), decision, causeCode, confidence, resultJson,
-                String.join("\n", trace), model, (int) ms, ncrId, error == null ? null : truncate(error, 1000));
+                String.join("\n", trace), model, (int) ms, ncrId, error == null ? null : truncate(error, 1000),
+                runTag);
     }
 
     @SuppressWarnings("unchecked")
