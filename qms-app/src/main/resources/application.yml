@@ -10,6 +10,14 @@ spring:
       properties:
         enable.idempotence: true      # 재시도 중 같은 메시지가 두 번 기록되지 않게 한다
         linger.ms: 5
+    streams:
+      application-id: qg-quality-pipeline     # 소비자 그룹·내부 토픽 이름의 기준
+      state-dir: ./build/kafka-streams-state  # 설비별 SPC 상태(RocksDB) 저장 위치
+      properties:
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        default.value.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        processing.guarantee: exactly_once_v2  # 상태 갱신과 결과 기록을 하나의 트랜잭션으로 묶음
+        commit.interval.ms: 1000
 
 server:
   port: 8080
