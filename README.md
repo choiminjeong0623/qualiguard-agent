@@ -11,10 +11,10 @@
 | 구분 | 내용 | 상태 |
 |---|---|---|
 | **문제** | 설비 상태가 서서히 나빠지면 불량이 생긴 뒤에야 알아채고, 원인을 찾으려면 담당자가 센서 그래프·검사 결과·과거 이력·정비 기록을 일일이 뒤져 부적합 보고서를 써야 함 | — |
-| **데이터** | 설비 센서 7종(온도·압력·쿠션량 등)의 shot 단위 공정 데이터, 비전 검사 결과, 검사 규격, 과거 부적합·조치 이력, 설비 정비 이력 | 센서·검사 ✅ / 나머지 예정 |
-| **엔지니어링** | ① 수집·정제: MQTT → Kafka 브리지(검증·중복 제거·DLQ) ② 탐지: SPC 관리도 4종(규칙 기반, LLM 미사용) ③ 분석 에이전트: 경보 발생 시 센서 추이·규격·유사 사례·정비 이력을 도구로 조회해 원인 추정 ④ 보고서 에이전트: 근거가 달린 부적합 보고서 초안 → 담당자 승인 | ①② ✅ / ③④ 예정 |
-| **산출물** | 이상 발생 시 근거가 첨부된 부적합 보고서 초안이 자동으로 올라오는 QMS 화면, 과거 부적합 사례 지식저장소, MES/ERP 연계 이벤트 | 예정 |
-| **성과** | (시뮬레이션) 고장 3종 모두 **첫 불량 발생 전에 감지**, 정상 구간 오경보 2건, LLM 호출 대상을 전체 데이터의 **2.4%**로 제한 / 원인 추정 정확도는 측정 예정 | 일부 ✅ |
+| **데이터** | 설비 센서 7종(온도·압력·쿠션량 등)의 shot 단위 공정 데이터, 비전 검사 결과, 검사 규격, 과거 부적합·조치 이력, 설비 정비 이력 | ✅ |
+| **엔지니어링** | ① 수집·정제: MQTT → Kafka 브리지(검증·중복 제거·DLQ) ② 탐지: SPC 관리도 4종(규칙 기반, LLM 미사용) ③ 원인 분석 에이전트: 경보를 사건 단위로 묶어, 센서 추이·공정 능력·불량·유사 사례·정비 이력을 도구(저장 프로시저)로 조회해 원인 추정 ④ 근거가 달린 부적합 보고서 초안 작성 → 담당자 승인 | ①②③④ ✅ / 승인 화면 예정 |
+| **산출물** | 근거가 첨부된 부적합 보고서 초안(✅), 과거 부적합 사례 지식저장소(✅), 판단 과정을 남기는 분석 기록(✅), QMS 승인 화면·MES/ERP 연계 이벤트(예정) | 일부 ✅ |
+| **성과** | (시뮬레이션) 고장 3종 모두 **첫 불량 발생 전에 감지**, 에이전트 **원인 추정 5/5·처리 판단 5/5**, 경보 후 **1분 이내** 초안, LLM 호출 대상을 전체 데이터의 **2.4%**로 제한 | ✅ (추가 평가 진행 중) |
 
 ### 핵심 성과 (시뮬레이션, 설비 2대 × 2,000 shot)
 
@@ -23,7 +23,9 @@
 | 실제 고장 3종 탐지 | **3/3**, 탐지 지연 35~45 shot, **모두 첫 불량 발생 전에 경보** |
 | 센서 이상(가짜 이상) 구분 | 7 shot 만에 탐지, 품질 영향 0건 → 에이전트가 "센서 점검"으로 판단할 근거 확보 |
 | 정상 구간 오경보 | 2건 (정상 2,200 shot × 센서 7종) |
-| LLM 호출 대상 | 4,000 shot 중 경보 97건 (**2.4%**) |
+| LLM 호출 대상 | 4,000 shot 중 경보 97건 (**2.4%**), 사건 단위로 묶어 더 줄임 |
+| 에이전트 원인 추정 | 고장 4종 + 단발성 경보 1건 중 **원인 5/5, 처리 판단 5/5** (센서 이상은 '센서 점검', 단발성 경보는 '관찰'로 구분) |
+| 초안 작성 시간 | 경보 사건당 **36~49초** |
 | 중복 메시지 | 재주입 50건 중 50건 차단 |
 
 자세한 측정 방법과 한계는 [평가 결과](docs/evaluation.md)를 참고하세요.
@@ -40,9 +42,11 @@ flowchart LR
     RAW --> SPC["Kafka Streams<br/>SPC 이상 탐지<br/>(설비별 상태 저장소)"]
     SPC --> CLEAN[("sensor.clean")]
     SPC --> ANO[("quality.anomaly")]
-    ANO -.-> AG["원인 분석·보고서 에이전트<br/>(Spring AI, 예정)"]
-    DB[("SQL Server<br/>규격 · 이력 · 사례")] -.-> AG
-    AG -.-> QMS["QMS 화면<br/>담당자 승인 (예정)"]
+    CLEAN --> DB[("SQL Server<br/>공정 · 이상 · 규격 · 정비 · 부적합")]
+    ANO --> DB
+    DB -- "미처리 경보" --> AG["원인 분석 에이전트<br/>(Spring AI + Gemini)<br/>도구 = 저장 프로시저"]
+    AG -- "부적합 초안 · 분석 기록" --> DB
+    DB -.-> QMS["QMS 화면<br/>담당자 승인 (예정)"]
     QMS -.-> APR[("quality.ncr.approved")] -.-> MES["MES/ERP (예정)"]
 ```
 
@@ -51,8 +55,8 @@ flowchart LR
 | 수집 | Python, paho-mqtt, Eclipse Mosquitto | 설비 역할의 시뮬레이터가 shot마다 공정 데이터 발행 |
 | 연계 | Spring Boot 4, Eclipse Paho MQTT v5, Apache Kafka 4 (KRaft) | 검증, 중복 제거, DLQ, 설비 ID 기준 순서 보장 |
 | 탐지 | Kafka Streams (exactly-once v2, RocksDB 상태 저장소) | SPC 관리도 4종으로 이상 판정, 에이전트용 근거 생성 |
-| 저장 | SQL Server 2025 | 규격, 측정 집계, 이상·부적합·정비 이력 (예정) |
-| AI | Spring AI 2.0, MCP 도구 | 원인 추정, 보고서 초안 (예정) |
+| 저장 | SQL Server 2025 | shot 공정 데이터, 이상·부적합·정비 이력, 검사 규격, 저장 프로시저 6개 |
+| AI | Spring AI 2.0, Gemini 3.8 Flash | 사건 단위 원인 추정, 부적합 보고서 초안, 판단 과정 기록 |
 | 화면 | Spring Boot, jQuery, Kendo UI | QMS 승인 화면 (예정) |
 
 자세한 내용은 [아키텍처 문서](docs/02-architecture.md)를 참고하세요.
@@ -69,6 +73,8 @@ flowchart LR
 | [ADR-004](docs/decisions/ADR-004-paho-direct-client.md) | MQTT 어댑터 대신 Paho 클라이언트 직접 사용 | 지속 세션 재접속 시 교착 상태 해결 |
 | [ADR-005](docs/decisions/ADR-005-spc-detect-llm-reason.md) | **탐지는 SPC, 판단은 LLM** | 비용·설명 가능성·현장 신뢰 |
 | [ADR-006](docs/decisions/ADR-006-kafka-streams-state.md) | Kafka Streams 상태 저장소 + exactly-once | 재시작해도 기준값 유지, 경보 중복 방지 |
+| [ADR-007](docs/decisions/ADR-007-sqlserver-qms-schema.md) | shot 원본 저장 + 저장 프로시저 조회, **경보 당시까지의 데이터만** 분석 | 에이전트가 미래 데이터를 보지 않게 (평가 신뢰성) |
+| [ADR-008](docs/decisions/ADR-008-agent-design.md) | 사건 단위 분석, **대응표 없이 지식저장소로 추론**, 사람 승인 | 비용·중복 방지, 정답 주입 없는 추론, 책임 소재 |
 
 ---
 
@@ -79,8 +85,8 @@ flowchart LR
 | 1 | 센서 시뮬레이터 → MQTT | ✅ |
 | 2 | MQTT → Kafka 브리지 (검증·중복 제거·DLQ·수동 ack·지속 세션) | ✅ |
 | 3 | 전처리·이상 탐지 (Kafka Streams + SPC 관리도 4종) | ✅ |
-| 4 | SQL Server 적재 (규격·집계·이력·부적합) | 진행 예정 |
-| 5 | 원인 분석·보고서 에이전트 (Spring AI + MCP 도구) | 예정 |
+| 4 | SQL Server 적재 (공정·이상·규격·정비·부적합, 저장 프로시저) | ✅ |
+| 5 | 원인 분석 에이전트 (Spring AI + Gemini, 도구 = 저장 프로시저) | ✅ (추가 평가 진행 중) |
 | 6 | QMS 화면·승인·MES/ERP 연계 | 예정 |
 
 ---
@@ -90,8 +96,9 @@ flowchart LR
 | 경로 | 내용 |
 |---|---|
 | `simulator/` | 사출성형 라인 센서 시뮬레이터 (고장 시나리오 4종, 평가용 정답 기록) |
-| `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지) |
-| `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트 |
+| `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석 에이전트) |
+| `scripts/` | `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가) |
+| `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트(스키마·기준 데이터·저장 프로시저) |
 | `docs/` | 문제 정의, 아키텍처, 의사결정 기록(ADR), 장애 분석, 평가 결과 |
 | `docker-compose.yml` | Mosquitto, Kafka(+토픽 생성), SQL Server(+DB 생성), Kafka UI(선택) |
 
@@ -99,11 +106,11 @@ flowchart LR
 
 ## 로컬 실행
 
-필요한 것: Docker(OrbStack 등), Java 21, Python 3.12 + [uv](https://docs.astral.sh/uv/)
+필요한 것: Docker(OrbStack 등), Java 21, Python 3.12 + [uv](https://docs.astral.sh/uv/), Gemini API 키
 
 ```bash
 # 1) 인프라
-cp .env.example .env                     # MSSQL_SA_PASSWORD 입력
+cp .env.example .env                     # MSSQL_SA_PASSWORD, GEMINI_API_KEY 입력
 docker compose up -d                     # Mosquitto, Kafka, SQL Server
 docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0) 이 정상
 
@@ -122,6 +129,12 @@ docker exec qg-kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 --topic quality.anomaly --from-beginning \
   --max-messages 3 --property print.key=true
 curl -s "localhost:8080/actuator/metrics/qg.bridge.messages?tag=result:published"
+./scripts/sql.sh "EXEC dbo.usp_GetDefectSummary 'IMM-01', 2000, 200"
+
+# 5) 원인 분석 에이전트 평가 (사례마다 LLM 호출)
+python3 scripts/evaluate_agent.py                  # 기본 평가
+python3 scripts/evaluate_agent.py --runs 3         # 반복 안정성
+python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장소 제거 실험
 ```
 
 | 서비스 | 주소 |

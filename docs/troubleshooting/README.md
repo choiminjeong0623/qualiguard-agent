@@ -6,4 +6,4 @@
 |---|---|---|---|
 | [01](01-mqtt-ack-header-type.md) | MQTT 수동 ack 헤더 타입 오류 | Kafka 기록은 성공했으나 ack 실패로 로그가 "기록 실패"로 잘못 표시 | — |
 | [02](02-mqtt-persistent-session-deadlock.md) | 지속 세션 재접속 시 구독 교착 상태 | 브리지가 메시지를 받지 못함 | [ADR-004](../decisions/ADR-004-paho-direct-client.md) |
-| [03](03-agent-llm-response-parsing.md) | 원인 분석 에이전트의 LLM 호출 실패와 응답 해석 실패 | 평가 5건 중 4~5건 분석 실패 (결과·초안 미생성) | — |
+| [03](03-agent-llm-response-parsing.md) | 원인 분석 에이전트의 LLM 호출 실패와 응답 해석 실패 | 평가 5건 중 4~5건 분석 실패 (결과·초안 미생성) → 해결 후 5/5 | [ADR-008](../decisions/ADR-008-agent-design.md) |

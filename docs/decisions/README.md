@@ -10,3 +10,5 @@
 | [ADR-004](ADR-004-paho-direct-client.md) | MQTT 수신에 Paho 클라이언트를 직접 사용한다 | 채택 (초기 결정 대체) |
 | [ADR-005](ADR-005-spc-detect-llm-reason.md) | 탐지는 SPC, 판단은 LLM이 맡는다 | 채택 |
 | [ADR-006](ADR-006-kafka-streams-state.md) | 이상 탐지 상태를 Kafka Streams 저장소에 두고 exactly-once로 처리한다 | 채택 |
+| [ADR-007](ADR-007-sqlserver-qms-schema.md) | QMS 데이터는 shot 원본으로 저장하고, 조회는 저장 프로시저로 제공한다 | 채택 |
+| [ADR-008](ADR-008-agent-design.md) | 원인 분석 에이전트: 사건 단위 분석, 지식저장소 기반 추론, 사람 승인 | 채택 |
