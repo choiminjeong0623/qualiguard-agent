@@ -1,0 +1,16 @@
+.env
+data/
+*.log
+.DS_Store
+# Java / Gradle
+build/
+.gradle/
+*.class
+# Python
+__pycache__/
+.venv/
+*.pyc
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json

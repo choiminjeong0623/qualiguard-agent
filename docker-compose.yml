@@ -1,0 +1,131 @@
+# QualiGuard Agent — 로컬 개발용 인프라
+# 8GB RAM(M1) 환경을 고려해 컨테이너마다 메모리 상한을 걸어 두었다.
+# 실행: docker compose up -d        도구(Kafka UI)까지: docker compose --profile tools up -d
+name: qualiguard
+
+services:
+  # ── MQTT 브로커: 설비(시뮬레이터)가 센서 값을 발행하는 현장 쪽 입구 ──
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: qg-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    mem_limit: 64m
+    restart: unless-stopped
+
+  # ── Kafka (KRaft 단일 노드, ZooKeeper 없음): 사내 시스템 간 이벤트 통로 ──
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: qg-kafka
+    ports:
+      - "9092:9092"          # Mac에서 실행하는 Spring/Python 앱이 붙는 주소: localhost:9092
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,DOCKER://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # 토픽은 kafka-init이 명시적으로 만든다
+      KAFKA_LOG_RETENTION_HOURS: 72
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    mem_limit: 900m
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+
+  # ── 토픽 생성(한 번 실행하고 종료) ──
+  kafka-init:
+    image: apache/kafka:4.1.0
+    container_name: qg-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for t in sensor.raw sensor.clean quality.anomaly quality.ncr.approved quality.dlq; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic $$t --partitions 3 --replication-factor 1
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx128m"
+    restart: "no"
+
+  # ── SQL Server 2025: QMS 데이터(설비·규격·측정 집계·부적합) + 과거 사례 벡터 ──
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64      # ARM 이미지가 없어 Rosetta로 실행 (OrbStack rosetta=true 필요)
+    container_name: qg-mssql
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?.env 파일에 MSSQL_SA_PASSWORD를 설정하세요}
+      MSSQL_MEMORY_LIMIT_MB: 2048
+    volumes:
+      - mssql-data:/var/opt/mssql
+    mem_limit: 2500m
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── DB 초기화(한 번 실행하고 종료): infra/mssql/init/*.sql 을 이름 순서대로 실행 ──
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    platform: linux/amd64
+    container_name: qg-mssql-init
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    volumes:
+      - ./infra/mssql/init:/init:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for f in /init/*.sql; do
+          echo "실행: $$f"
+          /opt/mssql-tools18/bin/sqlcmd -S mssql -U sa -P "$$MSSQL_SA_PASSWORD" -C -b -i "$$f" || exit 1
+        done
+    restart: "no"
+
+  # ── Kafka UI: 평소엔 꺼 두고 확인·데모 때만 켠다 (--profile tools) ──
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: qg-kafka-ui
+    profiles: ["tools"]
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: qualiguard
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    mem_limit: 400m
+
+volumes:
+  mosquitto-data:
+  kafka-data:
+  mssql-data:
