@@ -1,0 +1,34 @@
+# 시뮬레이션 설정 — 값을 바꿔 다양한 상황을 재현한다.
+mqtt:
+  host: localhost
+  port: 1883
+  qos: 1                                  # 최소 1회 전달 (중복 가능 → 수신 측에서 messageId로 멱등 처리)
+  topic: "factory/{line}/{equipment}/telemetry"
+  client_id: qg-simulator
+
+simulation:
+  line_id: LINE1
+  equipment: [IMM-01, IMM-02]             # IMM = Injection Molding Machine
+  shots: 2000                             # 설비당 shot 수
+  interval_sec: 0.5                       # shot 간격 (실제 30초 사이클을 빠르게 재생)
+  seed: 42                                # 같은 seed면 같은 데이터 → 데모·평가 재현 가능
+  ground_truth_csv: ../data/ground_truth.csv
+
+# 고장 시나리오 (FAULT_CATALOG 참고). start_shot부터 duration shot 동안 진행된다.
+faults:
+  - name: heater_degradation
+    equipment: IMM-01
+    start_shot: 300
+    duration: 500
+  - name: pressure_sensor_spike
+    equipment: IMM-02
+    start_shot: 400
+    duration: 200
+  - name: cooling_blockage
+    equipment: IMM-02
+    start_shot: 900
+    duration: 500
+  - name: check_ring_wear
+    equipment: IMM-01
+    start_shot: 1200
+    duration: 600
