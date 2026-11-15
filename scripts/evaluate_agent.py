@@ -18,7 +18,7 @@
     python3 scripts/evaluate_agent.py                         # 기본 평가 1회
     python3 scripts/evaluate_agent.py --runs 3                # 반복 안정성: 같은 사례를 3번
     python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr
-        # 지식저장소 제거 실험: 정답과 같은 원인의 과거 부적합 4건을 잠시 숨기고 실행 (끝나면 자동 복구)
+        # 지식저장소 제거 실험: 정답과 원인이 같은 승인·조치 완료 사례를 잠시 숨기고 실행 (끝나면 원래 상태로 복구)
 
 결과: 화면에 표 출력 + data/agent_eval_<모드>.json / .md 저장
 주의: 분석 1단계마다 LLM 을 1회 이상 호출한다 (사례당 최대 MAX_STEPS 단계).
@@ -49,9 +49,10 @@ FAULTS = [
 ]
 MARGIN = 100  # 고장 구간 앞뒤 이 범위의 경보는 단발성 경보 사례에서 제외
 
-# 지식저장소 제거 실험에서 숨길 과거 사례: 시뮬레이터 고장 4종과 원인이 같은 사례
-# (원료 건조 불량 사례 NCR-2025-0030 은 '헷갈리게 하는 사례'라 남겨 둔다)
-MATCHING_NCR = ["NCR-2025-0012", "NCR-2025-0021", "NCR-2024-0033", "NCR-2026-0004"]
+# 지식저장소 제거 실험에서 숨길 사례: 시뮬레이터 고장 4종과 원인 코드가 같은 승인·조치 완료 사례 전부
+# (사람이 작성한 과거 사례 4건 + QMS 화면에서 승인한 AI 초안. 원료 건조 불량(MATERIAL) 사례는
+#  '헷갈리게 하는 사례'라 남겨 둔다)
+MATCHING_CAUSES = ["HEATER_DEGRADATION", "COOLING_ISSUE", "CHECK_RING_WEAR", "SENSOR_FAULT"]
 
 
 def http(method, path):
@@ -69,8 +70,27 @@ def post(path):
 
 
 def sql(query):
-    """scripts/sql.sh 로 SQL Server 에 쿼리 실행 (비밀번호는 .env 에서 읽음)."""
-    subprocess.run(["bash", str(ROOT / "scripts" / "sql.sh"), query], check=True, capture_output=True, text=True)
+    """scripts/sql.sh 로 SQL Server 에 쿼리 실행 (비밀번호는 .env 에서 읽음). 결과 줄(머리·구분선 제외)을 돌려준다."""
+    out = subprocess.run(["bash", str(ROOT / "scripts" / "sql.sh"), query], check=True, capture_output=True,
+                         text=True).stdout.splitlines()
+    return [line.split() for line in out[2:] if line.strip()]
+
+
+def hide_matching_cases():
+    """정답과 원인이 같은 승인·조치 완료 사례를 잠시 REJECTED 로 바꿔 유사 사례 검색에서 숨긴다. 원래 상태를 돌려준다."""
+    causes = ",".join(f"'{c}'" for c in MATCHING_CAUSES)
+    rows = sql(f"SELECT ncr_no, status FROM dbo.ncr WHERE cause_code IN ({causes}) AND status IN ('APPROVED', 'CLOSED')")
+    hidden = {no: status for no, status in rows}
+    if hidden:
+        nos = ",".join(f"'{n}'" for n in hidden)
+        sql(f"UPDATE dbo.ncr SET status = 'REJECTED' WHERE ncr_no IN ({nos})")
+    return hidden
+
+
+def restore_cases(hidden):
+    for status in set(hidden.values()):
+        nos = ",".join(f"'{n}'" for n, st in hidden.items() if st == status)
+        sql(f"UPDATE dbo.ncr SET status = '{status}' WHERE ncr_no IN ({nos}) AND status = 'REJECTED'")
 
 
 def parse_ts(s):
@@ -313,21 +333,21 @@ def main():
     print(f"재확인 설정: 관찰 뒤 {cfg['recheckShots']} shot, 최대 {cfg['recheckMax']}회")
     cases = build_cases()
     stamp = datetime.now().strftime("%m%d%H%M%S")
-    ncr_list = ",".join(f"'{n}'" for n in MATCHING_NCR)
     results = []
+    hidden = {}
     try:
         if args.hide_matching_ncr:
             # 유사 사례 검색(usp_FindSimilarNcr)은 APPROVED/CLOSED 만 보므로 상태를 잠시 바꿔 숨긴다
-            sql(f"UPDATE dbo.ncr SET status = 'REJECTED' WHERE ncr_no IN ({ncr_list}) AND status = 'CLOSED'")
-            print(f"과거 사례 {len(MATCHING_NCR)}건을 숨겼습니다: {', '.join(MATCHING_NCR)}")
+            hidden = hide_matching_cases()
+            print(f"과거 사례 {len(hidden)}건을 숨겼습니다: {', '.join(sorted(hidden))}")
         for run in range(1, args.runs + 1):
             for c in cases:
                 print(f"[{run}회차] {c['case']} (경보 {len(c['alarms'])}건)", flush=True)
                 results.append(run_case(c, run, stamp, gt, cfg))
     finally:
-        if args.hide_matching_ncr:
-            sql(f"UPDATE dbo.ncr SET status = 'CLOSED' WHERE ncr_no IN ({ncr_list}) AND status = 'REJECTED'")
-            print("숨긴 과거 사례를 복구했습니다.")
+        if hidden:
+            restore_cases(hidden)
+            print("숨긴 과거 사례를 원래 상태로 복구했습니다.")
 
     summary = summarize(results, args.runs, mode)
     print("\n" + summary)

@@ -8,7 +8,7 @@
   var COLUMN = { suspectedCause: 'suspected_cause', rootCause: 'root_cause', recommendedAction: 'recommended_action',
     causeCode: 'cause_code', defectType: 'defect_type', relatedSensors: 'related_sensors' };
   var STATUS_LABEL = { DRAFT: '검토 대기', APPROVED: '승인', REJECTED: '반려', CLOSED: '조치 완료' };
-  var ACTION_LABEL = { EDIT: '수정', APPROVE: '승인', REJECT: '반려' };
+  var ACTION_LABEL = { EDIT: '수정', APPROVE: '승인', REJECT: '반려', CLOSE: '조치 완료' };
   var FIELD_LABEL = { title: '제목', phenomenon: '현상', suspectedCause: '추정 원인', rootCause: '확정 원인',
     evidence: '근거', recommendedAction: '권고 조치', causeCode: '원인 코드', defectType: '불량 유형',
     relatedSensors: '관련 센서' };
@@ -75,7 +75,12 @@
     var editable = d.status === 'DRAFT';
     $f.find('input, textarea, select').not('#reject-reason').prop('disabled', !editable);
     $('#btn-save, #btn-approve, #btn-reject, #reject-reason').prop('disabled', !editable);
-    msg(editable ? '' : '초안(검토 대기) 상태에서만 수정·승인·반려할 수 있습니다.');
+    var inKb = d.status === 'APPROVED' || d.status === 'CLOSED';
+    $('#d-kb').prop('hidden', !inKb);
+    $('#close-box').prop('hidden', d.status !== 'APPROVED');
+    $('#action-taken').prop('disabled', false).val('');
+    msg(editable ? '' : (d.status === 'APPROVED' ? '조치를 마치면 조치 내용을 적고 [조치 완료]를 누르세요.'
+      : '초안(검토 대기) 상태에서만 수정·승인·반려할 수 있습니다.'));
 
     $('#a-count').text('(' + d.anomalies.length + '건)');
     $('#anomalies').html(d.anomalies.map(function (a) {
@@ -137,7 +142,7 @@
     // 고친 내용(확정 원인 등)을 먼저 저장한 뒤 승인한다
     save().done(function () {
       send('POST', API + '/' + encodeURIComponent(state.selected) + '/approve', { actor: a })
-        .done(function (d) { render(d); msg('승인했습니다. 이 부적합은 다음 분석의 유사 사례로 쓰입니다.', 'ok'); loadList(); })
+        .done(function (d) { render(d); msg('승인했습니다. 이 부적합은 다음 분석의 유사 사례로 쓰입니다.', 'ok'); loadList(); loadKb(); })
         .fail(function (xhr) { msg(errorText(xhr), 'err'); });
     });
   });
@@ -152,6 +157,24 @@
       .fail(function (xhr) { msg(errorText(xhr), 'err'); });
   });
 
+  $('#btn-close').on('click', function () {
+    var a = requireActor();
+    if (!a) { return; }
+    var done = $.trim($('#action-taken').val());
+    if (!done) { msg('조치 내용을 입력하세요.', 'err'); $('#action-taken').focus(); return; }
+    send('POST', API + '/' + encodeURIComponent(state.selected) + '/close', { actor: a, actionTaken: done })
+      .done(function (d) { render(d); msg('조치 완료로 닫았습니다.', 'ok'); loadList(); loadKb(); })
+      .fail(function (xhr) { msg(errorText(xhr), 'err'); });
+  });
+
+  function loadKb() {
+    $.getJSON(API + '/knowledge').done(function (rows) {
+      var total = 0, ai = 0;
+      rows.forEach(function (r) { total += r.total; ai += r.ai_approved; });
+      $('#kb').text('지식저장소 ' + total + '건 (AI 초안 승인 ' + ai + '건)');
+    });
+  }
+
   $('.filters').on('click', '.tab', function () {
     $('.tab').removeClass('active');
     $(this).addClass('active');
@@ -163,4 +186,5 @@
 
   try { $('#actor').val(localStorage.getItem('qms.actor') || ''); } catch (e) { /* 무시 */ }
   loadList();
+  loadKb();
 }(jQuery));

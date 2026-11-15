@@ -70,13 +70,15 @@ public class QualityTools {
     }
 
     @Tool(description = "승인된 과거 부적합(NCR) 사례 중 관련 센서·불량 유형·설비가 비슷한 사례를 찾는다. "
-            + "결과의 root_cause(확정 원인)와 evidence(당시 근거)를 현재 상황과 비교해 원인을 추정한다.")
+            + "결과의 root_cause(확정 원인)와 evidence(당시 근거)를 현재 상황과 비교해 원인을 추정한다. "
+            + "source 는 사람이 작성한 사례인지, AI 초안을 사람이 승인한 사례인지 나타낸다.")
     public List<Map<String, Object>> findSimilarNcr(
             @ToolParam(description = "설비 ID") String equipmentId,
             @ToolParam(description = "이상이 보인 센서 키를 쉼표로 구분, 예: barrelTemp,injectionPressure") String sensorKeys,
             @ToolParam(description = "가장 많은 불량 유형 (없으면 빈 문자열)", required = false) String defectType) {
         String dt = defectType == null || defectType.isBlank() ? null : defectType;
-        return call("findSimilarNcr", "EXEC dbo.usp_FindSimilarNcr ?, ?, ?, ?", equipmentId, sensorKeys, dt, 5);
+        // 기준 시점까지 승인된 사례만: 지난 경보를 다시 분석할 때, 그 뒤에 승인된 사례(미래 지식)를 보지 않게
+        return call("findSimilarNcr", "EXEC dbo.usp_FindSimilarNcr ?, ?, ?, ?, ?", equipmentId, sensorKeys, dt, 5, asOf);
     }
 
     @Tool(description = "설비의 정비 이력(정비일, 유형, 부품, 내용, 경과 일수)을 최근 순으로 조회한다. "

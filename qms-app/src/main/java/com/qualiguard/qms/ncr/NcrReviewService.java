@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 부적합(NCR) 초안 검토·수정·승인/반려 (F-08).
+ * 부적합(NCR) 초안 검토·수정·승인/반려 (F-08), 조치 완료와 지식저장소 현황 (F-10).
  *
  * 상태 규칙(DRAFT 에서만 수정·승인·반려, 승인에는 확정 원인 필요)은 저장 프로시저가 한 트랜잭션에서 확인한다.
  * 이 클래스는 입력을 다듬고, 바뀐 항목을 이력으로 남기고, 프로시저 오류 번호를 HTTP 의미로 바꾼다.
@@ -157,6 +157,21 @@ public class NcrReviewService {
         }
         exec(() -> jdbc.update("EXEC dbo.usp_ReviewNcr ?, 'REJECT', ?, ?", ncrNo, who, reason.strip()));
         return detail(ncrNo);
+    }
+
+    /** 조치 완료: APPROVED → CLOSED. 조치 내용은 다음에 비슷한 사례를 만난 에이전트가 참고한다 (F-10). */
+    public Map<String, Object> close(String ncrNo, String actor, String actionTaken) {
+        String who = requireActor(actor);
+        if (blankToNull(actionTaken) == null) {
+            throw new ReviewException(400, "조치 내용을 입력하세요.");
+        }
+        exec(() -> jdbc.update("EXEC dbo.usp_CloseNcr ?, ?, ?", ncrNo, who, actionTaken.strip()));
+        return detail(ncrNo);
+    }
+
+    /** 지식저장소 현황: 유사 사례 검색 대상(APPROVED·CLOSED)을 원인 코드별로, 사람 작성과 AI 초안 승인으로 나눠 센다. */
+    public List<Map<String, Object>> knowledgeStats() {
+        return jdbc.queryForList("EXEC dbo.usp_KnowledgeStats");
     }
 
     // ── 보조 ─────────────────────────────────────────────────────────

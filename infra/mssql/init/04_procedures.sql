@@ -186,7 +186,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_FindSimilarNcr
     @EquipmentId  VARCHAR(20)  = NULL,
     @SensorKeys   VARCHAR(200) = NULL,     -- 쉼표 구분
     @DefectType   VARCHAR(20)  = NULL,
-    @Top          INT          = 5
+    @Top          INT          = 5,
+    @AsOf         DATETIMEOFFSET(3) = NULL  -- 이 시점까지 승인된 사례만 (지난 경보 분석 시 미래 지식 차단)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -199,7 +200,8 @@ BEGIN
 
     WITH scored AS (
         SELECT n.ncr_no, n.equipment_id, n.defect_type, n.related_sensors, n.title, n.phenomenon,
-               n.root_cause, n.evidence, n.action_taken, n.occurred_at,
+               n.root_cause, n.evidence, n.action_taken, n.occurred_at, n.cause_code,
+               CASE WHEN n.created_by = 'AGENT' THEN N'AI 초안을 사람이 승인' ELSE N'사람이 작성' END AS source,
                (SELECT COUNT(*)
                   FROM STRING_SPLIT(ISNULL(n.related_sensors, ''), ',') AS s
                   JOIN @keys AS q ON q.k = LTRIM(RTRIM(s.value)))                     AS sensor_match,
@@ -207,10 +209,11 @@ BEGIN
                CASE WHEN n.equipment_id = @EquipmentId THEN 1 ELSE 0 END             AS same_equipment
         FROM dbo.ncr AS n
         WHERE n.status IN ('APPROVED', 'CLOSED')
+          AND (@AsOf IS NULL OR COALESCE(n.approved_at, n.created_at) <= @AsOf)
     )
     SELECT TOP (@Top)
            ncr_no, equipment_id, defect_type, related_sensors, title, phenomenon,
-           root_cause, evidence, action_taken, occurred_at,
+           root_cause, evidence, action_taken, occurred_at, cause_code, source,
            sensor_match, defect_match, same_equipment,
            sensor_match * 2 + defect_match * 2 + same_equipment AS score
     FROM scored

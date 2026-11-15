@@ -9,6 +9,9 @@ body { margin: 0; font: 14px/1.5 -apple-system, "Apple SD Gothic Neo", "Malgun G
   padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .bar h1 { margin: 0; font-size: 17px; }
 .who input { margin-left: 6px; width: 200px; }
+.kb { margin-left: auto; color: var(--muted); font-size: 13px; }
+.kb-note { margin: -6px 0 12px; padding: 6px 8px; border-left: 3px solid var(--ok); background: #f1f8f3; font-size: 13px; }
+#close-box input { flex: 1; width: auto; }
 .layout { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(420px, 1.2fr); gap: 12px; padding: 12px; }
 @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
 .list-pane, .detail-pane { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px;

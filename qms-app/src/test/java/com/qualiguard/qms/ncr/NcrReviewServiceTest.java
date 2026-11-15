@@ -109,6 +109,17 @@ class NcrReviewServiceTest {
     }
 
     @Test
+    void 조치_완료에는_조치_내용이_필요하다() {
+        FakeJdbc jdbc = new FakeJdbc();
+        NcrReviewService.ReviewException e = assertThrows(NcrReviewService.ReviewException.class,
+                () -> service(jdbc).close("AI-2026-0001", "품질팀", ""));
+        assertEquals(400, e.status());
+        assertTrue(jdbc.updates.isEmpty());
+        service(jdbc).close("AI-2026-0001", "품질팀", "히터 밴드 교체");
+        assertTrue(((String) jdbc.updates.get(0)[0]).contains("usp_CloseNcr"));
+    }
+
+    @Test
     void 프로시저의_상태_오류는_409로_바꾼다() {
         FakeJdbc jdbc = new FakeJdbc();
         jdbc.fail = new SQLException("초안(DRAFT) 상태에서만 승인·반려할 수 있습니다.", "S0001", 50409);
