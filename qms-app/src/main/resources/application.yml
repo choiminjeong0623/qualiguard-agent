@@ -66,6 +66,8 @@ qg:
       - factory/+/+/telemetry         # + 는 한 단계 와일드카드 (라인, 설비)
     qos: 1
     session-expiry-seconds: 3600
+    username: ${MQTT_BRIDGE_USERNAME:qg-bridge}   # 브로커 계정 (N-07). ACL 상 telemetry 읽기만 가능
+    password: ${MQTT_BRIDGE_PASSWORD:}           # 루트 .env (scripts/mqtt_users.sh 가 생성)
   bridge:
     dedup-cache-size: 100000          # 최근 messageId 보관 개수 (중복 수신 거르기)
     kafka-send-timeout-seconds: 5

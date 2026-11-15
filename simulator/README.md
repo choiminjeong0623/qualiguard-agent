@@ -12,10 +12,14 @@ uv run qg-simulator --dry-run --shots 3   # 브로커 없이 출력만 확인
 uv run qg-simulator                       # Mosquitto(localhost:1883)로 발행
 ```
 
+설비마다 따로 접속하며 **사용자명 = 설비 ID**, 비밀번호는 프로젝트 루트 `.env` 의 `MQTT_DEVICE_PASSWORD_IMM_01` 처럼 설비 ID 의 `-` 를 `_` 로 바꾼 키에서 읽습니다. 브로커는 장비 인증·토픽 권한을 켠 상태라 `./scripts/mqtt_users.sh` 를 먼저 실행해야 합니다 ([ADR-015](../docs/decisions/ADR-015-mqtt-device-auth.md)). 다른 `.env` 를 쓰려면 `--env-file`.
+
 메시지 확인(다른 터미널):
 
 ```bash
-docker exec qg-mosquitto mosquitto_sub -t 'factory/#' -v -C 5
+# 브리지 계정으로 읽는다 (ACL 상 telemetry 읽기는 브리지 계정만 가능)
+docker exec qg-mosquitto mosquitto_sub -u qg-bridge -P "$(grep ^MQTT_BRIDGE_PASSWORD= ../.env | cut -d= -f2)" \
+  -t 'factory/+/+/telemetry' -v -C 5
 ```
 
 ## 메시지 형식

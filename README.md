@@ -72,7 +72,7 @@ flowchart LR
 | 계층 | 기술 | 역할 |
 |---|---|---|
 | 수집 | Python, paho-mqtt, Eclipse Mosquitto | 설비 역할의 시뮬레이터가 shot마다 공정 데이터 발행 |
-| 연계 | Spring Boot 4, Eclipse Paho MQTT v5, Apache Kafka 4 (KRaft) | 검증, 중복 제거, DLQ, 설비 ID 기준 순서 보장 |
+| 연계 | Spring Boot 4, Eclipse Paho MQTT v5, Apache Kafka 4 (KRaft) | 장비 인증·토픽 ACL, 검증, 중복 제거, DLQ, 설비 ID 기준 순서 보장 |
 | 탐지 | Kafka Streams (exactly-once v2, RocksDB 상태 저장소) | SPC 관리도 4종으로 이상 판정, 에이전트용 근거 생성 |
 | 저장 | SQL Server 2025 | shot 공정 데이터, 이상·부적합·정비 이력, 검사 규격, 저장 프로시저 6개 |
 | AI | Spring AI 2.0, Gemini 3.8 Flash, MCP 서버 | 사건 단위 원인 추정, 부적합 보고서 초안, 판단 과정 기록. 같은 조회 도구를 MCP(`/mcp`)로도 제공 |
@@ -99,6 +99,7 @@ flowchart LR
 | [ADR-011](docs/decisions/ADR-011-qms-login.md) | QMS **로그인**(DB 사용자·BCrypt), 역할 품질 담당자/조회 전용, 비밀번호는 `.env` 로만 | 승인자를 확실히, 비밀번호를 저장소에 남기지 않음 |
 | [ADR-012](docs/decisions/ADR-012-mes-erp-ack.md) | MES/ERP **응답**은 단계 번호로 순서 유지, 응답 ID 로 중복 제거, **실패한 시스템에만** 다시 보내기 | 순서 뒤바뀜·중복·부분 실패에도 상태가 맞게 |
 | [ADR-013](docs/decisions/ADR-013-mcp-server.md) | 에이전트 도구를 **MCP 서버**(`/mcp`)로도 노출, 기준 시점은 기준 경보 ID 로만 | 다른 AI 클라이언트도 같은 데이터·같은 미래 정보 차단 원칙 |
+| [ADR-015](docs/decisions/ADR-015-mqtt-device-auth.md) | **MQTT 장비 인증 + 토픽 ACL**: 사용자명 = 설비 ID, 장비는 자기 토픽 쓰기만, 브리지는 읽기만 | 데이터 시스템의 입구는 사람이 아니라 설비 → 가짜 데이터 주입·도청 차단 |
 
 ---
 
@@ -122,7 +123,7 @@ flowchart LR
 |---|---|
 | `simulator/` | 사출성형 라인 센서 시뮬레이터 (고장 시나리오 4종, 평가용 정답 기록) |
 | `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석 에이전트), `ncr/`(QMS 검토 API), `integration/`(아웃박스 발행·가상 MES/ERP), `resources/static/qms/`(검토 화면) |
-| `scripts/` | `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가), `fetch_secom.sh`(공개 데이터 SECOM 받기) |
+| `scripts/` | `mqtt_users.sh`·`test_mqtt_acl.sh`(MQTT 계정·권한 시험), `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가), `fetch_secom.sh`(공개 데이터 SECOM 받기) |
 | `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트(스키마·기준 데이터·저장 프로시저) |
 | `docs/` | 문제 정의, 아키텍처, 의사결정 기록(ADR), 장애 분석, 평가 결과 |
 | `docker-compose.yml` | Mosquitto, Kafka(+토픽 생성), SQL Server(+DB 생성), Kafka UI(선택) |
@@ -136,7 +137,9 @@ flowchart LR
 ```bash
 # 1) 인프라
 cp .env.example .env                     # MSSQL_SA_PASSWORD, GEMINI_API_KEY, QMS 화면 계정(QG_REVIEWER_PASSWORD 등) 입력
+./scripts/mqtt_users.sh                  # MQTT 장비·브리지 계정 만들기 (비밀번호는 .env 에 자동 생성, ADR-015)
 docker compose up -d                     # Mosquitto, Kafka, SQL Server
+./scripts/test_mqtt_acl.sh               # (선택) 익명 거부·토픽 권한 시험 6항목
 docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0) 이 정상
 
 # 2) 애플리케이션 (브리지 + 이상 탐지)
@@ -166,7 +169,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 
 | 서비스 | 주소 |
 |---|---|
-| MQTT | `localhost:1883` |
+| MQTT | `localhost:1883` (계정 필요: 장비 = 설비 ID, 브리지 = `qg-bridge`) |
 | Kafka | `localhost:9092` |
 | SQL Server | `localhost:1433` (DB `QUALIGUARD`) |
 | 앱 지표 | `http://localhost:8080/actuator/metrics` |
@@ -199,7 +202,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 | 분석 시간 | 1분 목표에 못 미칩니다. 평균 44~49초지만 1분을 넘는 분석이 있습니다(처음 보는 고장 실험 8/50). |
 | 체크 링 마모 | 첫 경보와 첫 불량 사이가 4 shot뿐이라 진단 전에 불량 1건이 생깁니다. 에이전트가 아니라 탐지 시점이 병목입니다. |
 | 실행 간 편차 | 처음 보는 고장 실험에서 같은 입력에도 냉각 막힘 진단 시점이 +35~+71 shot으로 흔들립니다. |
-| 운영 보안 | MQTT 장비 인증·ACL, 작성·승인 분리, 내부망 제한은 아직 없습니다. |
+| 운영 보안 | MQTT 장비 인증·ACL은 있지만 평문(1883)이라 TLS가 필요합니다. 작성·승인 분리, 내부망 제한은 아직 없습니다. |
 
 ---
 
@@ -221,7 +224,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 
 - [문제 정의](docs/01-problem-definition.md) — 누구의 어떤 문제를 풀려는가
 - [아키텍처](docs/02-architecture.md) — 구성 요소, 메시지 형식, 전달 보장 설계
-- [의사결정 기록](docs/decisions/README.md) — ADR-001 ~ 013
+- [의사결정 기록](docs/decisions/README.md) — ADR-001 ~ 015
 - [장애 분석](docs/troubleshooting/README.md) — 개발 중 겪은 문제와 해결 과정 (평가 방식의 허점을 찾은 과정 포함)
 - [평가 결과](docs/evaluation.md) — 측정 방법, 결과, 한계
 - [품질 담당자용 요약](docs/for-quality-team.md) — 기술 용어 없이 쓴 한 장 소개

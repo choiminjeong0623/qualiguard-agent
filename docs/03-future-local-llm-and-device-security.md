@@ -1,7 +1,7 @@
 # 03. 향후 계획: 로컬 소형 LLM, 설비 쪽 보안, Redis
 
 - 작성일: 2026-11-15
-- 상태: **계획 (미구현)**. 이 문서의 항목은 아직 코드에 없습니다. 수치는 추정이며, 구현할 때 실측으로 바꿉니다.
+- 상태: **계획**. N-07·N-08(MQTT 장비 인증·ACL)은 2026-11-15 구현했습니다([ADR-015](decisions/ADR-015-mqtt-device-auth.md)). 나머지 항목은 아직 코드에 없습니다. 수치는 추정이며, 구현할 때 실측으로 바꿉니다.
 - 관련: [문제 정의](01-problem-definition.md), [아키텍처](02-architecture.md), [ADR-005 (탐지는 규칙, LLM은 경보 시에만)](decisions/ADR-005-spc-detect-llm-reason.md), [ADR-008 (에이전트 설계)](decisions/ADR-008-agent-design.md), [ADR-011 (QMS 로그인)](decisions/ADR-011-qms-login.md)
 
 이 프로젝트의 대표 강점은 **MQTT·Kafka 실시간 데이터 흐름과 공장 현장에 맞는 구성**입니다. 아래 세 가지는 그 방향에서 다음에 할 일을 정리한 것입니다.
@@ -33,8 +33,8 @@
 
 | ID | 요구사항 | 수용 기준 | 우선순위 |
 |---|---|---|---|
-| N-07 | **MQTT 장비 인증**: 등록된 장비만 브로커에 접속한다 | ① `allow_anonymous false`, 장비별 계정(비밀번호 파일, 이후 인증서) ② 계정 없는 접속은 거부(CONNACK 실패)되는 것을 시험으로 확인 ③ 비밀번호 파일은 커밋하지 않는다 | 중간 |
-| N-08 | **토픽별 접근 권한(ACL)**: 장비는 자기 토픽에만 쓰고, 브리지만 읽는다 | ① 장비 계정은 `factory/{라인}/{자기 설비}/telemetry`에 발행만 가능 ② 다른 설비 토픽 발행·구독은 거부 ③ 브리지 계정만 `factory/+/+/telemetry` 구독 ④ 거부 사례를 시험으로 확인 | 중간 |
+| N-07 | **MQTT 장비 인증**: 등록된 장비만 브로커에 접속한다 | ① `allow_anonymous false`, 장비별 계정(비밀번호 파일, 이후 인증서) ② 계정 없는 접속은 거부(CONNACK 실패)되는 것을 시험으로 확인 ③ 비밀번호 파일은 커밋하지 않는다 | ✅ 구현 |
+| N-08 | **토픽별 접근 권한(ACL)**: 장비는 자기 토픽에만 쓰고, 브리지만 읽는다 | ① 장비 계정은 `factory/{라인}/{자기 설비}/telemetry`에 발행만 가능 ② 다른 설비 토픽 발행·구독은 거부 ③ 브리지 계정만 `factory/+/+/telemetry` 구독 ④ 거부 사례를 시험으로 확인 | ✅ 구현 |
 | N-09 | (선택) MQTT 구간 암호화(TLS, 8883) | 인증서 기반 접속 성공, 평문 1883 닫음 | 낮음 |
 | N-10 | **8GB M1에서 Kafka·MQTT·SQL Server·앱·로컬 LLM이 함께 동작**한다 | ① 2절 배분으로 재생 평가 1회 동안 스왑 증가가 작다(예: 1GB 미만, 실측으로 기준 확정) ② 로컬 초안 생성 1건이 설정한 시간 안에 끝난다 ③ 측정 방법과 결과를 평가 문서에 남긴다 | 높음 |
 
@@ -112,7 +112,9 @@ Ollama는 Docker가 아니라 **Mac에서 직접** 실행해야 Apple GPU(Metal)
 
 ## 4. MQTT 장비 인증과 ACL 설계
 
-현재 `infra/mosquitto/mosquitto.conf`는 로컬 개발용으로 `allow_anonymous true`입니다.
+> 2026-11-15 구현됨 → [ADR-015](decisions/ADR-015-mqtt-device-auth.md), `infra/mosquitto/`, `scripts/mqtt_users.sh`, `scripts/test_mqtt_acl.sh`. 아래는 구현 전 설계 기록입니다.
+
+구현 전 `infra/mosquitto/mosquitto.conf`는 로컬 개발용으로 `allow_anonymous true`였습니다.
 
 ```conf
 # 예정 설정 (예시)

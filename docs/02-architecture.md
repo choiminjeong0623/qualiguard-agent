@@ -57,7 +57,7 @@ flowchart LR
 | 구성 요소 | 위치 | 역할 |
 |---|---|---|
 | 센서 시뮬레이터 | `simulator/` | 사출성형기가 shot마다 센서 7종과 비전 검사 결과를 발행. 고장 시나리오 4종 주입, 평가용 정답 CSV 기록 |
-| Mosquitto | `docker-compose.yml` | MQTT 브로커. 지속 세션(persistence) 사용 |
+| Mosquitto | `docker-compose.yml`, `infra/mosquitto/` | MQTT 브로커. 지속 세션(persistence), 장비별 계정·토픽 ACL ([ADR-015](decisions/ADR-015-mqtt-device-auth.md)) |
 | 브리지 | `qms-app/.../bridge/` | MQTT 구독 → 형식 검증 → 중복 제거 → Kafka 기록 → MQTT ack |
 | 이상 탐지 | `qms-app/.../quality/` | Kafka Streams. 설비별 SPC 상태를 저장소에 두고 관리도 4종으로 판정 |
 | Kafka | `docker-compose.yml` | KRaft 단일 노드. 토픽은 `kafka-init`이 명시적으로 생성 |
