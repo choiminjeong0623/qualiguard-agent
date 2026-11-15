@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.google.genai.metadata.GoogleGenAiUsage;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -59,7 +60,19 @@ public class IncidentAnalyzer {
     public record Outcome(Integer analysisId, String equipmentId, String triggerType, Long asOfShot,
             Integer parentAnalysisId, String decision, String causeCode, Integer confidence, String ncrNo,
             boolean mergedIntoExistingNcr, List<String> anomalyIds, long latencyMs, List<String> toolTrace,
-            AnalysisResult result, String error) {
+            AnalysisResult result, String error, Tokens tokens) {
+    }
+
+    /** 응답이 알려 준 토큰 수 (입력·출력·생각). 모르면 null. */
+    public record Tokens(Integer prompt, Integer output, Integer thought) {
+        static Tokens of(ChatResponse r) {
+            if (r == null || r.getMetadata() == null || r.getMetadata().getUsage() == null) {
+                return new Tokens(null, null, null);
+            }
+            var u = r.getMetadata().getUsage();
+            Integer thought = u instanceof GoogleGenAiUsage g ? g.getThoughtsTokenCount() : null;
+            return new Tokens(u.getPromptTokens(), u.getCompletionTokens(), thought);
+        }
     }
 
     /** 분석 1건의 입력. 경보 분석과 재확인이 같은 실행 경로(execute)를 쓴다. */
@@ -278,6 +291,7 @@ public class IncidentAnalyzer {
         List<String> trace = Collections.synchronizedList(new ArrayList<>());
         long t0 = System.nanoTime();
         AnalysisResult result;
+        Tokens tokens = new Tokens(null, null, null);
         try {
             // 응답 전체 텍스트를 받아 직접 해석한다.
             // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
@@ -287,6 +301,7 @@ public class IncidentAnalyzer {
                     .tools(new QualityTools(jdbc, trace, job.asOf(), t0, embeddings::queryVector))
                     .call()
                     .chatResponse();
+            tokens = Tokens.of(response);
             String text = allText(response);
             AnalysisResult parsed = parseResult(text);
             if (parsed == null) {
@@ -313,10 +328,10 @@ public class IncidentAnalyzer {
                 setStatus(anomalyIds, "NEW");   // 다시 분석할 수 있게 되돌린다
             }
             String error = causeChain(e);
-            Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error);
+            Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error, tokens);
             log.error("[에이전트] 분석 실패 — {} {} 경보 {}건: {}", equipmentId, job.trigger(), anomalyIds.size(), error, e);
             return new Outcome(id, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), "FAILED", null, null,
-                    null, false, anomalyIds, ms, trace, null, error);
+                    null, false, anomalyIds, ms, trace, null, error, tokens);
         }
         long ms = elapsedMs(t0);
 
@@ -325,6 +340,7 @@ public class IncidentAnalyzer {
         String causeCode = result.causeCode() == null ? "UNKNOWN" : result.causeCode().toUpperCase(Locale.ROOT);
         int confidence = result.confidence() == null ? 0 : Math.max(0, Math.min(100, result.confidence()));
         String resultJson = objectMapper.writeValueAsString(result);
+        Tokens usage = tokens;
 
         Outcome outcome = tx.execute(status -> {
             String ncrNo = null;
@@ -379,9 +395,9 @@ public class IncidentAnalyzer {
                 setStatus(anomalyIds, "DISMISSED");
             }
             Integer analysisId = insertAnalysis(job, decision, causeCode, confidence, resultJson, trace, ms, ncrId,
-                    null);
+                    null, usage);
             return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
-                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null);
+                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, usage);
         });
 
         log.info("[에이전트] {} {} (shot {}) 경보 {}건 → {} / {} (확신도 {}) {}{} — 도구 {}회, {}ms",
@@ -505,18 +521,18 @@ public class IncidentAnalyzer {
     }
 
     private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,
-            String resultJson, List<String> trace, long ms, Integer ncrId, String error) {
+            String resultJson, List<String> trace, long ms, Integer ncrId, String error, Tokens tokens) {
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
                     confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag,
-                    trigger_type, as_of, as_of_shot, parent_analysis_id)
+                    trigger_type, as_of, as_of_shot, parent_analysis_id, prompt_tokens, output_tokens, thought_tokens)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?)
                 """, Integer.class,
                 job.equipmentId(), job.seedAnomalyId(), String.join(",", job.anomalyIds()), decision, causeCode,
                 confidence, resultJson, String.join("\n", trace), model, (int) ms, ncrId,
                 error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
-                job.parentId());
+                job.parentId(), tokens.prompt(), tokens.output(), tokens.thought());
     }
 
     @SuppressWarnings("unchecked")

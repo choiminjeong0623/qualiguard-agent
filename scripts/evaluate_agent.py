@@ -206,6 +206,7 @@ def run_case(c, run, stamp, gt, cfg):
             "toolCalls": len([t for t in trace if not t.startswith(" ") and not t.startswith("repairJsonFormat")]),
             "jsonRepaired": any(t.startswith("repairJsonFormat") for t in trace),
             "toolTimesMs": times,
+            "tokens": out.get("tokens"),
             "toolTrace": trace, "latencyMs": out.get("latencyMs"), "error": out.get("error"),
         }
         steps.append(s)
@@ -300,6 +301,12 @@ def summarize(results, runs, mode):
         lines.append(f"- 분석 1단계 소요: 평균 {round(sum(all_lat) / len(all_lat) / 1000, 1)}초, "
                      f"최소 {round(min(all_lat) / 1000)}초, 최대 {round(max(all_lat) / 1000)}초, "
                      f"1분 초과 {sum(x > 60000 for x in all_lat)}/{len(all_lat)}단계")
+    toks = [s["tokens"] for r in results for s in r["stepDetails"] if s.get("tokens") and s["tokens"].get("prompt")]
+    if toks:
+        def avg(k):
+            xs = [t[k] for t in toks if t.get(k) is not None]
+            return round(sum(xs) / len(xs)) if xs else "-"
+        lines.append(f"- 분석 1단계 토큰 평균: 입력 {avg('prompt')}, 출력 {avg('output')}, 생각 {avg('thought')} ({len(toks)}단계)")
     lines.append("- '진단까지 shot', '첫 불량 shot'은 고장 시작 shot 기준 차이. 단발성 경보는 고장 구간이 없어 '-'")
     lines.append("- 단발성 경보는 첫 판단으로 채점하고, 이어진 재확인에서 만든 초안은 '잘못된 초안'에 셉니다")
     lines.append("")
