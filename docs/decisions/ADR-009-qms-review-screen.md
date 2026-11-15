@@ -34,6 +34,13 @@
 
 화면 코드(`qms.js`)는 API 호출과 그리기를 나눠 두어, 나중에 Kendo Grid 같은 부품으로 바꾸기 쉽게 했습니다.
 
+## 결정 5. 스타일은 Tabler CSS, 배치는 IBM Carbon 참고 (2026-11-15 추가)
+빌드 없는 jQuery 구조(결정 4)는 그대로 두고 **CSS만** 얹었습니다.
+- **Tabler** (Bootstrap 5 기반, MIT): CDN 의 CSS 한 파일만 씁니다. Bootstrap JS 는 싣지 않고, 아코디언 여닫기는 `qms.js` 가 처리합니다.
+- **Carbon 식 배치**: 48px 어두운 상단 바(UI Shell), 상태별 건수 타일(누르면 그 상태로 거름), 툴바 + 촘촘한 데이터 표, 상세의 메타 정보는 이름/값 격자, 동작 버튼은 카드 아래쪽에 모으고 주 동작(승인)을 오른쪽 끝에 둠, MES/ERP 연계는 승인 → 전송 → MES → ERP 단계 표시.
+- 같은 이유로 Carbon 자체(Web Components)는 쓰지 않았습니다: 부품 단위 스크립트를 여러 개 실어야 하고 jQuery 화면과 섞기 어렵습니다.
+- 한계: 공장 내부망처럼 CDN 에 닿지 않는 환경에서는 CSS 를 `static/` 으로 내려받아 두어야 합니다.
+
 ## 결과
 - 화면: `http://localhost:8080/qms/index.html` — 상태별 목록, 상세(연결된 경보·에이전트 분석 기록·도구 호출 순서), 수정·승인·반려, 검토 이력
 - API: `GET/PUT /api/qms/ncrs/{ncrNo}`, `POST .../approve`, `POST .../reject`

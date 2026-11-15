@@ -13,7 +13,7 @@
     evidence: '근거', recommendedAction: '권고 조치', causeCode: '원인 코드', defectType: '불량 유형',
     relatedSensors: '관련 센서' };
 
-  var state = { status: 'DRAFT', selected: null, current: null, me: null };
+  var state = { status: 'DRAFT', selected: null, current: null, me: null, rows: [] };
 
   // 쓰기 요청에는 CSRF 토큰(XSRF-TOKEN 쿠키 값)을 헤더로 보낸다. 로그인이 끊기면(401) 로그인 화면으로.
   function csrf() {
@@ -30,7 +30,8 @@
 
   function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
   function time(s) { return s ? s.replace('T', ' ').replace(/\.\d+.*$/, '').replace(/Z$/, '') : ''; }
-  function msg(text, kind) { $('#msg').text(text || '').attr('class', 'msg ' + (kind || '')); }
+  function msg(text, kind) { $('#msg').text(text || '').attr('class', 'msg ' + (kind || 'info')); }
+  function statusTag(s) { return '<span class="badge qg-status ' + esc(s) + '">' + esc(STATUS_LABEL[s] || s) + '</span>'; }
   function errorText(xhr) {
     var body = xhr.responseJSON;
     return (body && body.error) ? body.error : ('요청 실패 (' + xhr.status + ')');
@@ -42,21 +43,44 @@
 
   // ── 목록 ─────────────────────────────────────────────────────
   function loadList() {
+    $('#list-title').text(STATUS_LABEL[state.status] || '전체');
     $.getJSON(API, { status: state.status, top: 200 }).done(function (rows) {
-      var $b = $('#rows').empty();
-      if (!rows.length) {
-        $b.append('<tr><td colspan="7" class="muted">해당 상태의 부적합이 없습니다.</td></tr>');
-        return;
-      }
-      rows.forEach(function (r) {
-        $('<tr class="pick">').attr('data-no', r.ncr_no).toggleClass('selected', r.ncr_no === state.selected)
-          .append('<td>' + esc(r.ncr_no) + '</td><td>' + esc(r.equipment_id) + '</td><td title="' + esc(r.title) + '">' + esc(r.title) +
-            '</td><td>' + esc(r.cause_code || '') + '</td><td>' + esc(r.confidence == null ? '' : r.confidence) +
-            '</td><td>' + esc(r.created_by === 'AGENT' ? 'AI' : r.created_by) + '</td><td>' + esc(time(r.created_at)) + '</td>')
-          .appendTo($b);
-      });
+      state.rows = rows;
+      drawRows();
     }).fail(function (xhr) {
       $('#rows').html('<tr><td colspan="7" class="msg err">' + esc(errorText(xhr)) + '</td></tr>');
+    });
+    loadCounts();
+  }
+
+  // 검색어는 화면에서만 거른다 (번호·설비·제목·원인)
+  function drawRows() {
+    var q = $.trim($('#search').val() || '').toLowerCase();
+    var rows = state.rows.filter(function (r) {
+      return !q || [r.ncr_no, r.equipment_id, r.title, r.cause_code].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    var $b = $('#rows').empty();
+    if (!rows.length) {
+      $b.append('<tr><td colspan="7" class="text-secondary">' + (q ? '검색 결과가 없습니다.' : '해당 상태의 부적합이 없습니다.') + '</td></tr>');
+      return;
+    }
+    rows.forEach(function (r) {
+      var no = '<span class="qg-no">' + esc(r.ncr_no) + '</span>' + (state.status === '' && r.status ? ' ' + statusTag(r.status) : '');
+      var by = r.created_by === 'AGENT' ? '<span class="badge bg-azure-lt">AI</span>' : esc(r.created_by);
+      $('<tr class="pick">').attr('data-no', r.ncr_no).toggleClass('selected', r.ncr_no === state.selected)
+        .append('<td>' + no + '</td><td>' + esc(r.equipment_id) + '</td><td class="qg-title-cell" title="' + esc(r.title) + '">' + esc(r.title) +
+          '</td><td>' + esc(r.cause_code || '') + '</td><td class="text-end"><span class="qg-conf">' + esc(r.confidence == null ? '' : r.confidence) +
+          '</span></td><td>' + by + '</td><td class="text-secondary">' + esc(time(r.created_at)) + '</td>')
+        .appendTo($b);
+    });
+  }
+
+  // 상태 타일의 건수: 전체 목록 한 번으로 센다
+  function loadCounts() {
+    $.getJSON(API, { status: '', top: 500 }).done(function (rows) {
+      var c = { '': rows.length, DRAFT: 0, APPROVED: 0, REJECTED: 0, CLOSED: 0 };
+      rows.forEach(function (r) { if (c[r.status] != null) { c[r.status] += 1; } });
+      $('[data-count]').each(function () { $(this).text(c[$(this).attr('data-count')]); });
     });
   }
 
@@ -70,19 +94,24 @@
   function render(d) {
     state.current = d;
     $('#detail').prop('hidden', false);
-    $('#d-title').text(d.ncr_no + ' · ' + d.title);
-    $('#d-status').text(STATUS_LABEL[d.status] || d.status).attr('class', 'badge ' + d.status);
-    var meta = d.equipment_id + ' · 발생 ' + time(d.occurred_at) + ' · 작성 ' + (d.created_by === 'AGENT' ? 'AI 에이전트' : d.created_by);
-    if (d.confidence != null) { meta += ' · 확신도 ' + d.confidence; }
-    if (d.reviewed_by) { meta += ' · ' + (STATUS_LABEL[d.status] || '') + ' ' + d.reviewed_by + ' (' + time(d.reviewed_at) + ')'; }
-    if (d.review_comment) { meta += ' · 의견: ' + d.review_comment; }
-    $('#d-meta').text(meta);
+    $('#empty').prop('hidden', true);
+    $('#d-no').text(d.ncr_no);
+    $('#d-title').text(d.title);
+    $('#d-status').text(STATUS_LABEL[d.status] || d.status).attr('class', 'badge qg-status ' + d.status);
+    var meta = [['설비', d.equipment_id], ['발생', time(d.occurred_at)],
+      ['작성', d.created_by === 'AGENT' ? 'AI 에이전트' : d.created_by]];
+    if (d.confidence != null) { meta.push(['확신도', d.confidence]); }
+    if (d.reviewed_by) { meta.push([(STATUS_LABEL[d.status] || '검토') + '자', d.reviewed_by + ' · ' + time(d.reviewed_at)]); }
+    if (d.review_comment) { meta.push(['의견', d.review_comment]); }
+    $('#d-meta').html(meta.map(function (m) { return '<div><dt>' + esc(m[0]) + '</dt><dd>' + esc(m[1]) + '</dd></div>'; }).join(''));
 
     var $f = $('#edit-form');
     FIELDS.forEach(function (k) { $f.find('[name="' + k + '"]').val(d[COLUMN[k] || k] || ''); });
     var editable = d.status === 'DRAFT' && canWrite();
     $f.find('input, textarea, select').not('#reject-reason').prop('disabled', !editable);
     $('#btn-save, #btn-approve, #btn-reject, #reject-reason').prop('disabled', !editable);
+    $('#edit-form > .qg-actions').first().prop('hidden', !editable);
+    $('#edit-state').text(editable ? '수정 가능' : '읽기 전용');
     var inKb = d.status === 'APPROVED' || d.status === 'CLOSED';
     $('#d-kb').prop('hidden', !inKb);
     $('#close-box').prop('hidden', d.status !== 'APPROVED' || !canWrite());
@@ -94,23 +123,26 @@
         : '초안(검토 대기) 상태에서만 수정·승인·반려할 수 있습니다.'));
     }
 
-    $('#a-count').text('(' + d.anomalies.length + '건)');
+    $('#a-count').text(d.anomalies.length + '건');
+    $('#g-count').text(d.analyses.length + '건');
     $('#anomalies').html(d.anomalies.map(function (a) {
       return '<tr><td>' + esc(a.shot_no) + '</td><td>' + esc(a.rule_code) + '</td><td>' + esc(a.sensor_name) +
         '</td><td>' + esc(a.message) + '</td></tr>';
-    }).join('') || '<tr><td colspan="4" class="muted">연결된 경보 없음</td></tr>');
+    }).join('') || '<tr><td colspan="4" class="text-secondary">연결된 경보 없음</td></tr>');
 
     $('#analyses').html(d.analyses.map(function (g) {
       var r = {};
       try { r = JSON.parse(g.result_json || '{}'); } catch (e) { r = {}; }
-      var head = '#' + g.analysis_id + ' · ' + (g.trigger_type === 'RECHECK' ? '재확인' : '경보') +
-        (g.as_of_shot != null ? ' (shot ' + g.as_of_shot + ')' : '') + ' · ' + g.decision + ' / ' + (g.cause_code || '') +
-        ' · 확신도 ' + (g.confidence == null ? '-' : g.confidence) + ' · ' + Math.round((g.latency_ms || 0) / 1000) + '초';
-      return '<div class="analysis"><strong>' + esc(head) + '</strong>' +
+      var head = '<strong>#' + esc(g.analysis_id) + '</strong>' +
+        '<span class="badge ' + (g.trigger_type === 'RECHECK' ? 'bg-purple-lt">재확인' : 'bg-orange-lt">경보') + '</span>' +
+        '<span class="badge bg-secondary-lt">' + esc(g.decision) + '</span>' +
+        '<span>' + esc((g.cause_code || '') + (g.as_of_shot != null ? ' · shot ' + g.as_of_shot : '') +
+          ' · 확신도 ' + (g.confidence == null ? '-' : g.confidence) + ' · ' + Math.round((g.latency_ms || 0) / 1000) + '초') + '</span>';
+      return '<div class="analysis"><div class="analysis-head">' + head + '</div>' +
         (r.reasoningSummary ? '<p>' + esc(r.reasoningSummary) + '</p>' : '') +
         ((r.similarCases && r.similarCases.length) ? '<p class="muted">참고 사례: ' + esc(r.similarCases.join(', ')) + '</p>' : '') +
         '<pre>' + esc(g.tool_trace || '') + '</pre></div>';
-    }).join('') || '<p class="muted">분석 기록 없음 (사람이 작성한 부적합)</p>');
+    }).join('') || '<p class="text-secondary mb-0">분석 기록 없음 (사람이 작성한 부적합)</p>');
 
     var ACK = { RECEIVED: '수신 확인', PROCESSED: '처리 완료', FAILED: '실패' };
     var latestFailed = false;
@@ -127,8 +159,9 @@
       }).join('') + '</ul>' : (o.published_at ? ' · ' + esc('MES/ERP 응답 대기') : '');
       if (i === events.length - 1) { latestFailed = acks.some(function (s) { return s.status === 'FAILED'; }); }
       return '<li>' + line + '</li>';
-    }).join('') || '<li class="muted">승인하면 MES/ERP 로 보낼 이벤트가 만들어집니다.</li>');
+    }).join('') || '<li class="text-secondary">승인하면 MES/ERP 로 보낼 이벤트가 만들어집니다.</li>');
     $('#btn-retry').prop('hidden', !(latestFailed && canWrite()));
+    drawFlow(d, events[events.length - 1]);
 
     $('#history').html(d.history.map(function (h) {
       var line = time(h.created_at) + ' · ' + h.actor + ' · ' + (ACTION_LABEL[h.action] || h.action);
@@ -139,7 +172,27 @@
         changed = Object.keys(c).map(function (k) { return FIELD_LABEL[k] || k; }).join(', ');
       } catch (e) { changed = ''; }
       return '<li>' + esc(line) + (changed ? ' <span class="muted">(' + esc(changed) + ')</span>' : '') + '</li>';
-    }).join('') || '<li class="muted">아직 검토 이력이 없습니다.</li>');
+    }).join('') || '<li class="text-secondary">아직 검토 이력이 없습니다.</li>');
+  }
+
+  // 승인 → 전송 → MES → ERP 진행 단계 (가장 최근 이벤트 기준). 지난 단계까지 채우고, 실패한 시스템은 빨갛게.
+  function drawFlow(d, ev) {
+    var acks = ev ? (d.integrationStatus || []).filter(function (s) { return s.event_id === ev.event_id; }) : [];
+    function sys(name) {
+      var a = acks.filter(function (s) { return s.system_name === name; })[0];
+      if (!a) { return { done: false, label: name + ' 응답 대기' }; }
+      var L = { RECEIVED: '수신 확인', PROCESSED: '처리 완료', FAILED: '실패' };
+      return { done: a.status !== 'FAILED', failed: a.status === 'FAILED', label: name + ' ' + (L[a.status] || a.status) };
+    }
+    var approved = d.status === 'APPROVED' || d.status === 'CLOSED';
+    var steps = [
+      { done: approved, label: approved ? '승인됨' : '승인 전' },
+      { done: !!(ev && ev.published_at), label: ev && ev.published_at ? 'Kafka 전송' : '전송 대기' },
+      sys('MES'), sys('ERP')
+    ];
+    $('#flow').html(steps.map(function (s) {
+      return '<li class="qg-step' + (s.failed ? ' failed' : (s.done ? ' done' : '')) + '">' + esc(s.label) + '</li>';
+    }).join(''));
   }
 
   function editedFields() {
@@ -211,14 +264,23 @@
     });
   }
 
-  $('.filters').on('click', '.tab', function () {
-    $('.tab').removeClass('active');
-    $(this).addClass('active');
+  $('#tiles').on('click', '.tab', function () {
+    $('#tiles .tab').removeClass('active').attr('aria-selected', 'false');
+    $(this).addClass('active').attr('aria-selected', 'true');
     state.status = String($(this).data('status'));
     loadList();
   });
 
   $('#rows').on('click', 'tr.pick', function () { loadDetail($(this).data('no')); });
+  $('#search').on('input', drawRows);
+
+  // 아코디언 열고 닫기 (Bootstrap JS 를 따로 싣지 않는다)
+  $('#more').on('click', '[data-qg-toggle]', function () {
+    var $p = $('#' + $(this).attr('data-qg-toggle'));
+    var open = $p.prop('hidden');
+    $p.prop('hidden', !open);
+    $(this).toggleClass('collapsed', !open).attr('aria-expanded', String(open));
+  });
 
   $('#btn-logout').on('click', function () {
     send('POST', '/logout').always(function () { location.href = 'login.html?logout'; });
