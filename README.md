@@ -57,7 +57,7 @@ flowchart LR
 | 탐지 | Kafka Streams (exactly-once v2, RocksDB 상태 저장소) | SPC 관리도 4종으로 이상 판정, 에이전트용 근거 생성 |
 | 저장 | SQL Server 2025 | shot 공정 데이터, 이상·부적합·정비 이력, 검사 규격, 저장 프로시저 6개 |
 | AI | Spring AI 2.0, Gemini 3.8 Flash | 사건 단위 원인 추정, 부적합 보고서 초안, 판단 과정 기록 |
-| 화면 | Spring Boot 정적 페이지, jQuery | QMS 검토 화면: 초안 수정·승인·반려, 검토 이력 (`/qms/index.html`) |
+| 화면 | Spring Boot 정적 페이지, jQuery, Spring Security | QMS 검토 화면: 로그인, 초안 수정·승인·반려, 검토 이력 (`/qms/index.html`) |
 
 자세한 내용은 [아키텍처 문서](docs/02-architecture.md)를 참고하세요.
 
@@ -77,6 +77,7 @@ flowchart LR
 | [ADR-008](docs/decisions/ADR-008-agent-design.md) | 사건 단위 분석, **대응표 없이 지식저장소로 추론**, 사람 승인 | 비용·중복 방지, 정답 주입 없는 추론, 책임 소재 |
 | [ADR-009](docs/decisions/ADR-009-qms-review-screen.md) | 검토 상태 규칙은 **저장 프로시저 한 트랜잭션**에, 승인에는 확정 원인 필수, 화면은 jQuery | 동시 요청에도 상태 규칙 유지, 지식저장소 품질, 라이선스·메모리 |
 | [ADR-010](docs/decisions/ADR-010-ncr-integration-outbox.md) | 승인 결과는 **트랜잭션 아웃박스**로 Kafka 에, 받는 쪽은 event_id 로 중복 제거 | 승인과 이벤트가 따로 성공·실패하지 않게 |
+| [ADR-011](docs/decisions/ADR-011-qms-login.md) | QMS **로그인**(DB 사용자·BCrypt), 역할 품질 담당자/조회 전용, 비밀번호는 `.env` 로만 | 승인자를 확실히, 비밀번호를 저장소에 남기지 않음 |
 
 ---
 
@@ -112,7 +113,7 @@ flowchart LR
 
 ```bash
 # 1) 인프라
-cp .env.example .env                     # MSSQL_SA_PASSWORD, GEMINI_API_KEY 입력
+cp .env.example .env                     # MSSQL_SA_PASSWORD, GEMINI_API_KEY, QMS 화면 계정(QG_REVIEWER_PASSWORD 등) 입력
 docker compose up -d                     # Mosquitto, Kafka, SQL Server
 docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0) 이 정상
 
@@ -120,6 +121,8 @@ docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0)
 cd qms-app
 ./gradlew test --tests '*SpcEngineTest'  # 이상 탐지 단위 테스트 (인프라 불필요)
 ./gradlew bootRun
+
+# QMS 검토 화면: http://localhost:8080/qms/index.html  (.env 의 QG_REVIEWER_USERNAME / PASSWORD 로 로그인)
 
 # 3) 시뮬레이터 (다른 터미널)
 cd simulator

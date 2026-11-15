@@ -13,15 +13,23 @@
     evidence: '근거', recommendedAction: '권고 조치', causeCode: '원인 코드', defectType: '불량 유형',
     relatedSensors: '관련 센서' };
 
-  var state = { status: 'DRAFT', selected: null, current: null };
+  var state = { status: 'DRAFT', selected: null, current: null, me: null };
+
+  // 쓰기 요청에는 CSRF 토큰(XSRF-TOKEN 쿠키 값)을 헤더로 보낸다. 로그인이 끊기면(401) 로그인 화면으로.
+  function csrf() {
+    var c = document.cookie.split('; ').find(function (x) { return x.indexOf('XSRF-TOKEN=') === 0; });
+    return c ? decodeURIComponent(c.split('=')[1]) : '';
+  }
+  $.ajaxSetup({
+    beforeSend: function (xhr, settings) {
+      if (settings.type && settings.type !== 'GET') { xhr.setRequestHeader('X-XSRF-TOKEN', csrf()); }
+    }
+  });
+  $(document).ajaxError(function (e, xhr) { if (xhr.status === 401) { location.href = 'login.html'; } });
+  function canWrite() { return state.me && state.me.role === 'REVIEWER'; }
 
   function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
   function time(s) { return s ? s.replace('T', ' ').replace(/\.\d+.*$/, '').replace(/Z$/, '') : ''; }
-  function actor() {
-    var v = $.trim($('#actor').val());
-    try { localStorage.setItem('qms.actor', v); } catch (e) { /* 저장 못 해도 동작에는 지장 없음 */ }
-    return v;
-  }
   function msg(text, kind) { $('#msg').text(text || '').attr('class', 'msg ' + (kind || '')); }
   function errorText(xhr) {
     var body = xhr.responseJSON;
@@ -72,15 +80,19 @@
 
     var $f = $('#edit-form');
     FIELDS.forEach(function (k) { $f.find('[name="' + k + '"]').val(d[COLUMN[k] || k] || ''); });
-    var editable = d.status === 'DRAFT';
+    var editable = d.status === 'DRAFT' && canWrite();
     $f.find('input, textarea, select').not('#reject-reason').prop('disabled', !editable);
     $('#btn-save, #btn-approve, #btn-reject, #reject-reason').prop('disabled', !editable);
     var inKb = d.status === 'APPROVED' || d.status === 'CLOSED';
     $('#d-kb').prop('hidden', !inKb);
-    $('#close-box').prop('hidden', d.status !== 'APPROVED');
+    $('#close-box').prop('hidden', d.status !== 'APPROVED' || !canWrite());
     $('#action-taken').prop('disabled', false).val('');
-    msg(editable ? '' : (d.status === 'APPROVED' ? '조치를 마치면 조치 내용을 적고 [조치 완료]를 누르세요.'
-      : '초안(검토 대기) 상태에서만 수정·승인·반려할 수 있습니다.'));
+    if (!canWrite()) {
+      msg('조회 전용 계정입니다. 수정·승인·반려는 품질 담당자 계정으로 할 수 있습니다.');
+    } else {
+      msg(editable ? '' : (d.status === 'APPROVED' ? '조치를 마치면 조치 내용을 적고 [조치 완료]를 누르세요.'
+        : '초안(검토 대기) 상태에서만 수정·승인·반려할 수 있습니다.'));
+    }
 
     $('#a-count').text('(' + d.anomalies.length + '건)');
     $('#anomalies').html(d.anomalies.map(function (a) {
@@ -128,16 +140,16 @@
   }
 
   // ── 동작 ─────────────────────────────────────────────────────
+  // 검토자는 로그인한 사용자 (서버가 세션에서 정한다)
   function requireActor() {
-    var a = actor();
-    if (!a) { msg('검토자 이름을 먼저 입력하세요.', 'err'); $('#actor').focus(); }
-    return a;
+    if (!canWrite()) { msg('조회 전용 계정은 수정·승인·반려할 수 없습니다.', 'err'); return null; }
+    return state.me.displayName;
   }
 
   function save() {
     var a = requireActor();
     if (!a) { return $.Deferred().reject().promise(); }
-    return send('PUT', API + '/' + encodeURIComponent(state.selected), { actor: a, fields: editedFields() })
+    return send('PUT', API + '/' + encodeURIComponent(state.selected), { fields: editedFields() })
       .done(function (d) { render(d); msg('저장했습니다.', 'ok'); loadList(); })
       .fail(function (xhr) { msg(errorText(xhr), 'err'); });
   }
@@ -149,7 +161,7 @@
     if (!a) { return; }
     // 고친 내용(확정 원인 등)을 먼저 저장한 뒤 승인한다
     save().done(function () {
-      send('POST', API + '/' + encodeURIComponent(state.selected) + '/approve', { actor: a })
+      send('POST', API + '/' + encodeURIComponent(state.selected) + '/approve', {})
         .done(function (d) { render(d); msg('승인했습니다. 이 부적합은 다음 분석의 유사 사례로 쓰입니다.', 'ok'); loadList(); loadKb(); })
         .fail(function (xhr) { msg(errorText(xhr), 'err'); });
     });
@@ -160,7 +172,7 @@
     if (!a) { return; }
     var reason = $.trim($('#reject-reason').val());
     if (!reason) { msg('반려 사유를 입력하세요.', 'err'); $('#reject-reason').focus(); return; }
-    send('POST', API + '/' + encodeURIComponent(state.selected) + '/reject', { actor: a, reason: reason })
+    send('POST', API + '/' + encodeURIComponent(state.selected) + '/reject', { reason: reason })
       .done(function (d) { $('#reject-reason').val(''); render(d); msg('반려했습니다.', 'ok'); loadList(); })
       .fail(function (xhr) { msg(errorText(xhr), 'err'); });
   });
@@ -170,7 +182,7 @@
     if (!a) { return; }
     var done = $.trim($('#action-taken').val());
     if (!done) { msg('조치 내용을 입력하세요.', 'err'); $('#action-taken').focus(); return; }
-    send('POST', API + '/' + encodeURIComponent(state.selected) + '/close', { actor: a, actionTaken: done })
+    send('POST', API + '/' + encodeURIComponent(state.selected) + '/close', { actionTaken: done })
       .done(function (d) { render(d); msg('조치 완료로 닫았습니다.', 'ok'); loadList(); loadKb(); })
       .fail(function (xhr) { msg(errorText(xhr), 'err'); });
   });
@@ -192,7 +204,14 @@
 
   $('#rows').on('click', 'tr.pick', function () { loadDetail($(this).data('no')); });
 
-  try { $('#actor').val(localStorage.getItem('qms.actor') || ''); } catch (e) { /* 무시 */ }
-  loadList();
-  loadKb();
+  $('#btn-logout').on('click', function () {
+    send('POST', '/logout').always(function () { location.href = 'login.html?logout'; });
+  });
+
+  $.getJSON('/api/qms/me').done(function (me) {
+    state.me = me;
+    $('#me').text(me.displayName + ' (' + (me.role === 'REVIEWER' ? '품질 담당자' : '조회 전용') + ')');
+    loadList();
+    loadKb();
+  });
 }(jQuery));

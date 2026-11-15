@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QMS 로그인</title>
+<link rel="stylesheet" href="qms.css">
+</head>
+<body class="login-body">
+<main class="login-box">
+  <h1>QMS 부적합 검토</h1>
+  <p id="login-msg" class="msg" role="status"></p>
+  <form id="login-form" method="post" action="/login" autocomplete="on">
+    <label>아이디 <input name="username" autocomplete="username" required autofocus></label>
+    <label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label>
+    <input type="hidden" name="_csrf" id="csrf">
+    <button type="submit" class="primary">로그인</button>
+  </form>
+  <p class="muted small">계정은 관리자가 .env 의 QG_REVIEWER_* · QG_VIEWER_* 로 만듭니다.</p>
+</main>
+<script>
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var m = document.getElementById('login-msg');
+    if (q.has('error')) { m.textContent = '아이디 또는 비밀번호가 맞지 않습니다.'; m.className = 'msg err'; }
+    if (q.has('logout')) { m.textContent = '로그아웃했습니다.'; m.className = 'msg ok'; }
+    // 로그인 요청에도 CSRF 토큰이 필요하다: 서버가 내려준 XSRF-TOKEN 쿠키 값을 폼에 넣는다
+    document.getElementById('login-form').addEventListener('submit', function () {
+      var c = document.cookie.split('; ').find(function (x) { return x.indexOf('XSRF-TOKEN=') === 0; });
+      document.getElementById('csrf').value = c ? decodeURIComponent(c.split('=')[1]) : '';
+    });
+  }());
+</script>
+</body>
+</html>
