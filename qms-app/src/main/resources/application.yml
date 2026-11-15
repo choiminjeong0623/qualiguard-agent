@@ -64,6 +64,10 @@ qg:
     merge-minutes: 60                 # 같은 설비·같은 원인 초안이 60분 안에 있으면 그 초안에 연결
     recheck-shots: 40                 # 관찰(OBSERVE) 판단 뒤 새 경보가 없어도 40 shot 이 지나면 다시 분석
     recheck-max: 3                    # 새 경보 없이 이어지는 재확인 최대 횟수 (LLM 비용 상한)
+  integration:
+    publish-enabled: true             # 승인 이벤트 아웃박스를 Kafka(quality.ncr.approved)로 발행
+    poll-ms: 2000
+    receiver-enabled: true            # 가상 MES/ERP 수신 서비스 (별도 소비자 그룹)
 
 management:
   endpoints:
