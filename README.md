@@ -21,6 +21,18 @@
 - **사람이 승인**: AI는 초안만 쓰고, 확정 원인을 적어 승인한 사례만 다음 분석의 지식저장소가 됩니다.
 - **한계도 그대로 적었습니다**: [아래 "한계"](#한계)와 [평가 결과](docs/evaluation.md) 참고.
 
+### 데모 화면
+
+경보 → 분류 → 원인 분석 ⇄ 검증 → 초안 → 품질 담당자 승인 → MES/ERP
+
+| 1. 로그인 | 2. 검토 대기 목록 |
+|:---:|:---:|
+| [![로그인](docs/demo/01-login.png)](docs/demo/01-login.png) | [![검토 대기 목록](docs/demo/02-list.png)](docs/demo/02-list.png) |
+| 검토자·조회자 계정 (역할별 권한) | 상태별 부적합 수, AI가 쓴 초안 목록 |
+| **3. AI 초안 + 에이전트 분석 기록** | **4. 승인 후 MES/ERP 연계** |
+| [![에이전트 분석 기록](docs/demo/03-draft-agent-analysis.png)](docs/demo/03-draft-agent-analysis.png) | [![MES/ERP 연계](docs/demo/04-approved-mes-erp.png)](docs/demo/04-approved-mes-erp.png) |
+| 분류 MEDIUM · PROCESS_SHIFT, 단계별 시간(원인 분석 55.3초 · 검증 PASS · 합계 55.5초), 도구 호출 기록 | 승인됨 → Kafka 전송 → MES·ERP 처리 완료, 실패한 시스템만 다시 보냄 |
+
 ---
 
 ## 프로젝트 요약
