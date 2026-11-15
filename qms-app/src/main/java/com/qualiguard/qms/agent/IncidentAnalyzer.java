@@ -57,7 +57,7 @@ public class IncidentAnalyzer {
     public record Outcome(Integer analysisId, String equipmentId, String triggerType, Long asOfShot,
             Integer parentAnalysisId, String decision, String causeCode, Integer confidence, String ncrNo,
             boolean mergedIntoExistingNcr, List<String> anomalyIds, long latencyMs, List<String> toolTrace,
-            AnalysisResult result, String error) {
+            AnalysisResult result, String error, int attempts, VerifierAgent.Verification verification) {
     }
 
     /** 분석 1건의 입력. 경보 분석과 재확인이 같은 실행 경로(execute)를 쓴다. */
@@ -72,17 +72,19 @@ public class IncidentAnalyzer {
     private final TransactionTemplate tx;
     private final AgentProperties props;
     private final ObjectProvider<ChatClient.Builder> chatClientBuilder;
+    private final VerifierAgent verifier;
     private final String model;
     private volatile ChatClient chatClient;
 
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
-            AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
+            AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder, VerifierAgent verifier,
             @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.tx = tx;
         this.props = props;
         this.chatClientBuilder = chatClientBuilder;
+        this.verifier = verifier;
         this.model = model;
     }
 
@@ -273,47 +275,50 @@ public class IncidentAnalyzer {
         List<String> trace = Collections.synchronizedList(new ArrayList<>());
         long t0 = System.nanoTime();
         AnalysisResult result;
+        VerifierAgent.Verification verification = null;
+        int attempts = 0;
         try {
-            // 응답 전체 텍스트를 받아 직접 해석한다.
-            // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
-            ChatResponse response = chatClient().prompt()
-                    .system(AgentPrompts.SYSTEM)
-                    .user(userPrompt)
-                    .tools(new QualityTools(jdbc, trace, job.asOf(), t0))
-                    .call()
-                    .chatResponse();
-            String text = allText(response);
-            AnalysisResult parsed = parseResult(text);
-            if (parsed == null) {
-                // 형식만 다시 요청 (도구 없이 1회 — 조사를 반복하지 않으므로 비용이 적다)
-                trace.add("repairJsonFormat()");
-                String repaired = allText(chatClient().prompt()
-                        .system(AgentPrompts.REPAIR)
-                        .user(text)
-                        .call()
-                        .chatResponse());
-                parsed = parseResult(repaired);
-                if (parsed == null) {
-                    throw new IllegalStateException("분석 결과를 JSON 으로 읽지 못함. 응답 앞부분: " + preview(text));
+            // 분석 에이전트 → 검증 에이전트. 근거가 약하면(WEAK) 지적을 붙여 분석 에이전트로 되돌린다 (최대 verify-max-retries 회)
+            List<String> trace0 = trace;
+            String prompt = userPrompt;
+            AnalysisResult current = null;
+            while (true) {
+                attempts++;
+                List<String> attemptTrace = Collections.synchronizedList(new ArrayList<>());
+                try {
+                    current = analyzeOnce(prompt, job.asOf(), t0, attemptTrace);
+                } finally {
+                    trace0.addAll(attemptTrace);   // 실패해도 어디까지 조사했는지 남긴다
                 }
+                if (verifier == null) {
+                    break;
+                }
+                verification = verifier.verify(new VerifierAgent.Input(equipmentId, job.asOf(), alarmRules(job),
+                        current, attemptTrace));
+                trace0.add("verify#" + attempts + "(" + verification.status() + ") @" + elapsedMs(t0) + "ms");
+                verification.fails().forEach(f -> trace0.add("  ↳ 지적: " + f));
+                if (verification.passed() || attempts > props.verifyMaxRetries()) {
+                    break;
+                }
+                trace0.add("  ↳ 분석 에이전트로 되돌림 (" + attempts + "/" + props.verifyMaxRetries() + ")");
+                prompt = userPrompt + "\n\n[앞선 분석 결과]\n" + objectMapper.writeValueAsString(current)
+                        + "\n\n[검증 에이전트 지적]\n" + VerifierAgent.feedback(verification);
             }
-            result = parsed;   // result 는 한 번만 대입 (아래 트랜잭션 람다에서 쓰기 위해)
-            if (result == null || result.decision() == null
-                    || !DECISIONS.contains(result.decision().toUpperCase(Locale.ROOT))) {
-                throw new IllegalStateException("에이전트 응답 형식 오류: " + result);
-            }
+            result = current;   // result 는 한 번만 대입 (아래 트랜잭션 람다에서 쓰기 위해)
         } catch (RuntimeException e) {
             long ms = elapsedMs(t0);
             if (job.ownsAlarmStatus()) {
                 setStatus(anomalyIds, "NEW");   // 다시 분석할 수 있게 되돌린다
             }
             String error = causeChain(e);
-            Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error);
+            Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error, attempts, null);
             log.error("[에이전트] 분석 실패 — {} {} 경보 {}건: {}", equipmentId, job.trigger(), anomalyIds.size(), error, e);
             return new Outcome(id, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), "FAILED", null, null,
-                    null, false, anomalyIds, ms, trace, null, error);
+                    null, false, anomalyIds, ms, trace, null, error, attempts, null);
         }
         long ms = elapsedMs(t0);
+        final int attemptCount = attempts;
+        final VerifierAgent.Verification verified = verification;
 
         // ── 결과 저장 (하나의 트랜잭션) ──────────────────────────────
         String decision = result.decision().toUpperCase(Locale.ROOT);
@@ -360,7 +365,7 @@ public class IncidentAnalyzer {
                             ncrNo, equipmentId, job.seedAnomalyId(), defectType(job),
                             relatedSensors(job.alarms()), truncate(result.title(), 200),
                             truncate(result.phenomenon(), 1000), truncate(result.suspectedCause(), 1000),
-                            evidenceText(result), truncate(result.recommendedAction(), 1000),
+                            evidenceText(result) + verifyNote(verified), truncate(result.recommendedAction(), 1000),
                             job.seedTs(), causeCode, confidence);
                 }
                 for (String id : anomalyIds) {
@@ -374,16 +379,52 @@ public class IncidentAnalyzer {
                 setStatus(anomalyIds, "DISMISSED");
             }
             Integer analysisId = insertAnalysis(job, decision, causeCode, confidence, resultJson, trace, ms, ncrId,
-                    null);
+                    null, attemptCount, verified);
             return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
-                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null);
+                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, attemptCount, verified);
         });
 
-        log.info("[에이전트] {} {} (shot {}) 경보 {}건 → {} / {} (확신도 {}) {}{} — 도구 {}회, {}ms",
+        log.info("[에이전트] {} {} (shot {}) 경보 {}건 → {} / {} (확신도 {}) {}{} — 분석 {}회, 검증 {}, 도구 {}회, {}ms",
                 equipmentId, job.trigger(), job.asOfShot(), anomalyIds.size(), decision, causeCode, confidence,
                 outcome.ncrNo() == null ? "" : outcome.ncrNo(),
-                outcome.mergedIntoExistingNcr() ? "(기존 초안에 연결)" : "", trace.size(), ms);
+                outcome.mergedIntoExistingNcr() ? "(기존 초안에 연결)" : "", attemptCount,
+                verified == null ? "-" : verified.status(), trace.size(), ms);
         return outcome;
+    }
+
+    /** 분석 에이전트 1회: 도구로 조사 → JSON 결과. 형식이 깨지면 형식만 1회 고쳐 달라고 한다. */
+    private AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace) {
+        // 응답 전체 텍스트를 받아 직접 해석한다.
+        // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
+        ChatResponse response = chatClient().prompt()
+                .system(AgentPrompts.SYSTEM)
+                .user(userPrompt)
+                .tools(new QualityTools(jdbc, trace, asOf, t0))
+                .call()
+                .chatResponse();
+        String text = allText(response);
+        AnalysisResult parsed = parseResult(text);
+        if (parsed == null) {
+            // 형식만 다시 요청 (도구 없이 1회 — 조사를 반복하지 않으므로 비용이 적다)
+            trace.add("repairJsonFormat()");
+            String repaired = allText(chatClient().prompt()
+                    .system(AgentPrompts.REPAIR)
+                    .user(text)
+                    .call()
+                    .chatResponse());
+            parsed = parseResult(repaired);
+            if (parsed == null) {
+                throw new IllegalStateException("분석 결과를 JSON 으로 읽지 못함. 응답 앞부분: " + preview(text));
+            }
+        }
+        if (parsed.decision() == null || !DECISIONS.contains(parsed.decision().toUpperCase(Locale.ROOT))) {
+            throw new IllegalStateException("에이전트 응답 형식 오류: " + parsed);
+        }
+        return parsed;
+    }
+
+    private static List<String> alarmRules(Job job) {
+        return job.alarms().stream().map(a -> (String) a.get("rule_code")).filter(r -> r != null).toList();
     }
 
     /** 초안의 불량 유형: 경보 근거가 있으면 그것을, 재확인이면 기준 시점까지 최근 50 shot 의 최다 불량 유형. */
@@ -500,18 +541,20 @@ public class IncidentAnalyzer {
     }
 
     private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,
-            String resultJson, List<String> trace, long ms, Integer ncrId, String error) {
+            String resultJson, List<String> trace, long ms, Integer ncrId, String error, int attempts,
+            VerifierAgent.Verification verification) {
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
                     confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag,
-                    trigger_type, as_of, as_of_shot, parent_analysis_id)
+                    trigger_type, as_of, as_of_shot, parent_analysis_id, attempts, verify_status, verify_json)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?)
                 """, Integer.class,
                 job.equipmentId(), job.seedAnomalyId(), String.join(",", job.anomalyIds()), decision, causeCode,
                 confidence, resultJson, String.join("\n", trace), model, (int) ms, ncrId,
                 error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
-                job.parentId());
+                job.parentId(), attempts, verification == null ? null : verification.status(),
+                verification == null ? null : objectMapper.writeValueAsString(verification));
     }
 
     @SuppressWarnings("unchecked")
@@ -560,6 +603,14 @@ public class IncidentAnalyzer {
             sb.append("판단 요약: ").append(r.reasoningSummary());
         }
         return sb.toString();
+    }
+
+    /** 재분석 뒤에도 근거가 부족하면 검토자가 볼 수 있게 초안 근거 끝에 남긴다. */
+    static String verifyNote(VerifierAgent.Verification v) {
+        if (v == null || v.passed()) {
+            return "";
+        }
+        return "\n검증 에이전트: 근거 부족 — " + String.join(" / ", v.fails());
     }
 
     private static String truncate(String s, int max) {

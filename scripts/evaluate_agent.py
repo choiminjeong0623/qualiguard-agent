@@ -174,7 +174,7 @@ def next_seed(c):
 
 def tool_times(trace):
     """trace 의 '도구(...) @1234ms' 에서 도구가 불린 시각(분석 시작 후 ms)을 읽는다."""
-    return [int(m.group(1)) for t in trace for m in [re.search(r" @(\d+)ms$", t)] if m]
+    return [int(m.group(1)) for t in trace if not t.startswith("verify#") for m in [re.search(r" @(\d+)ms$", t)] if m]
 
 
 def run_case(c, run, stamp, gt, cfg):
@@ -216,7 +216,11 @@ def run_case(c, run, stamp, gt, cfg):
             "correct": ok, "ncrNo": out.get("ncrNo"), "mergedIntoExistingNcr": out.get("mergedIntoExistingNcr"),
             "watchItems": result.get("watchItems"), "reasoningSummary": result.get("reasoningSummary"),
             "similarCases": result.get("similarCases"),
-            "toolCalls": len([t for t in trace if not t.startswith(" ") and not t.startswith("repairJsonFormat")]),
+            "toolCalls": len([t for t in trace if not t.startswith(" ") and not t.startswith("repairJsonFormat")
+                              and not t.startswith("verify#")]),
+            "attempts": out.get("attempts") or 1,
+            "verifyStatus": (out.get("verification") or {}).get("status"),
+            "verifyFails": (out.get("verification") or {}).get("fails") or [],
             "jsonRepaired": any(t.startswith("repairJsonFormat") for t in trace),
             "toolTimesMs": times,
             "toolTrace": trace, "latencyMs": out.get("latencyMs"), "error": out.get("error"),
@@ -264,7 +268,9 @@ def run_case(c, run, stamp, gt, cfg):
         "wrongDrafts": sum(1 for s in steps if s["decision"] == "NCR_DRAFT" and not s["correct"]),
         "steps": len(steps),
         "rechecks": sum(s["trigger"] == "RECHECK" for s in steps),
-        "llmCalls": len(steps) + sum(s["jsonRepaired"] for s in steps),
+        "llmCalls": sum(s.get("attempts", 1) for s in steps) + sum(s["jsonRepaired"] for s in steps),
+        "verifyRetries": sum(s.get("attempts", 1) - 1 for s in steps),
+        "verifyWeakFinal": sum(s.get("verifyStatus") == "WEAK" for s in steps),
         "toolCalls": sum(s["toolCalls"] for s in steps),
         "failed": sum(s["decision"] == "FAILED" for s in steps),
         "latencyMs": sum(s["latencyMs"] or 0 for s in steps),
@@ -320,8 +326,10 @@ def summarize(results, runs, mode):
     lines.append(f"- 잘못 만든 초안: {sum(r['wrongDrafts'] for r in results)}건, "
                  f"실패(FAILED): {sum(r['failed'] for r in results)}건, "
                  f"JSON 형식 재요청: {sum(s['jsonRepaired'] for r in results for s in r['stepDetails'])}회")
+    lines.append(f"- 검증 에이전트: 되돌려 다시 분석 {sum(r.get('verifyRetries', 0) for r in results)}회, "
+                 f"다시 분석한 뒤에도 근거 부족(WEAK)으로 남은 단계 {sum(r.get('verifyWeakFinal', 0) for r in results)}개")
     lines.append(f"- LLM 호출 합계: {sum(r['llmCalls'] for r in results)}회 "
-                 f"(분석 {sum(r['steps'] for r in results)}단계 + JSON 재요청), "
+                 f"(분석 {sum(r['steps'] for r in results)}단계 + 검증 반려 재분석 + JSON 재요청), "
                  f"도구 호출 합계: {sum(r['toolCalls'] for r in results)}회")
     all_lat = [s["latencyMs"] or 0 for r in results for s in r["stepDetails"]]
     if all_lat:
@@ -336,14 +344,15 @@ def summarize(results, runs, mode):
         lines.append("")
         lines.append(f"**{r['case']} — {r['run']}회차** (`{r['runTag']}`)")
         lines.append("")
-        lines.append("| 단계 | 시작 | 판단 | 원인 | 확신도 | watchItems |")
-        lines.append("|---|---|---|---|---|---|")
+        lines.append("| 단계 | 시작 | 판단 | 원인 | 확신도 | 검증 | watchItems |")
+        lines.append("|---|---|---|---|---|---|---|")
         for s in r["stepDetails"]:
             watch = "; ".join(s["watchItems"] or []).replace("|", "/")
             start_label = (f"shot {s['seedShot']} 재확인" if s.get("trigger") == "RECHECK"
                            else f"shot {s['seedShot']} {s['seedRule']}")
             lines.append(f"| {s['step']} | {start_label} "
                          f"| {s['decision']}{' ✅' if s['correct'] else ''} | {s['cause']} | {fmt(s['confidence'])} "
+                         f"| {fmt(s.get('verifyStatus'))}{' (재분석 ' + str(s.get('attempts', 1) - 1) + '회)' if s.get('attempts', 1) > 1 else ''} "
                          f"| {watch or '-'} |")
     return "\n".join(lines)
 

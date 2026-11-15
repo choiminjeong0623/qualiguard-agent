@@ -12,8 +12,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param mergeMinutes         같은 설비·같은 원인의 초안이 이 시간 안에 있으면 새 초안 대신 기존 초안에 연결
  * @param recheckShots         관찰(OBSERVE) 판단 뒤 새 경보가 없어도 이 shot 수가 지나면 다시 분석 (0 이면 끔)
  * @param recheckMax           새 경보 없이 이어지는 재확인 최대 횟수
+ * @param verifyMaxRetries     검증 에이전트가 근거 부족으로 되돌렸을 때 다시 분석하는 최대 횟수 (0 이면 검증 결과만 기록)
  */
 @ConfigurationProperties(prefix = "qg.agent")
 public record AgentProperties(boolean autoEnabled, long pollMs, int incidentShotWindow, int incidentMinutes,
-        int mergeMinutes, int recheckShots, int recheckMax) {
+        int mergeMinutes, int recheckShots, int recheckMax, int verifyMaxRetries) {
 }

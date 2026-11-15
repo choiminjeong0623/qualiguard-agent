@@ -121,6 +121,7 @@ body { background: var(--qg-bg); color: var(--qg-text); font-size: 14px; word-br
 .analysis p { margin: 6px 0 0; }
 .analysis pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 240px; overflow: auto;
   background: #f4f4f4; color: var(--qg-text); padding: 8px; margin: 8px 0 0; border: 0; }
+.qg-verify { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
 .qg-history { padding-left: 20px; margin: 0; }
 .qg-history li { margin-bottom: 6px; }
 

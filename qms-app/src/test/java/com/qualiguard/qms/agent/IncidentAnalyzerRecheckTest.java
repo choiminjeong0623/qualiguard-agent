@@ -75,11 +75,11 @@ class IncidentAnalyzerRecheckTest {
     }
 
     private static IncidentAnalyzer analyzer(FakeJdbc jdbc, int recheckShots, int recheckMax) {
-        AgentProperties props = new AgentProperties(false, 5000, 100, 30, 60, recheckShots, recheckMax);
+        AgentProperties props = new AgentProperties(false, 5000, 100, 30, 60, recheckShots, recheckMax, 1);
         @SuppressWarnings("unchecked")
         ObjectProvider<org.springframework.ai.chat.client.ChatClient.Builder> noLlm =
                 org.mockito.Mockito.mock(ObjectProvider.class);
-        return new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null, props, noLlm, "test-model");
+        return new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null, props, noLlm, null, "test-model");
     }
 
     @Test

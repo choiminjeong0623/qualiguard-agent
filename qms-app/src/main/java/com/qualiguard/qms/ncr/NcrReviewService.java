@@ -99,7 +99,8 @@ public class NcrReviewService {
                 """, ncrId));
         out.put("analyses", jdbc.queryForList("""
                 SELECT analysis_id, trigger_type, as_of_shot, decision, cause_code, confidence, latency_ms,
-                       result_json, tool_trace, CONVERT(VARCHAR(33), created_at, 127) AS created_at
+                       result_json, tool_trace, attempts, verify_status, verify_json,
+                       CONVERT(VARCHAR(33), created_at, 127) AS created_at
                 FROM dbo.agent_analysis WHERE ncr_id = ? ORDER BY analysis_id
                 """, ncrId));
         // MES/ERP 연계 (F-09): 보낸 이벤트와 가상 수신 시스템이 기록한 업무
