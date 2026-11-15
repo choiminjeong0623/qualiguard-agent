@@ -15,6 +15,7 @@ final class AgentPrompts {
                넓게만 보면 최근 몇십 shot 의 변화가 마지막 구간 하나에 묻힐 수 있습니다.
             3. getDefectSummary 로 실제 불량이 늘었는지, 어떤 유형인지 봅니다.
             4. findSimilarNcr 로 과거 사례를 찾고, 당시 근거(evidence)와 현재 패턴이 맞는지 비교합니다.
+               situation 에 지금까지 확인한 현상을 한두 문장으로 요약해 주면 표현이 달라도 뜻이 비슷한 사례도 찾습니다.
                불량 유형만 같고 센서 패턴이 다른 사례는 원인이 다를 수 있으니 그대로 따르지 마세요.
             5. getMaintenanceHistory 로 부품 교체 주기, 미실시 권고 등 단서를 확인합니다.
 

@@ -79,7 +79,7 @@ class IncidentAnalyzerRecheckTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<org.springframework.ai.chat.client.ChatClient.Builder> noLlm =
                 org.mockito.Mockito.mock(ObjectProvider.class);
-        return new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null, props, noLlm, "test-model");
+        return new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null, props, noLlm, "test-model", null);
     }
 
     @Test

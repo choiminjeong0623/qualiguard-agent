@@ -21,6 +21,13 @@ spring:
     google:
       genai:
         api-key: ${GEMINI_API_KEY:}             # 루트 .env 에서 읽음
+        embedding:
+          api-key: ${GEMINI_API_KEY:}           # 유사 사례 의미 검색용 임베딩 (ADR-014)
+          text:
+            options:
+              model: gemini-embedding-001
+              dimensions: 768
+              task-type: SEMANTIC_SIMILARITY
         chat:
           model: ${GEMINI_MODEL:gemini-3.8-flash}
           temperature: 0.2                      # 분석 결과가 매번 크게 달라지지 않도록 낮게
@@ -78,6 +85,9 @@ qg:
     merge-minutes: 60                 # 같은 설비·같은 원인 초안이 60분 안에 있으면 그 초안에 연결
     recheck-shots: 40                 # 관찰(OBSERVE) 판단 뒤 새 경보가 없어도 40 shot 이 지나면 다시 분석
     recheck-max: 3                    # 새 경보 없이 이어지는 재확인 최대 횟수 (LLM 비용 상한)
+  knowledge:
+    vector-enabled: true              # 유사 사례 의미 검색 (SQL Server VECTOR, ADR-014). 끄면 키워드 검색만
+    refresh-ms: 60000                 # 지식저장소 사례 벡터를 새로 만들 주기
   integration:
     publish-enabled: true             # 승인 이벤트 아웃박스를 Kafka(quality.ncr.approved)로 발행
     poll-ms: 2000

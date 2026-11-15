@@ -24,6 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.qualiguard.qms.knowledge.NcrEmbeddingService;
+
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -73,17 +75,20 @@ public class IncidentAnalyzer {
     private final AgentProperties props;
     private final ObjectProvider<ChatClient.Builder> chatClientBuilder;
     private final String model;
+    private final NcrEmbeddingService embeddings;
     private volatile ChatClient chatClient;
 
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
             AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
-            @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model) {
+            @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model,
+            NcrEmbeddingService embeddings) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.tx = tx;
         this.props = props;
         this.chatClientBuilder = chatClientBuilder;
         this.model = model;
+        this.embeddings = embeddings;
     }
 
     /** 가장 오래된 미처리 경보부터 사건 1건을 분석한다. 같은 경보로 2번 실패하면 건너뛴다. */
@@ -279,7 +284,7 @@ public class IncidentAnalyzer {
             ChatResponse response = chatClient().prompt()
                     .system(AgentPrompts.SYSTEM)
                     .user(userPrompt)
-                    .tools(new QualityTools(jdbc, trace, job.asOf(), t0))
+                    .tools(new QualityTools(jdbc, trace, job.asOf(), t0, embeddings::queryVector))
                     .call()
                     .chatResponse();
             String text = allText(response);

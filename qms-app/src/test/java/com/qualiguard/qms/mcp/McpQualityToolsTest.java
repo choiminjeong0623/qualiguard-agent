@@ -41,9 +41,9 @@ class McpQualityToolsTest {
     @Test
     void 기준_경보가_없으면_지금까지_조회한다() {
         FakeJdbc jdbc = new FakeJdbc();
-        new McpQualityTools(jdbc).findSimilarNcr("IMM-01", "barrelTemp", null, null);
+        new McpQualityTools(jdbc).findSimilarNcr("IMM-01", "barrelTemp", null, null, null);
         Object[] args = jdbc.procCalls.get(0);
-        assertNull(args[args.length - 1]);
+        assertNull(args[4], "기준 시점 없음 = 지금까지");
     }
 
     @Test
