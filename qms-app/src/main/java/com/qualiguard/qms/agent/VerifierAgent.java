@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -60,6 +61,8 @@ public class VerifierAgent {
 
     private final Facts facts;
 
+    /** 앱에서 쓰는 생성자. 생성자가 둘이라 Spring 이 고를 수 있게 표시한다 (없으면 앱 시작 실패). */
+    @Autowired
     public VerifierAgent(JdbcTemplate jdbc) {
         this(new JdbcFacts(jdbc));
     }
