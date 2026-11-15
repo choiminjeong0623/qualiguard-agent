@@ -111,6 +111,14 @@ public class NcrReviewService {
                           FROM dbo.integration_receipt AS r WHERE r.event_id = o.event_id) AS receipts
                 FROM dbo.integration_outbox AS o WHERE o.ncr_id = ? ORDER BY o.created_at
                 """, ncrId));
+        // MES/ERP 응답 (ADR-012): 이벤트·시스템별 현재 상태 (수신 확인 / 처리 완료 + 번호 / 실패 + 사유)
+        out.put("integrationStatus", jdbc.queryForList("""
+                SELECT CONVERT(VARCHAR(36), s.event_id) AS event_id, s.system_name, s.status, s.reference_no, s.message,
+                       CONVERT(VARCHAR(33), s.updated_at, 127) AS updated_at
+                FROM dbo.integration_status AS s
+                JOIN dbo.integration_outbox AS o ON o.event_id = s.event_id
+                WHERE o.ncr_id = ? ORDER BY o.created_at, s.system_name
+                """, ncrId));
         out.put("history", jdbc.queryForList("""
                 SELECT action, actor, from_status, to_status, changes_json, comment,
                        CONVERT(VARCHAR(33), created_at, 127) AS created_at
@@ -175,6 +183,37 @@ public class NcrReviewService {
             throw new ReviewException(400, "조치 내용을 입력하세요.");
         }
         exec(() -> jdbc.update("EXEC dbo.usp_CloseNcr ?, ?, ?", ncrNo, who, actionTaken.strip()));
+        return detail(ncrNo);
+    }
+
+    /**
+     * 연계 다시 보내기 (ADR-012): 가장 최근 이벤트에 실패한 시스템이 있을 때만, 그 시스템들만 대상으로 새 이벤트를 보낸다.
+     * 새 event_id 로 보내므로 수신 쪽은 새 요청으로 처리하고, 이전 실패 기록은 그대로 남는다.
+     */
+    public Map<String, Object> retryIntegration(String ncrNo, String actor) {
+        requireActor(actor);
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT TOP 1 n.ncr_id, n.status,
+                       (SELECT STRING_AGG(s.system_name, ',') FROM dbo.integration_status AS s
+                         WHERE s.event_id = o.event_id AND s.status = 'FAILED') AS failed
+                FROM dbo.ncr AS n
+                LEFT JOIN dbo.integration_outbox AS o ON o.ncr_id = n.ncr_id
+                WHERE n.ncr_no = ?
+                ORDER BY o.created_at DESC
+                """, ncrNo);
+        if (rows.isEmpty()) {
+            throw new ReviewException(404, "부적합을 찾을 수 없습니다: " + ncrNo);
+        }
+        Map<String, Object> r = rows.get(0);
+        if (!"APPROVED".equals(r.get("status")) && !"CLOSED".equals(r.get("status"))) {
+            throw new ReviewException(409, "승인된 부적합만 다시 보낼 수 있습니다.");
+        }
+        String failed = (String) r.get("failed");
+        if (failed == null || failed.isBlank()) {
+            throw new ReviewException(409, "가장 최근 연계에 실패한 시스템이 없습니다.");
+        }
+        // 실패한 시스템에만 다시 보낸다 (이미 처리한 시스템에 같은 업무가 두 번 생기지 않게)
+        jdbc.update("EXEC dbo.usp_EnqueueNcrApproved ?, ?", r.get("ncr_id"), failed);
         return detail(ncrNo);
     }
 

@@ -112,13 +112,23 @@
         '<pre>' + esc(g.tool_trace || '') + '</pre></div>';
     }).join('') || '<p class="muted">분석 기록 없음 (사람이 작성한 부적합)</p>');
 
-    $('#integration').html((d.integration || []).map(function (o) {
+    var ACK = { RECEIVED: '수신 확인', PROCESSED: '처리 완료', FAILED: '실패' };
+    var latestFailed = false;
+    var events = d.integration || [];
+    $('#integration').html(events.map(function (o, i) {
       var state = o.published_at ? ('전송됨 ' + time(o.published_at)) : ('전송 대기' + (o.attempts ? ' (시도 ' + o.attempts + '회)' : ''));
-      var line = (o.event_type === 'NCR_APPROVED' ? '승인 이벤트' : o.event_type) + ' · ' + state;
-      if (o.receipts) { line += ' · 수신: ' + o.receipts; } else if (o.published_at) { line += ' · 수신 확인 대기'; }
-      if (o.last_error && !o.published_at) { line += ' · 오류: ' + o.last_error; }
-      return '<li>' + esc(line) + '</li>';
+      var line = '<strong>' + esc((o.event_type === 'NCR_APPROVED' ? '승인 이벤트' : o.event_type) + ' · ' + state) + '</strong>';
+      if (o.last_error && !o.published_at) { line += ' · ' + esc('오류: ' + o.last_error); }
+      var acks = (d.integrationStatus || []).filter(function (s) { return s.event_id === o.event_id; });
+      line += acks.length ? '<ul class="acks">' + acks.map(function (s) {
+        var t = s.system_name + ': ' + (ACK[s.status] || s.status) + (s.reference_no ? ' ' + s.reference_no : '') +
+          (s.message ? ' — ' + s.message : '') + ' (' + time(s.updated_at) + ')';
+        return '<li class="ack ' + s.status + '">' + esc(t) + '</li>';
+      }).join('') + '</ul>' : (o.published_at ? ' · ' + esc('MES/ERP 응답 대기') : '');
+      if (i === events.length - 1) { latestFailed = acks.some(function (s) { return s.status === 'FAILED'; }); }
+      return '<li>' + line + '</li>';
     }).join('') || '<li class="muted">승인하면 MES/ERP 로 보낼 이벤트가 만들어집니다.</li>');
+    $('#btn-retry').prop('hidden', !(latestFailed && canWrite()));
 
     $('#history').html(d.history.map(function (h) {
       var line = time(h.created_at) + ' · ' + h.actor + ' · ' + (ACTION_LABEL[h.action] || h.action);
@@ -174,6 +184,12 @@
     if (!reason) { msg('반려 사유를 입력하세요.', 'err'); $('#reject-reason').focus(); return; }
     send('POST', API + '/' + encodeURIComponent(state.selected) + '/reject', { reason: reason })
       .done(function (d) { $('#reject-reason').val(''); render(d); msg('반려했습니다.', 'ok'); loadList(); })
+      .fail(function (xhr) { msg(errorText(xhr), 'err'); });
+  });
+
+  $('#btn-retry').on('click', function () {
+    send('POST', API + '/' + encodeURIComponent(state.selected) + '/integration/retry')
+      .done(function (d) { render(d); msg('MES/ERP 로 다시 보냈습니다. 응답을 기다리는 중입니다.', 'ok'); })
       .fail(function (xhr) { msg(errorText(xhr), 'err'); });
   });
 

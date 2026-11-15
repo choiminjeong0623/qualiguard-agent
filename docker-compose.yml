@@ -58,7 +58,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        for t in sensor.raw sensor.clean quality.anomaly quality.ncr.approved quality.dlq; do
+        for t in sensor.raw sensor.clean quality.anomaly quality.ncr.approved integration.ncr.ack quality.dlq; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic $$t --partitions 3 --replication-factor 1
         done
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list

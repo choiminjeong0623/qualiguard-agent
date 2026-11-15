@@ -59,7 +59,7 @@
 | F-06 | 경보 발생 시 규격·유사 사례·정비 이력을 조회해 원인을 추정한다 | ✅ |
 | F-07 | 근거가 달린 부적합 보고서 초안을 작성한다 | ✅ |
 | F-08 | 담당자가 초안을 검토·수정·승인한다 | ✅ QMS 검토 화면 ([ADR-009](decisions/ADR-009-qms-review-screen.md)) |
-| F-09 | 승인 결과를 다른 시스템으로 전달한다 | ✅ 트랜잭션 아웃박스 → Kafka → 가상 MES/ERP ([ADR-010](decisions/ADR-010-ncr-integration-outbox.md)) |
+| F-09 | 승인 결과를 다른 시스템으로 전달한다 | ✅ 트랜잭션 아웃박스 → Kafka → 가상 MES/ERP, 처리 결과 응답·실패 시 다시 보내기 ([ADR-010](decisions/ADR-010-ncr-integration-outbox.md), [ADR-012](decisions/ADR-012-mes-erp-ack.md)) |
 | F-10 | 승인된 부적합을 다음 분석의 유사 사례로 재사용한다 (지식저장소) | ✅ 승인·조치 완료 → 유사 사례 검색, 승인 시점 이후 분석에만 ([ADR-008](decisions/ADR-008-agent-design.md) 결정 6) |
 
 ### 비기능 요구사항

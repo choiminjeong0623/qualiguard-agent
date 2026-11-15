@@ -46,7 +46,8 @@ GO
 -- usp_EnqueueNcrApproved: 승인된 부적합을 이벤트로 아웃박스에 쓴다 (호출하는 쪽 트랜잭션 안에서)
 -- ---------------------------------------------------------------------
 CREATE OR ALTER PROCEDURE dbo.usp_EnqueueNcrApproved
-    @NcrId INT
+    @NcrId   INT,
+    @Targets VARCHAR(50) = NULL     -- 다시 보내기: 실패한 시스템만 (예: 'ERP'). NULL 이면 모든 시스템 (ADR-012)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -60,7 +61,8 @@ BEGIN
                n.created_by AS createdBy, n.approved_by AS approvedBy,
                CONVERT(VARCHAR(33), n.approved_at, 127) AS approvedAt,
                CONVERT(VARCHAR(33), n.occurred_at, 127) AS occurredAtLine,
-               (SELECT STRING_AGG(x.anomaly_id, ',') FROM dbo.ncr_anomaly AS x WHERE x.ncr_id = n.ncr_id) AS anomalyIds
+               (SELECT STRING_AGG(x.anomaly_id, ',') FROM dbo.ncr_anomaly AS x WHERE x.ncr_id = n.ncr_id) AS anomalyIds,
+               @Targets AS targetSystems
         FROM dbo.ncr AS n WHERE n.ncr_id = @NcrId
         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
 

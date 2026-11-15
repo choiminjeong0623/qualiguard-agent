@@ -48,6 +48,7 @@ flowchart LR
     AG -- "부적합 초안 · 분석 기록" --> DB
     DB --> QMS["QMS 검토 화면<br/>담당자 수정 · 승인 · 반려"]
     QMS -- "승인 + 이벤트 (같은 트랜잭션, 아웃박스)" --> APR[("quality.ncr.approved")] --> MES["가상 MES/ERP<br/>점검 지시 · 비용 전표 (중복 제거)"]
+    MES -- "수신 확인 · 처리 완료(번호) · 실패" --> ACK[("integration.ncr.ack")] --> QMS
 ```
 
 | 계층 | 기술 | 역할 |
@@ -78,6 +79,7 @@ flowchart LR
 | [ADR-009](docs/decisions/ADR-009-qms-review-screen.md) | 검토 상태 규칙은 **저장 프로시저 한 트랜잭션**에, 승인에는 확정 원인 필수, 화면은 jQuery | 동시 요청에도 상태 규칙 유지, 지식저장소 품질, 라이선스·메모리 |
 | [ADR-010](docs/decisions/ADR-010-ncr-integration-outbox.md) | 승인 결과는 **트랜잭션 아웃박스**로 Kafka 에, 받는 쪽은 event_id 로 중복 제거 | 승인과 이벤트가 따로 성공·실패하지 않게 |
 | [ADR-011](docs/decisions/ADR-011-qms-login.md) | QMS **로그인**(DB 사용자·BCrypt), 역할 품질 담당자/조회 전용, 비밀번호는 `.env` 로만 | 승인자를 확실히, 비밀번호를 저장소에 남기지 않음 |
+| [ADR-012](docs/decisions/ADR-012-mes-erp-ack.md) | MES/ERP **응답**은 단계 번호로 순서 유지, 응답 ID 로 중복 제거, **실패한 시스템에만** 다시 보내기 | 순서 뒤바뀜·중복·부분 실패에도 상태가 맞게 |
 
 ---
 
@@ -158,6 +160,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 | `sensor.clean` | 중복 제거·범위 검사를 거친 정제 데이터 |
 | `quality.anomaly` | 이상 탐지 결과 + 에이전트용 근거(최근 값, 센서별 z 점수, 불량 유형) |
 | `quality.ncr.approved` | 담당자가 승인한 부적합 (아웃박스 발행 → 가상 MES/ERP 수신) |
+| `integration.ncr.ack` | 가상 MES/ERP 의 처리 결과 응답 (수신 확인·처리 완료·실패 → QMS 연계 상태) |
 | `quality.dlq` | 형식 오류 메시지 (오류 사유 헤더 포함) |
 
 ### 개발 환경 메모

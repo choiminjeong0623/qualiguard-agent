@@ -27,6 +27,7 @@ import com.qualiguard.qms.security.AppUser;
  *   POST /api/qms/ncrs/{ncrNo}/reject                     반려      {"reason": "..."}
  *   POST /api/qms/ncrs/{ncrNo}/close                      조치 완료 {"actionTaken": "..."}
  *   GET  /api/qms/ncrs/knowledge                          지식저장소 현황 (유사 사례 검색 대상)
+ *   POST /api/qms/ncrs/{ncrNo}/integration/retry          MES/ERP 연계 다시 보내기 (최근 연계에 실패가 있을 때)
  *   GET  /api/qms/me                                      로그인 사용자 (이름·역할)
  *
  * 검토 이력의 검토자는 로그인한 사용자다 (요청 본문의 이름은 쓰지 않는다). 권한은 SecurityConfig (ADR-011).
@@ -97,6 +98,11 @@ public class NcrController {
     public Map<String, Object> close(@PathVariable String ncrNo, @RequestBody Map<String, String> body,
             Authentication auth) {
         return service.close(ncrNo, actor(auth), body.get("actionTaken"));
+    }
+
+    @PostMapping("/ncrs/{ncrNo}/integration/retry")
+    public Map<String, Object> retryIntegration(@PathVariable String ncrNo, Authentication auth) {
+        return service.retryIntegration(ncrNo, actor(auth));
     }
 
     @ExceptionHandler(NcrReviewService.ReviewException.class)

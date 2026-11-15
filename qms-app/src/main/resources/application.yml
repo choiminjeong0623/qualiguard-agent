@@ -74,6 +74,8 @@ qg:
     publish-enabled: true             # 승인 이벤트 아웃박스를 Kafka(quality.ncr.approved)로 발행
     poll-ms: 2000
     receiver-enabled: true            # 가상 MES/ERP 수신 서비스 (별도 소비자 그룹)
+    ack-enabled: true                 # QMS 쪽 MES/ERP 응답(integration.ncr.ack) 수신
+    simulate-failure: ""              # 시험용: "ERP" 처럼 지정한 시스템은 실패 응답을 보냄
 
 management:
   endpoints:
