@@ -222,6 +222,13 @@ BEGIN
 END;
 GO
 
+-- 평가용 숨김 표시: "처음 보는 고장" 실험에서 정비 이력을 잠시 가린다 (scripts/evaluate_agent.py --hide-maintenance).
+-- 행을 지우지 않고 표시만 바꿔, 실험이 끝나면 그대로 되돌린다.
+IF COL_LENGTH(N'dbo.maintenance_history', N'eval_hidden') IS NULL
+    ALTER TABLE dbo.maintenance_history ADD eval_hidden BIT NOT NULL
+        CONSTRAINT df_maintenance_eval_hidden DEFAULT (0);
+GO
+
 -- ---------------------------------------------------------------------
 -- 5) 정비 이력
 --    예) EXEC dbo.usp_GetMaintenanceHistory 'IMM-01', 10;
@@ -238,6 +245,7 @@ BEGIN
            DATEDIFF(DAY, maint_date, CAST(SYSDATETIMEOFFSET() AS DATE)) AS days_ago
     FROM dbo.maintenance_history
     WHERE equipment_id = @EquipmentId
+      AND eval_hidden = 0
     ORDER BY maint_date DESC;
 END;
 GO
