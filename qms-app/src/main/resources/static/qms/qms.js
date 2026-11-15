@@ -232,9 +232,16 @@
       esc('분류 ' + (t.severity || '-') + ' · ' + (t.type || '-')) + '</span>' +
       (p.report ? '<span class="badge bg-azure-lt">' + esc('초안 문장: ' + (REPORT_LABEL[p.report.mode] || p.report.mode) +
         ' · 클라우드 ' + (p.report.cloudCalls || 0) + '회') + '</span>' : '') + '</div>';
-    var steps = (p.timeline || []).map(function (s) {
+    // 기록은 "그 단계에 들어간 시각"과 "앞 단계의 결과"를 담는다.
+    // 화면에는 단계마다 걸린 시간(다음 기록까지)과 그 단계의 결과(다음 기록의 detail)를 보이고, 마지막 줄에 합계를 보인다.
+    var tl = p.timeline || [];
+    var steps = tl.map(function (s, i) {
+      var next = tl[i + 1];
+      var text = next
+        ? ((next.atMs - s.atMs) / 1000).toFixed(1) + '초' + (next.detail ? ' · ' + next.detail : '')
+        : '합계 ' + (s.atMs / 1000).toFixed(1) + '초' + (s.state === 'FAILED' && s.detail ? ' · ' + s.detail : '');
       return '<li class="' + (s.state === 'FAILED' ? 'failed' : '') + '"><span>' + esc(STATE_LABEL[s.state] || s.state) +
-        '</span><span class="muted">' + esc((s.atMs / 1000).toFixed(1) + '초' + (s.detail ? ' · ' + s.detail : '')) + '</span></li>';
+        '</span><span class="muted">' + esc(text) + '</span></li>';
     }).join('');
     return '<div class="qg-pipe">' + head + (steps ? '<ol class="qg-pipe-steps">' + steps + '</ol>' : '') + '</div>';
   }
