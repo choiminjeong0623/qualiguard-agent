@@ -35,5 +35,5 @@
 - 설정: `qg.integration.publish-enabled`, `qg.integration.poll-ms`, `qg.integration.receiver-enabled`
 
 ## 한계
-- 실제 MES/ERP 의 응답(작업 지시 번호 등)을 받아 QMS 에 되돌려 기록하는 흐름은 없습니다.
+- ~~실제 MES/ERP 의 응답(작업 지시 번호 등)을 받아 QMS 에 되돌려 기록하는 흐름은 없습니다.~~ → [ADR-012](ADR-012-mes-erp-ack.md)에서 응답(수신 확인·처리 완료·실패)과 다시 보내기를 추가했습니다.
 - 반려·조치 완료는 보내지 않습니다 (승인만 다른 시스템의 업무를 만들기 때문).

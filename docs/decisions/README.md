@@ -15,3 +15,4 @@
 | [ADR-009](ADR-009-qms-review-screen.md) | QMS 검토 화면: 상태 규칙은 저장 프로시저에, 화면은 jQuery 정적 페이지로 | 채택 |
 | [ADR-010](ADR-010-ncr-integration-outbox.md) | 승인 결과는 트랜잭션 아웃박스로 Kafka 에 보내고, 가상 MES/ERP 가 중복 없이 받는다 | 채택 |
 | [ADR-011](ADR-011-qms-login.md) | QMS 로그인: DB 사용자 + BCrypt, 역할 두 가지, 에이전트 API 는 로컬 도구용으로 열어 둠 | 채택 |
+| [ADR-012](ADR-012-mes-erp-ack.md) | MES/ERP 응답: 단계 번호로 순서를 지키고, 응답 ID 로 중복을 거르고, 실패한 시스템에만 다시 보낸다 | 채택 |
