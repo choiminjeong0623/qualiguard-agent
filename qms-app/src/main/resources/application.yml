@@ -41,6 +41,12 @@ spring:
         processing.guarantee: exactly_once_v2  # 상태 갱신과 결과 기록을 하나의 트랜잭션으로 묶음
         commit.interval.ms: 1000
 
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true                      # QMS 화면(정적 파일)을 고친 뒤 브라우저가 예전 JS 를 쓰지 않게 (매번 확인)
+
 server:
   port: 8080
 
