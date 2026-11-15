@@ -62,4 +62,4 @@ QMS 검토 화면([ADR-009](ADR-009-qms-review-screen.md))에서 승인한 AI �
 
 ## 다음에 검토할 것
 - ~~같은 도구를 **MCP 서버**로도 노출~~ → [ADR-013](ADR-013-mcp-server.md)에서 완료 (`/mcp`, 기준 시점은 기준 경보로만)
-- 유사 사례 검색에 SQL Server 2025 벡터 검색 추가 (현재는 관련 센서·불량 유형 겹침 점수)
+- ~~유사 사례 검색에 SQL Server 2025 벡터 검색 추가~~ → [ADR-014](ADR-014-ncr-vector-search.md)에서 완료 (키워드 점수 + 의미 유사도)

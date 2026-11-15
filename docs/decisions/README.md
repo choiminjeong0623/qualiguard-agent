@@ -17,3 +17,4 @@
 | [ADR-011](ADR-011-qms-login.md) | QMS 로그인: DB 사용자 + BCrypt, 역할 두 가지, 에이전트 API 는 로컬 도구용으로 열어 둠 | 채택 |
 | [ADR-012](ADR-012-mes-erp-ack.md) | MES/ERP 응답: 단계 번호로 순서를 지키고, 응답 ID 로 중복을 거르고, 실패한 시스템에만 다시 보낸다 | 채택 |
 | [ADR-013](ADR-013-mcp-server.md) | 에이전트 도구를 MCP 서버로도 노출한다 — 기준 시점은 기준 경보로만 | 채택 |
+| [ADR-014](ADR-014-ncr-vector-search.md) | 유사 사례 의미 검색: SQL Server 2025 VECTOR + Gemini 임베딩, 키워드 점수에 더하는 방식 | 채택 |

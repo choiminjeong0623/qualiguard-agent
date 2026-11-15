@@ -82,6 +82,7 @@ flowchart LR
 | [ADR-011](docs/decisions/ADR-011-qms-login.md) | QMS **로그인**(DB 사용자·BCrypt), 역할 품질 담당자/조회 전용, 비밀번호는 `.env` 로만 | 승인자를 확실히, 비밀번호를 저장소에 남기지 않음 |
 | [ADR-012](docs/decisions/ADR-012-mes-erp-ack.md) | MES/ERP **응답**은 단계 번호로 순서 유지, 응답 ID 로 중복 제거, **실패한 시스템에만** 다시 보내기 | 순서 뒤바뀜·중복·부분 실패에도 상태가 맞게 |
 | [ADR-013](docs/decisions/ADR-013-mcp-server.md) | 에이전트 도구를 **MCP 서버**(`/mcp`)로도 노출, 기준 시점은 기준 경보 ID 로만 | 다른 AI 클라이언트도 같은 데이터·같은 미래 정보 차단 원칙 |
+| [ADR-014](docs/decisions/ADR-014-ncr-vector-search.md) | 유사 사례 **의미 검색**: SQL Server 2025 `VECTOR` + Gemini 임베딩, 센서 일치 점수에 유사도를 더함 | 같은 DB·프로시저에서 상태·기준 시점 조건과 함께, 엉뚱한 사례가 앞서지 않게 |
 
 ---
 
