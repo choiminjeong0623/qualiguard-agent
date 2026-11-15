@@ -19,6 +19,8 @@
     python3 scripts/evaluate_agent.py --runs 3                # 반복 안정성: 같은 사례를 3번
     python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr
         # 지식저장소 제거 실험: 정답과 원인이 같은 승인·조치 완료 사례를 잠시 숨기고 실행 (끝나면 원래 상태로 복구)
+    python3 scripts/evaluate_agent.py --runs 5 --hide-matching-ncr --hide-maintenance
+        # "처음 보는 고장" 실험: 과거 사례와 정비 이력(교체 주기·단서)까지 숨김 (끝나면 복구)
 
 결과: 화면에 표 출력 + data/agent_eval_<모드>.json / .md 저장
 주의: 분석 1단계마다 LLM 을 1회 이상 호출한다 (사례당 최대 MAX_STEPS 단계).
@@ -85,6 +87,17 @@ def hide_matching_cases():
         nos = ",".join(f"'{n}'" for n in hidden)
         sql(f"UPDATE dbo.ncr SET status = 'REJECTED' WHERE ncr_no IN ({nos})")
     return hidden
+
+
+def hide_maintenance():
+    """정비 이력을 평가용 표시(eval_hidden)로 숨긴다. 숨긴 건수를 돌려준다 (행은 지우지 않음)."""
+    rows = sql("SELECT COUNT(*) FROM dbo.maintenance_history WHERE eval_hidden = 0")
+    sql("UPDATE dbo.maintenance_history SET eval_hidden = 1 WHERE eval_hidden = 0")
+    return int(rows[0][0]) if rows else 0
+
+
+def restore_maintenance():
+    sql("UPDATE dbo.maintenance_history SET eval_hidden = 0 WHERE eval_hidden = 1")
 
 
 def restore_cases(hidden):
@@ -264,7 +277,9 @@ def fmt(v):
 
 
 def summarize(results, runs, mode):
-    title = "지식저장소 제거 실험 (시간 순 재생)" if mode == "hidden" else "시간 순 재생 평가"
+    title = {"hidden": "지식저장소 제거 실험 (시간 순 재생)",
+             "nomaint": "정비 이력 제거 실험 (시간 순 재생)",
+             "novel": "처음 보는 고장 실험 — 과거 사례·정비 이력 제거 (시간 순 재생)"}.get(mode, "시간 순 재생 평가")
     by_case = {}
     for r in results:
         by_case.setdefault(r["case"], []).append(r)
@@ -286,6 +301,19 @@ def summarize(results, runs, mode):
             f"| {steps_text} "
             f"| {round(sum(lat) / len(lat) / 1000, 1) if lat else '-'} / {round(max(lat) / 1000, 1) if lat else '-'} |")
     n = len(results)
+    if runs >= 3:
+        lines.append("")
+        lines.append("**진단까지 shot 분포** (미진단은 제외, 최소 / 중앙값 / 최대)")
+        lines.append("")
+        lines.append("| 사례 | 진단 횟수 | 최소 | 중앙값 | 최대 |")
+        lines.append("|---|---|---|---|---|")
+        for case, rs in by_case.items():
+            xs = sorted(r["shotsToDiagnosis"] for r in rs if r["diagnosed"] and r["shotsToDiagnosis"] is not None)
+            if rs[0]["faultStart"] is None:
+                continue
+            med = xs[len(xs) // 2] if xs else None
+            lines.append(f"| {case} | {len(xs)}/{len(rs)} | {fmt(xs[0] if xs else None)} | {fmt(med)} "
+                         f"| {fmt(xs[-1] if xs else None)} |")
     lines.append("")
     lines.append(f"- 정답 진단: **{sum(r['diagnosed'] for r in results)}/{n}** "
                  f"(고장: NCR_DRAFT + 정답 원인, 센서 이상: SENSOR_CHECK, 단발성: OBSERVE)")
@@ -325,8 +353,15 @@ def main():
     ap.add_argument("--runs", type=int, default=1, help="같은 사례를 반복 실행할 횟수")
     ap.add_argument("--hide-matching-ncr", action="store_true",
                     help="정답과 같은 원인의 과거 부적합 사례를 숨기고 실행 (끝나면 복구)")
+    ap.add_argument("--hide-maintenance", action="store_true",
+                    help="정비 이력까지 숨기고 실행 — '처음 보는 고장' 실험 (끝나면 복구)")
     args = ap.parse_args()
-    mode = "hidden" if args.hide_matching_ncr else "base"
+    if args.hide_matching_ncr and args.hide_maintenance:
+        mode = "novel"
+    elif args.hide_maintenance:
+        mode = "nomaint"
+    else:
+        mode = "hidden" if args.hide_matching_ncr else "base"
 
     gt = load_ground_truth()
     cfg = http("GET", "/config")
@@ -335,7 +370,11 @@ def main():
     stamp = datetime.now().strftime("%m%d%H%M%S")
     results = []
     hidden = {}
+    maint_hidden = 0
     try:
+        if args.hide_maintenance:
+            maint_hidden = hide_maintenance()
+            print(f"정비 이력 {maint_hidden}건을 숨겼습니다.")
         if args.hide_matching_ncr:
             # 유사 사례 검색(usp_FindSimilarNcr)은 APPROVED/CLOSED 만 보므로 상태를 잠시 바꿔 숨긴다
             hidden = hide_matching_cases()
@@ -348,6 +387,9 @@ def main():
         if hidden:
             restore_cases(hidden)
             print("숨긴 과거 사례를 원래 상태로 복구했습니다.")
+        if args.hide_maintenance:
+            restore_maintenance()
+            print("숨긴 정비 이력을 복구했습니다.")
 
     summary = summarize(results, args.runs, mode)
     print("\n" + summary)
