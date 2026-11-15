@@ -28,6 +28,8 @@ env_ensure() {   # 값이 비어 있으면 무작위 비밀번호를 만들어 .
       local tmp; tmp=$(mktemp)
       awk -v k="$key" -v v="$val" -F= 'BEGIN{OFS="="} $1==k{print k, v; next} {print}' "$ENV_FILE" >"$tmp" && cat "$tmp" >"$ENV_FILE" && rm -f "$tmp"
     else
+      # 마지막 줄에 줄바꿈이 없으면 먼저 넣는다 (앞 줄 끝에 붙어 쓰이지 않게)
+      if [ -s "$ENV_FILE" ] && [ -n "$(tail -c 1 "$ENV_FILE")" ]; then printf '\n' >>"$ENV_FILE"; fi
       printf '%s=%s\n' "$key" "$val" >>"$ENV_FILE"
     fi
     echo "  .env 에 $key 를 새로 만들었습니다" >&2

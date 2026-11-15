@@ -1,6 +1,6 @@
 # ADR-016. 역할 분리형 멀티 에이전트 — Kafka 이벤트로 잇는다
 
-- 상태: 진행 중 (2026-11-15). 1단계 검증 에이전트 구현
+- 상태: 채택 (2026-11-15). 1단계 검증 에이전트, 2단계 분류·오케스트레이터·보고서 작성·Kafka 연결 구현
 - 관련: [ADR-005](ADR-005-spc-detect-llm-reason.md) 탐지는 SPC·판단은 LLM, [ADR-008](ADR-008-agent-design.md) 원인 분석 에이전트
 
 ## 배경
@@ -38,6 +38,40 @@ LangGraph 같은 Python 프레임워크 대신 Spring AI + Kafka 로 만듭니�
 - 다시 분석해도 약하면 결과는 그대로 쓰되 `verify_status = WEAK` 로 남기고, 초안이면 근거 끝에 "검증 에이전트: 근거 부족 — …"을 붙여 검토자가 보게 합니다. 판단을 검증 에이전트가 바꾸지는 않습니다(최종 판단은 사람).
 - 기록: `agent_analysis.attempts`, `verify_status`, `verify_json`. QMS 화면의 에이전트 분석 기록에 "검증 통과 / 재분석 n회 / 근거 부족" 태그와 지적 내용을 보여 줍니다.
 
+## 2단계: 오케스트레이터와 Kafka 토픽 (구현)
+코드: `qms-app/.../agent/pipeline/`
+
+```
+경보 ─▶ 분류 ──agent.incident.triaged──▶ 오케스트레이터 ──agent.analysis.requested──▶ 원인 분석(LLM)
+                                            ▲  │                                        │
+                 agent.analysis.completed ──┘  └──agent.verification.requested──▶ 검증(규칙)
+                 agent.verification.completed ◀───────────────────────────────────────┘
+          PASS·초안 ──agent.report.requested──▶ 보고서 작성(로컬/근거 표) ──agent.report.completed──▶ 승인 대기
+          WEAK·재분석 남음 ──▶ 지적을 붙여 agent.analysis.requested (횟수 제한)
+          관찰·센서 점검 ──▶ 종결 / 분석 실패 ──▶ 실패 (경보는 다시 분석 대상)
+```
+
+| 상태 | 뜻 |
+|---|---|
+| TRIAGED → ANALYZING → VERIFYING → (ANALYZING …) → WRITING → **AWAITING_APPROVAL** | 초안: 사람 승인을 기다림 (QMS 화면) |
+| … → VERIFYING → CLOSED | 관찰·센서 점검: 초안 없음 |
+| … → FAILED | 분석 실패 |
+
+- **분류 에이전트는 규칙**입니다. 경보 규칙의 뜻이 이미 분명해서(P_CHART=제품 영향 HIGH, XBAR=평균 이동 MEDIUM, S_CHART=산포 MEDIUM, INDIVIDUAL=단발 LOW, 여러 센서 동시면 한 단계 위) LLM 을 부를 이유가 없고, 모든 경보에 LLM 을 부르지 않는다는 비용 원칙(N-04)을 지킵니다. 사건 묶기는 기존 규칙(같은 설비·100 shot·30분)을 그대로 씁니다.
+- **오케스트레이터는 스스로 판단하지 않습니다.** 상태를 바꾸고 다음 에이전트에게 일을 넘기기만 합니다. 되돌림 횟수 제한도 여기서 지킵니다.
+- **보고서 작성 에이전트** (`qg.agent.writer.mode`)
+  - `analysis-text`(기본): 분석 에이전트가 쓴 문장 그대로. 평가 결과가 기존과 같도록 기본값으로 둡니다.
+  - `local`: Ollama 소형 모델(예: qwen2.5 1.5B 4bit)이 원시 shot 값·정비 기록을 보고 문장을 씁니다. 이 자료는 로컬 모델에만 갑니다.
+  - 로컬 모델이 실패하거나 시간을 넘기면 **클라우드로 넘기지 않고** 근거 표 + "사람 작성 필요" 초안으로 대신합니다(`TEMPLATE_FALLBACK`). 작성 기록에 `cloudCalls: 0` 을 남깁니다.
+  - 작성 에이전트는 문장만 씁니다. 판단(decision·원인 코드·확신도)은 바꾸지 않습니다.
+- **Kafka 전달** (`qg.agent.pipeline.transport=kafka`, 기본)
+  - 메시지는 사건 ID + 요약만 담습니다. 무거운 작업 상태(프롬프트·도구 기록)는 한 JVM 안의 사건 저장소에 둡니다. 8GB 환경에서 프로세스를 늘리지 않으면서, 토픽 계약은 나중에 에이전트를 다른 프로세스로 떼어 낼 때 그대로 쓸 수 있게 했습니다.
+  - 키 = 사건 ID → 한 사건의 이벤트는 같은 파티션에서 순서대로 처리됩니다. 에이전트마다 소비자 그룹이 따로이고 동시 처리는 1건입니다(LLM 호출을 한 번에 하나로).
+  - `direct` 로 바꾸면 Kafka 없이 같은 스레드에서 이어 부릅니다. 단위 시험(`AgentPipelineTest`)이 이 방식으로 상태 기계 전체(되돌림·작성 대체·실패)를 확인합니다.
+- **기록**: `agent_incident`(사건 상태), `agent_incident_event`(단계마다 한 줄), `agent_analysis.incident_id`·`pipeline_json`(분류·작성·단계 시간). QMS 화면의 분석 기록에 분류 결과와 단계별 시간이 보입니다.
+- **API·스케줄러**: `/api/agent/analyze/*`, `/recheck/*` 는 파이프라인에 사건을 넣고 승인 대기·종결까지 기다려(`wait-seconds`, 기본 600) 같은 형식으로 결과를 돌려줍니다. 자동 분석은 기다리지 않고, 진행 중인 사건이 있으면 새 사건을 넣지 않습니다.
+
 ## 한계
 - 규칙 검증은 "근거가 있는가, 모순이 없는가"를 볼 뿐, 원인이 맞는지는 판단하지 못합니다. 그건 사람 승인이 맡습니다.
 - 되돌림이 생기면 그 단계는 LLM 호출이 한 번 더 들어 시간이 늘어납니다. 재생 평가에서 되돌림 횟수와 시간을 함께 기록합니다.
+- 진행 중인 사건 상태는 메모리에 있어 앱이 재시작되면 사라집니다. 경보는 `NEW` 로 남지 않고 `ANALYZING` 에 머물 수 있어, 운영이라면 시작할 때 오래된 `ANALYZING` 을 되돌리는 정리 작업이 필요합니다. 에이전트를 프로세스로 나누면 사건 상태를 DB(이미 기록 중인 `agent_incident`)나 Redis 로 옮겨야 합니다.

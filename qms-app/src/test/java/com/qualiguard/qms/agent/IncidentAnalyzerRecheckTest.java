@@ -79,7 +79,7 @@ class IncidentAnalyzerRecheckTest {
         @SuppressWarnings("unchecked")
         ObjectProvider<org.springframework.ai.chat.client.ChatClient.Builder> noLlm =
                 org.mockito.Mockito.mock(ObjectProvider.class);
-        return new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null, props, noLlm, null, "test-model");
+        return new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null, props, noLlm, "test-model");
     }
 
     @Test
@@ -87,7 +87,7 @@ class IncidentAnalyzerRecheckTest {
         FakeJdbc jdbc = new FakeJdbc();
         jdbc.parent = parent("NCR_DRAFT");
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> analyzer(jdbc, 40, 3).recheck(10, null));
+                () -> analyzer(jdbc, 40, 3).prepareRecheck(10, null));
         assertTrue(e.getMessage().contains("관찰"));
     }
 
@@ -100,7 +100,7 @@ class IncidentAnalyzerRecheckTest {
         jdbc.chain.put(9, link("RECHECK", 8));
         jdbc.chain.put(8, link("ALARM", null));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> analyzer(jdbc, 40, 2).recheck(10, null));
+                () -> analyzer(jdbc, 40, 2).prepareRecheck(10, null));
         assertTrue(e.getMessage().contains("상한"));
     }
 
@@ -110,7 +110,7 @@ class IncidentAnalyzerRecheckTest {
         jdbc.parent = parent("OBSERVE");
         jdbc.chain.put(10, link("ALARM", null));
         jdbc.shotExists = false;
-        assertThrows(IllegalStateException.class, () -> analyzer(jdbc, 40, 3).recheck(10, null));
+        assertThrows(IllegalStateException.class, () -> analyzer(jdbc, 40, 3).prepareRecheck(10, null));
         // 기본 재확인 shot = 관찰 기준 shot 325 + 40
         assertEquals(365L, jdbc.lastShotQueried);
     }
@@ -120,6 +120,6 @@ class IncidentAnalyzerRecheckTest {
         FakeJdbc jdbc = new FakeJdbc();
         jdbc.parent = parent("OBSERVE");
         jdbc.chain.put(10, link("ALARM", null));
-        assertThrows(IllegalArgumentException.class, () -> analyzer(jdbc, 40, 3).recheck(10, 300L));
+        assertThrows(IllegalArgumentException.class, () -> analyzer(jdbc, 40, 3).prepareRecheck(10, 300L));
     }
 }

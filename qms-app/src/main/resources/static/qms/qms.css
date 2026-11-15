@@ -56,7 +56,7 @@ body { background: var(--qg-bg); color: var(--qg-text); font-size: 14px; word-br
 .qg-table thead th { position: sticky; top: 0; z-index: 1; background: #e0e0e0; color: var(--qg-text);
   font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; white-space: nowrap; }
 .qg-list .qg-table td { white-space: nowrap; }
-.qg-list .qg-table td.qg-title-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.qg-list .qg-table td.qg-title-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .qg-table tbody tr.pick { cursor: pointer; }
 .qg-table tbody tr.selected { background: var(--qg-accent-soft); box-shadow: inset 3px 0 0 var(--qg-accent); }
 .qg-conf { display: inline-block; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -122,6 +122,12 @@ body { background: var(--qg-bg); color: var(--qg-text); font-size: 14px; word-br
 .analysis pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 240px; overflow: auto;
   background: #f4f4f4; color: var(--qg-text); padding: 8px; margin: 8px 0 0; border: 0; }
 .qg-verify { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.qg-pipe { margin: 8px 0 0; }
+.qg-pipe-head { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.qg-pipe-steps { list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 2px solid var(--qg-line); font-size: 13px; }
+.qg-pipe-steps li { display: flex; gap: 8px; padding: 1px 0; }
+.qg-pipe-steps li > span:first-child { min-width: 64px; font-weight: 600; }
+.qg-pipe-steps li.failed > span:first-child { color: #da1e28; }
 .qg-history { padding-left: 20px; margin: 0; }
 .qg-history li { margin-bottom: 6px; }
 
@@ -130,3 +136,4 @@ body { background: var(--qg-bg); color: var(--qg-text); font-size: 14px; word-br
 .qg-login-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
 .qg-login-card { width: 400px; max-width: 100%; }
 .qg-login-card .card-body { padding: 32px; }
+.muted { color: var(--qg-muted); }

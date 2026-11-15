@@ -81,6 +81,14 @@ qg:
     recheck-shots: 40                 # 관찰(OBSERVE) 판단 뒤 새 경보가 없어도 40 shot 이 지나면 다시 분석
     recheck-max: 3                    # 새 경보 없이 이어지는 재확인 최대 횟수 (LLM 비용 상한)
     verify-max-retries: 1             # 검증 에이전트가 근거 부족으로 되돌리면 다시 분석하는 최대 횟수 (ADR-016)
+    pipeline:
+      transport: kafka                # 에이전트 사이 전달: kafka(agent.incident.* 토픽) / direct(같은 스레드, Kafka 없이 시험)
+      wait-seconds: 600               # API 가 사건 결과를 기다리는 최대 시간 (넘어도 파이프라인은 계속 진행)
+    writer:
+      mode: analysis-text             # 초안 문장: analysis-text(분석 문장 그대로) / local(Ollama) / template(근거 표만)
+      ollama-url: http://localhost:11434
+      model: qwen2.5:1.5b             # 로컬 소형 모델 (M1 8GB: 4bit 1.5B, docs/03)
+      timeout-seconds: 120            # 넘으면 클라우드로 넘기지 않고 근거 표 초안으로 (F-13)
   integration:
     publish-enabled: true             # 승인 이벤트 아웃박스를 Kafka(quality.ncr.approved)로 발행
     poll-ms: 2000
