@@ -23,9 +23,11 @@
 
 ### 데모 화면
 
-[![시연 영상 (85초) — 클릭하면 mp4](docs/demo/qualiguard-demo.gif)](docs/demo/qualiguard-demo.mp4)
+[![시연 영상 (76초) — 클릭하면 mp4](docs/demo/qualiguard-demo.gif)](docs/demo/qualiguard-demo.mp4)
 
-[시연 영상 mp4 (85초)](docs/demo/qualiguard-demo.mp4): 로그인 → 검토 대기 목록 → AI 초안·연결된 경보·에이전트 분석 기록 → 승인된 건의 MES/ERP 연계 → 목록
+[사용자용 영상 mp4 (76초)](docs/demo/qualiguard-demo.mp4): 품질 담당자 화면 — 로그인 → 검토 대기 목록 → AI 초안·연결된 경보·에이전트 분석 기록 → 승인된 건의 MES/ERP 연계 → 목록
+
+[개발자용 영상 mp4 (2분 34초, 시스템 뒤 흐름)](docs/demo/qualiguard-dev-demo.mp4): 인프라(docker compose)·센서 시뮬레이터 → Kafka UI(sensor.raw · sensor.clean · quality.anomaly) → 경보 1건 실시간 분석(분류 → 원인 분석 → 검증 → 초안, agent.* 토픽 · 사건 이벤트) → QMS 화면의 새 초안과 분석 기록
 
 경보 → 분류 → 원인 분석 ⇄ 검증 → 초안 → 품질 담당자 승인 → MES/ERP
 
