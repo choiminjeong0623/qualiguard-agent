@@ -10,6 +10,14 @@ spring:
     hikari:
       maximum-pool-size: 5                     # 8GB 환경: 연결 수 최소화
   ai:
+    mcp:
+      server:
+        name: qualiguard-qms
+        version: 1.0.0
+        protocol: streamable                  # POST /mcp (streamable HTTP)
+        instructions: >-
+          사출성형 라인 QMS 조회 도구입니다. 기준 경보(anomalyId)를 주면 그 경보 시각까지의 데이터만 조회합니다.
+          지난 경보를 분석할 때는 반드시 기준 경보를 지정해 미래 데이터를 보지 않게 하세요.
     google:
       genai:
         api-key: ${GEMINI_API_KEY:}             # 루트 .env 에서 읽음

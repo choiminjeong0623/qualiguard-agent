@@ -57,7 +57,7 @@ flowchart LR
 | 연계 | Spring Boot 4, Eclipse Paho MQTT v5, Apache Kafka 4 (KRaft) | 검증, 중복 제거, DLQ, 설비 ID 기준 순서 보장 |
 | 탐지 | Kafka Streams (exactly-once v2, RocksDB 상태 저장소) | SPC 관리도 4종으로 이상 판정, 에이전트용 근거 생성 |
 | 저장 | SQL Server 2025 | shot 공정 데이터, 이상·부적합·정비 이력, 검사 규격, 저장 프로시저 6개 |
-| AI | Spring AI 2.0, Gemini 3.8 Flash | 사건 단위 원인 추정, 부적합 보고서 초안, 판단 과정 기록 |
+| AI | Spring AI 2.0, Gemini 3.8 Flash, MCP 서버 | 사건 단위 원인 추정, 부적합 보고서 초안, 판단 과정 기록. 같은 조회 도구를 MCP(`/mcp`)로도 제공 |
 | 화면 | Spring Boot 정적 페이지, jQuery, Spring Security | QMS 검토 화면: 로그인, 초안 수정·승인·반려, 검토 이력 (`/qms/index.html`) |
 
 자세한 내용은 [아키텍처 문서](docs/02-architecture.md)를 참고하세요.
@@ -80,6 +80,7 @@ flowchart LR
 | [ADR-010](docs/decisions/ADR-010-ncr-integration-outbox.md) | 승인 결과는 **트랜잭션 아웃박스**로 Kafka 에, 받는 쪽은 event_id 로 중복 제거 | 승인과 이벤트가 따로 성공·실패하지 않게 |
 | [ADR-011](docs/decisions/ADR-011-qms-login.md) | QMS **로그인**(DB 사용자·BCrypt), 역할 품질 담당자/조회 전용, 비밀번호는 `.env` 로만 | 승인자를 확실히, 비밀번호를 저장소에 남기지 않음 |
 | [ADR-012](docs/decisions/ADR-012-mes-erp-ack.md) | MES/ERP **응답**은 단계 번호로 순서 유지, 응답 ID 로 중복 제거, **실패한 시스템에만** 다시 보내기 | 순서 뒤바뀜·중복·부분 실패에도 상태가 맞게 |
+| [ADR-013](docs/decisions/ADR-013-mcp-server.md) | 에이전트 도구를 **MCP 서버**(`/mcp`)로도 노출, 기준 시점은 기준 경보 ID 로만 | 다른 AI 클라이언트도 같은 데이터·같은 미래 정보 차단 원칙 |
 
 ---
 
