@@ -99,7 +99,7 @@ public class NcrReviewService {
                 """, ncrId));
         out.put("analyses", jdbc.queryForList("""
                 SELECT analysis_id, trigger_type, as_of_shot, decision, cause_code, confidence, latency_ms,
-                       result_json, tool_trace, attempts, verify_status, verify_json,
+                       result_json, tool_trace, attempts, verify_status, verify_json, incident_id, pipeline_json,
                        CONVERT(VARCHAR(33), created_at, 127) AS created_at
                 FROM dbo.agent_analysis WHERE ncr_id = ? ORDER BY analysis_id
                 """, ncrId));

@@ -62,7 +62,7 @@ flowchart LR
 | 이상 탐지 | `qms-app/.../quality/` | Kafka Streams. 설비별 SPC 상태를 저장소에 두고 관리도 4종으로 판정 |
 | Kafka | `docker-compose.yml` | KRaft 단일 노드. 토픽은 `kafka-init`이 명시적으로 생성 |
 | DB 적재 | `qms-app/.../store/` | `sensor.clean`·`quality.anomaly`를 읽어 SQL Server에 저장 (`read_committed`, 중복 건너뜀) |
-| 원인 분석 에이전트 | `qms-app/.../agent/` | 미처리 경보를 사건 단위로 묶어 분석, 부적합 초안 작성. 관찰 판단 뒤 일정 shot 이 지나면 재확인 |
+| 에이전트 파이프라인 | `qms-app/.../agent/`, `agent/pipeline/` | 역할 분리형: 분류(규칙) → 원인 분석(LLM) → 검증(규칙, 약하면 되돌림) → 보고서 작성(로컬 모델/근거 표) → 사람 승인. 단계마다 Kafka 토픽 `agent.*` ([ADR-016](decisions/ADR-016-multi-agent-pipeline.md)) |
 | QMS 검토 | `qms-app/.../ncr/`, `resources/static/qms/` | 초안 수정·승인·반려·조치 완료, 검토 이력, 지식저장소 현황 (화면 `/qms/index.html`) |
 | 로그인·권한 | `qms-app/.../security/` | 폼 로그인, 사용자 `app_user`(BCrypt), 역할 품질 담당자/조회 전용 |
 | MES/ERP 연계 | `qms-app/.../integration/` | 아웃박스 발행, 가상 MES/ERP 수신(별도 소비자 그룹), 처리 결과 응답 반영 |
@@ -177,16 +177,27 @@ Kafka 메시지 key 는 부적합 번호.
 | `anomaly_event` | 이상 이력. 상태: NEW → ANALYZING → NCR_DRAFTED / DISMISSED |
 | `maintenance_history` | 설비 정비 이력 |
 | `ncr`, `ncr_anomaly` | 부적합 보고서(과거 사례 + 에이전트 초안)와 경보 연결 |
-| `agent_analysis` | 에이전트 분석 기록: 판단, 원인, 확신도, 도구 호출 순서, 소요 시간, 경보/재확인 구분·기준 시점, 평가 실행 표시(`run_tag`) |
+| `agent_analysis` | 에이전트 분석 기록: 판단, 원인, 확신도, 도구 호출 순서, 소요 시간, 경보/재확인 구분·기준 시점, 평가 실행 표시(`run_tag`), 분석 시도 수·검증 결과, 사건 번호·단계 기록(`pipeline_json`) |
+| `agent_incident`, `agent_incident_event` | 파이프라인 사건 상태(분류·현재 단계·시도 수)와 단계마다 한 줄씩의 이동 기록 |
 | `ncr_history` | 검토 이력: 수정(바뀐 항목 전·후)·승인·반려·조치 완료, 검토자 |
 | `app_user` | QMS 화면 사용자 (BCrypt 해시, 역할) |
 | `integration_outbox` | 승인 이벤트 아웃박스 (전송 시각·시도 횟수·오류) |
 | `integration_receipt` | 가상 MES/ERP 가 만든 업무 (점검 작업 지시·비용 전표) |
 | `integration_status`, `integration_ack_log` | MES/ERP 응답: 이벤트·시스템별 현재 상태, 받은 응답 전부 |
 
-조회는 저장 프로시저로 제공하며, 에이전트 도구와 QMS 화면이 함께 씁니다. 검토·연계의 쓰기(`usp_UpdateNcrDraft`, `usp_ReviewNcr`, `usp_CloseNcr`, `usp_EnqueueNcrApproved`, `usp_ApplyIntegrationAck`)도 프로시저 하나가 상태 확인·변경·이력을 한 트랜잭션에서 처리합니다. 초기화 스크립트는 `infra/mssql/init/01~10`이며 모두 다시 실행해도 안전합니다. 자세한 결정은 [ADR-007](decisions/ADR-007-sqlserver-qms-schema.md), [ADR-009](decisions/ADR-009-qms-review-screen.md)에 있습니다.
+조회는 저장 프로시저로 제공하며, 에이전트 도구와 QMS 화면이 함께 씁니다. 검토·연계의 쓰기(`usp_UpdateNcrDraft`, `usp_ReviewNcr`, `usp_CloseNcr`, `usp_EnqueueNcrApproved`, `usp_ApplyIntegrationAck`)도 프로시저 하나가 상태 확인·변경·이력을 한 트랜잭션에서 처리합니다. 초기화 스크립트는 `infra/mssql/init/01~10, 13`이며 모두 다시 실행해도 안전합니다. 자세한 결정은 [ADR-007](decisions/ADR-007-sqlserver-qms-schema.md), [ADR-009](decisions/ADR-009-qms-review-screen.md)에 있습니다.
 
 ## 8. 원인 분석 에이전트
+
+경보 1건은 역할이 나뉜 에이전트들을 차례로 거칩니다 (Kafka 토픽으로 연결, [ADR-016](decisions/ADR-016-multi-agent-pipeline.md)).
+
+```
+분류(규칙: 심각도·유형) → 원인 분석(LLM, 아래 ①~⑤) → 검증(규칙) ─PASS→ 보고서 작성 → 사람 승인 대기
+                              ▲                          └─WEAK→ 지적을 붙여 되돌림 (최대 1회)
+                              └──────────────────────────────────┘
+```
+
+아래는 그중 원인 분석 에이전트의 흐름입니다.
 
 ```
 미처리 경보 ─ ① 사건 묶기 (같은 설비, 100 shot·30분 안)
@@ -206,7 +217,7 @@ Kafka 메시지 key 는 부적합 번호.
 | API | 용도 |
 |---|---|
 | `GET /api/agent/anomalies` | 경보 목록 |
-| `POST /api/agent/analyze-next` | 가장 오래된 미처리 사건 1건 분석 |
+| `POST /api/agent/analyze-next` | 가장 오래된 미처리 사건 1건 분석 (분석 API 는 파이프라인 끝까지 기다려 결과를 돌려줌) |
 | `POST /api/agent/analyze/{anomalyId}?replay=&tag=` | 지정 경보를 시작점으로 분석 (시간 순 재생 가능) |
 | `POST /api/agent/recheck/{analysisId}?asOfShot=` | 관찰 판단 재확인 |
 | `GET /api/agent/config` | 재확인 설정 |

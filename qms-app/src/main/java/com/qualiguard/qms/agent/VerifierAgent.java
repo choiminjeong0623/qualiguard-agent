@@ -67,7 +67,7 @@ public class VerifierAgent {
         this(new JdbcFacts(jdbc));
     }
 
-    VerifierAgent(Facts facts) {
+    public VerifierAgent(Facts facts) {
         this.facts = facts;
     }
 

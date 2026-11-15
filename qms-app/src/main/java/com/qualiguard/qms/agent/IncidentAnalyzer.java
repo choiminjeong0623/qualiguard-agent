@@ -2,7 +2,6 @@ package com.qualiguard.qms.agent;
 
 import java.time.Year;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,7 +26,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 경보 → 사건 묶기 → 에이전트 분석 → 결과 저장.
+ * 경보 → 사건 묶기 → 에이전트 분석 → 결과 저장. 각 단계를 agent/pipeline 의 역할별 에이전트(분류·분석·검증·작성)가
+ * 오케스트레이터의 Kafka 이벤트를 받아 부른다 (ADR-016). 이 클래스는 단계별 기능만 제공하고 순서는 정하지 않는다.
  *
  * 1) 사건 묶기: 시작 경보(seed)와 같은 설비에서 일정 shot·시간 안에 난 미처리 경보를 하나의 사건으로 묶는다.
  *    경보마다 LLM 을 부르지 않기 위해서다 (비용 절감, 같은 원인의 중복 보고서 방지).
@@ -57,11 +57,20 @@ public class IncidentAnalyzer {
     public record Outcome(Integer analysisId, String equipmentId, String triggerType, Long asOfShot,
             Integer parentAnalysisId, String decision, String causeCode, Integer confidence, String ncrNo,
             boolean mergedIntoExistingNcr, List<String> anomalyIds, long latencyMs, List<String> toolTrace,
-            AnalysisResult result, String error, int attempts, VerifierAgent.Verification verification) {
+            AnalysisResult result, String error, int attempts, VerifierAgent.Verification verification,
+            String incidentId, Map<String, Object> triage, Map<String, Object> report, List<Map<String, Object>> timeline) {
+
+        /** 파이프라인(오케스트레이터)이 사건 번호·분류·작성 결과·단계 기록을 붙인다. */
+        public Outcome withPipeline(String incidentId, Map<String, Object> triage, Map<String, Object> report,
+                List<Map<String, Object>> timeline) {
+            return new Outcome(analysisId, equipmentId, triggerType, asOfShot, parentAnalysisId, decision, causeCode,
+                    confidence, ncrNo, mergedIntoExistingNcr, anomalyIds, latencyMs, toolTrace, result, error, attempts,
+                    verification, incidentId, triage, report, timeline);
+        }
     }
 
-    /** 분석 1건의 입력. 경보 분석과 재확인이 같은 실행 경로(execute)를 쓴다. */
-    private record Job(String trigger, String equipmentId, String seedAnomalyId, String seedTs,
+    /** 분석 1건의 입력(사건). 경보 분석과 재확인이 같은 파이프라인(분류 → 분석 → 검증 → 작성)을 탄다. */
+    public record Job(String trigger, String equipmentId, String seedAnomalyId, String seedTs,
             List<Map<String, Object>> alarms, List<String> anomalyIds, boolean ownsAlarmStatus,
             Map<String, Object> seedEvidence, String asOf, Long asOfShot, String previousBefore,
             Integer parentId, String tag, Map<String, Object> recheckInfo) {
@@ -72,24 +81,22 @@ public class IncidentAnalyzer {
     private final TransactionTemplate tx;
     private final AgentProperties props;
     private final ObjectProvider<ChatClient.Builder> chatClientBuilder;
-    private final VerifierAgent verifier;
     private final String model;
     private volatile ChatClient chatClient;
 
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
-            AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder, VerifierAgent verifier,
+            AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
             @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.tx = tx;
         this.props = props;
         this.chatClientBuilder = chatClientBuilder;
-        this.verifier = verifier;
         this.model = model;
     }
 
-    /** 가장 오래된 미처리 경보부터 사건 1건을 분석한다. 같은 경보로 2번 실패하면 건너뛴다. */
-    public Optional<Outcome> analyzeNext() {
+    /** 가장 오래된 미처리 경보 (같은 경보로 2번 실패했으면 건너뛴다). */
+    public Optional<String> nextSeed() {
         List<String> ids = jdbc.queryForList("""
                 SELECT TOP 1 a.anomaly_id
                 FROM dbo.anomaly_event AS a
@@ -98,7 +105,7 @@ public class IncidentAnalyzer {
                         WHERE g.seed_anomaly_id = a.anomaly_id AND g.decision = 'FAILED') < 2
                 ORDER BY a.detected_at, a.anomaly_id
                 """, String.class);
-        return ids.isEmpty() ? Optional.empty() : Optional.of(analyze(ids.get(0), false, null));
+        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
     }
 
     /**
@@ -108,7 +115,7 @@ public class IncidentAnalyzer {
      *               false(운영)면 시작 경보 이후 묶음 범위 안의 미처리 경보까지 함께 묶는다.
      * @param runTag 평가 실행 구분 표시 (운영은 null). 이전 판단은 같은 runTag 의 분석에서만 찾는다.
      */
-    public synchronized Outcome analyze(String seedAnomalyId, boolean replay, String runTag) {
+    public synchronized Job prepareAlarm(String seedAnomalyId, boolean replay, String runTag) {
         String tag = runTag == null || runTag.isBlank() ? null : truncate(runTag.strip(), 60);
         Map<String, Object> seed;
         try {
@@ -145,8 +152,8 @@ public class IncidentAnalyzer {
         long asOfShot = replay || last == null ? seedShot : ((Number) last.get("shot_no")).longValue();
         setStatus(anomalyIds, "ANALYZING");
 
-        return execute(new Job("ALARM", equipmentId, seedAnomalyId, seedTs, anomalies, anomalyIds, true,
-                readMap((String) seed.get("evidence_json")), asOf, asOfShot, seedTs, null, tag, null));
+        return new Job("ALARM", equipmentId, seedAnomalyId, seedTs, anomalies, anomalyIds, true,
+                readMap((String) seed.get("evidence_json")), asOf, asOfShot, seedTs, null, tag, null);
     }
 
     /**
@@ -158,7 +165,7 @@ public class IncidentAnalyzer {
      * @throws IllegalArgumentException 분석이 없거나 관찰 판단이 아닐 때
      * @throws IllegalStateException    재확인 횟수 상한에 닿았거나 그 shot 의 데이터가 아직 없을 때
      */
-    public synchronized Outcome recheck(int parentAnalysisId, Long asOfShot) {
+    public synchronized Job prepareRecheck(int parentAnalysisId, Long asOfShot) {
         Map<String, Object> parent;
         try {
             parent = jdbc.queryForMap("""
@@ -210,16 +217,16 @@ public class IncidentAnalyzer {
         info.put("currentShot", target);
         info.put("shotsSinceObservation", target - baseShot);
         info.put("recheckCount", depth + 1);
-        return execute(new Job("RECHECK", equipmentId, (String) parent.get("seed_anomaly_id"),
+        return new Job("RECHECK", equipmentId, (String) parent.get("seed_anomaly_id"),
                 (String) parent.get("seed_ts"), observedAlarms, anomalyIds, false, null, asOf, target, asOf,
-                parentAnalysisId, (String) parent.get("run_tag"), info));
+                parentAnalysisId, (String) parent.get("run_tag"), info);
     }
 
     /**
      * 운영용: 새 경보 없이 recheck-shots 가 지난 관찰 판단을 하나 골라 재확인한다.
      * 그 설비에 더 최근 분석이 있으면(새 경보가 났으면) 그 분석이 이어받으므로 재확인하지 않는다.
      */
-    public Optional<Outcome> recheckNextDue() {
+    public Optional<Integer> nextRecheckDue() {
         if (props.recheckShots() <= 0 || props.recheckMax() <= 0) {
             return Optional.empty();
         }
@@ -241,7 +248,7 @@ public class IncidentAnalyzer {
                 """, Integer.class, props.recheckShots());
         for (Integer id : due) {
             if (recheckDepth(id) < props.recheckMax()) {
-                return Optional.of(recheck(id, null));
+                return Optional.of(id);
             }
         }
         return Optional.empty();
@@ -263,63 +270,47 @@ public class IncidentAnalyzer {
         return depth;
     }
 
-    /** 공통 실행: 프롬프트 → 에이전트 분석 → 결과 저장. */
-    private Outcome execute(Job job) {
+    /** 분석 에이전트에게 줄 입력: 사건 + 같은 설비의 이전 판단. */
+    public String userPrompt(Job job) {
+        return buildUserPrompt(job, previousJudgements(job.equipmentId(), job.previousBefore(), job.tag()));
+    }
+
+    /** 검증 에이전트가 되돌렸을 때의 재분석 입력: 원래 입력 + 앞선 결과 + 지적. */
+    public String reworkPrompt(String userPrompt, AnalysisResult previous, VerifierAgent.Verification v) {
+        return userPrompt + "\n\n[앞선 분석 결과]\n" + objectMapper.writeValueAsString(previous)
+                + "\n\n[검증 에이전트 지적]\n" + VerifierAgent.feedback(v);
+    }
+
+    /** 검증 에이전트 입력. */
+    public VerifierAgent.Input verifyInput(Job job, AnalysisResult result, List<String> attemptTrace) {
+        return new VerifierAgent.Input(job.equipmentId(), job.asOf(), alarmRules(job), result, attemptTrace);
+    }
+
+    /** 사건이 끝내 실패했을 때: 경보를 다시 분석할 수 있게 되돌리고 실패를 기록한다. */
+    public Outcome fail(String incidentId, Job job, List<String> trace, long ms, int attempts, String error,
+            String pipelineJson) {
+        if (job.ownsAlarmStatus()) {
+            setStatus(job.anomalyIds(), "NEW");
+        }
+        Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error, attempts, null,
+                incidentId, pipelineJson);
+        log.error("[에이전트] 분석 실패 — {} {} 경보 {}건: {}", job.equipmentId(), job.trigger(), job.anomalyIds().size(), error);
+        return new Outcome(id, job.equipmentId(), job.trigger(), job.asOfShot(), job.parentId(), "FAILED", null, null,
+                null, false, job.anomalyIds(), ms, trace, null, error, attempts, null, null, null, null, null);
+    }
+
+    /**
+     * 사건 마무리: 분석·검증·작성 결과를 하나의 트랜잭션으로 저장한다.
+     * NCR_DRAFT 면 부적합 초안(사람 승인 대기)을 만들거나 기존 초안에 연결하고, 아니면 경보를 종결한다.
+     *
+     * @param written 보고서 작성 에이전트가 쓴 초안 문장 (null 이면 분석 결과 문장을 그대로 쓴다)
+     */
+    public Outcome complete(String incidentId, Job job, AnalysisResult result, List<String> trace, long ms,
+            int attemptCount, VerifierAgent.Verification verified, AnalysisResult written, String pipelineJson) {
         String equipmentId = job.equipmentId();
         List<String> anomalyIds = job.anomalyIds();
         String tag = job.tag();
-        List<Map<String, Object>> previous = previousJudgements(equipmentId, job.previousBefore(), tag);
-        String userPrompt = buildUserPrompt(job, previous);
-
-        // ── 에이전트 분석 ─────────────────────────────────────────────
-        List<String> trace = Collections.synchronizedList(new ArrayList<>());
-        long t0 = System.nanoTime();
-        AnalysisResult result;
-        VerifierAgent.Verification verification = null;
-        int attempts = 0;
-        try {
-            // 분석 에이전트 → 검증 에이전트. 근거가 약하면(WEAK) 지적을 붙여 분석 에이전트로 되돌린다 (최대 verify-max-retries 회)
-            List<String> trace0 = trace;
-            String prompt = userPrompt;
-            AnalysisResult current = null;
-            while (true) {
-                attempts++;
-                List<String> attemptTrace = Collections.synchronizedList(new ArrayList<>());
-                try {
-                    current = analyzeOnce(prompt, job.asOf(), t0, attemptTrace);
-                } finally {
-                    trace0.addAll(attemptTrace);   // 실패해도 어디까지 조사했는지 남긴다
-                }
-                if (verifier == null) {
-                    break;
-                }
-                verification = verifier.verify(new VerifierAgent.Input(equipmentId, job.asOf(), alarmRules(job),
-                        current, attemptTrace));
-                trace0.add("verify#" + attempts + "(" + verification.status() + ") @" + elapsedMs(t0) + "ms");
-                verification.fails().forEach(f -> trace0.add("  ↳ 지적: " + f));
-                if (verification.passed() || attempts > props.verifyMaxRetries()) {
-                    break;
-                }
-                trace0.add("  ↳ 분석 에이전트로 되돌림 (" + attempts + "/" + props.verifyMaxRetries() + ")");
-                prompt = userPrompt + "\n\n[앞선 분석 결과]\n" + objectMapper.writeValueAsString(current)
-                        + "\n\n[검증 에이전트 지적]\n" + VerifierAgent.feedback(verification);
-            }
-            result = current;   // result 는 한 번만 대입 (아래 트랜잭션 람다에서 쓰기 위해)
-        } catch (RuntimeException e) {
-            long ms = elapsedMs(t0);
-            if (job.ownsAlarmStatus()) {
-                setStatus(anomalyIds, "NEW");   // 다시 분석할 수 있게 되돌린다
-            }
-            String error = causeChain(e);
-            Integer id = insertAnalysis(job, "FAILED", null, null, null, trace, ms, null, error, attempts, null);
-            log.error("[에이전트] 분석 실패 — {} {} 경보 {}건: {}", equipmentId, job.trigger(), anomalyIds.size(), error, e);
-            return new Outcome(id, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), "FAILED", null, null,
-                    null, false, anomalyIds, ms, trace, null, error, attempts, null);
-        }
-        long ms = elapsedMs(t0);
-        final int attemptCount = attempts;
-        final VerifierAgent.Verification verified = verification;
-
+        AnalysisResult text = written == null ? result : written;
         // ── 결과 저장 (하나의 트랜잭션) ──────────────────────────────
         String decision = result.decision().toUpperCase(Locale.ROOT);
         String causeCode = result.causeCode() == null ? "UNKNOWN" : result.causeCode().toUpperCase(Locale.ROOT);
@@ -363,9 +354,9 @@ public class IncidentAnalyzer {
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', 'AGENT', CAST(? AS DATETIMEOFFSET(3)), ?, ?)
                             """, Integer.class,
                             ncrNo, equipmentId, job.seedAnomalyId(), defectType(job),
-                            relatedSensors(job.alarms()), truncate(result.title(), 200),
-                            truncate(result.phenomenon(), 1000), truncate(result.suspectedCause(), 1000),
-                            evidenceText(result) + verifyNote(verified), truncate(result.recommendedAction(), 1000),
+                            relatedSensors(job.alarms()), truncate(text.title(), 200),
+                            truncate(text.phenomenon(), 1000), truncate(text.suspectedCause(), 1000),
+                            evidenceText(result) + verifyNote(verified), truncate(text.recommendedAction(), 1000),
                             job.seedTs(), causeCode, confidence);
                 }
                 for (String id : anomalyIds) {
@@ -379,9 +370,10 @@ public class IncidentAnalyzer {
                 setStatus(anomalyIds, "DISMISSED");
             }
             Integer analysisId = insertAnalysis(job, decision, causeCode, confidence, resultJson, trace, ms, ncrId,
-                    null, attemptCount, verified);
+                    null, attemptCount, verified, incidentId, pipelineJson);
             return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
-                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, attemptCount, verified);
+                    causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, attemptCount, verified,
+                    null, null, null, null);
         });
 
         log.info("[에이전트] {} {} (shot {}) 경보 {}건 → {} / {} (확신도 {}) {}{} — 분석 {}회, 검증 {}, 도구 {}회, {}ms",
@@ -393,7 +385,7 @@ public class IncidentAnalyzer {
     }
 
     /** 분석 에이전트 1회: 도구로 조사 → JSON 결과. 형식이 깨지면 형식만 1회 고쳐 달라고 한다. */
-    private AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace) {
+    public AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace) {
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
         ChatResponse response = chatClient().prompt()
@@ -542,19 +534,20 @@ public class IncidentAnalyzer {
 
     private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,
             String resultJson, List<String> trace, long ms, Integer ncrId, String error, int attempts,
-            VerifierAgent.Verification verification) {
+            VerifierAgent.Verification verification, String incidentId, String pipelineJson) {
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
                     confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag,
-                    trigger_type, as_of, as_of_shot, parent_analysis_id, attempts, verify_status, verify_json)
+                    trigger_type, as_of, as_of_shot, parent_analysis_id, attempts, verify_status, verify_json,
+                    incident_id, pipeline_json)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?, ?, ?)
                 """, Integer.class,
                 job.equipmentId(), job.seedAnomalyId(), String.join(",", job.anomalyIds()), decision, causeCode,
                 confidence, resultJson, String.join("\n", trace), model, (int) ms, ncrId,
                 error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
                 job.parentId(), attempts, verification == null ? null : verification.status(),
-                verification == null ? null : objectMapper.writeValueAsString(verification));
+                verification == null ? null : objectMapper.writeValueAsString(verification), incidentId, pipelineJson);
     }
 
     @SuppressWarnings("unchecked")

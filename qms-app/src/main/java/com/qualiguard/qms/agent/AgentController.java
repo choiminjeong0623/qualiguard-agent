@@ -12,10 +12,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.qualiguard.qms.agent.pipeline.AgentPipeline;
+
 /**
  * 에이전트 수동 실행·조회 API (시험과 평가용).
  *
  *   GET  /api/agent/anomalies?equipmentId=IMM-01&status=NEW   경보 목록
+ * 분석은 역할 분리형 파이프라인(분류 → 원인 분석 → 검증 → 작성, ADR-016)을 거치며, API 는 끝날 때까지 기다려 결과를 돌려준다.
+ *
  *   POST /api/agent/analyze-next                              가장 오래된 미처리 사건 1건 분석
  *   POST /api/agent/analyze/{anomalyId}                       지정 경보를 시작점으로 분석
  *        ?replay=true&tag=...                                 시간 순 재생: 시작 경보 시각까지의 경보·데이터만 사용,
@@ -30,11 +34,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgentController {
 
     private final IncidentAnalyzer analyzer;
+    private final AgentPipeline pipeline;
     private final JdbcTemplate jdbc;
     private final AgentProperties props;
 
-    public AgentController(IncidentAnalyzer analyzer, JdbcTemplate jdbc, AgentProperties props) {
+    public AgentController(IncidentAnalyzer analyzer, AgentPipeline pipeline, JdbcTemplate jdbc, AgentProperties props) {
         this.analyzer = analyzer;
+        this.pipeline = pipeline;
         this.jdbc = jdbc;
         this.props = props;
     }
@@ -54,9 +60,11 @@ public class AgentController {
 
     @PostMapping("/analyze-next")
     public ResponseEntity<?> analyzeNext() {
-        return analyzer.analyzeNext()
-                .<ResponseEntity<?>>map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.ok(Map.of("message", "분석할 미처리 경보가 없습니다.")));
+        var seed = analyzer.nextSeed();
+        if (seed.isEmpty()) {
+            return ResponseEntity.ok(Map.of("message", "분석할 미처리 경보가 없습니다."));
+        }
+        return analyze(seed.get(), false, null);
     }
 
     @PostMapping("/analyze/{anomalyId}")
@@ -64,16 +72,20 @@ public class AgentController {
             @RequestParam(defaultValue = "false") boolean replay,
             @RequestParam(required = false) String tag) {
         try {
-            return ResponseEntity.ok(analyzer.analyze(anomalyId, replay, tag));
+            return ResponseEntity.ok(pipeline.analyzeAndWait(anomalyId, replay, tag));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (AgentPipeline.WaitException e) {
+            return ResponseEntity.status(504).body(Map.of("error", e.getMessage()));
         }
     }
 
     @PostMapping("/recheck/{analysisId}")
     public ResponseEntity<?> recheck(@PathVariable int analysisId, @RequestParam(required = false) Long asOfShot) {
         try {
-            return ResponseEntity.ok(analyzer.recheck(analysisId, asOfShot));
+            return ResponseEntity.ok(pipeline.recheckAndWait(analysisId, asOfShot));
+        } catch (AgentPipeline.WaitException e) {
+            return ResponseEntity.status(504).body(Map.of("error", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (IllegalStateException e) {
@@ -91,7 +103,8 @@ public class AgentController {
         return jdbc.queryForList("""
                 SELECT TOP (?) g.analysis_id, g.equipment_id, g.trigger_type, g.as_of_shot, g.parent_analysis_id,
                        g.decision, g.cause_code, g.confidence,
-                       g.latency_ms, n.ncr_no, g.tool_trace, g.error_message,
+                       g.latency_ms, n.ncr_no, g.tool_trace, g.error_message, g.attempts, g.verify_status,
+                       g.incident_id, g.pipeline_json,
                        CONVERT(VARCHAR(33), g.created_at, 127) AS created_at
                 FROM dbo.agent_analysis AS g
                 LEFT JOIN dbo.ncr AS n ON n.ncr_id = g.ncr_id

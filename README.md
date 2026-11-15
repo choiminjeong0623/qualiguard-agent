@@ -12,7 +12,8 @@
 | 과거 사례·정비 이력을 모두 숨기고 시간 순 재생 5회 | 재생 평가 전체 | 28~72초, 1분 초과 8/50 | 실제 고장 3종 모두 |
 
 ```
-경보 → 원인 분석 에이전트 → 부적합 초안 → 품질 담당자 검토·승인 → MES/ERP 점검 지시·비용 전표 → 응답 확인
+경보 → 분류 → 원인 분석 ⇄ 검증 → 초안 작성 → 품질 담당자 검토·승인 → MES/ERP 점검 지시·비용 전표 → 응답 확인
+       └──────── 에이전트끼리는 Kafka 이벤트로 이어짐 ────────┘
 ```
 
 - **탐지는 규칙(SPC), 판단은 LLM**: LLM 호출은 전체 shot의 2.4%(경보)에만, 사건 단위로 묶어 더 줄입니다.
@@ -62,7 +63,7 @@ flowchart LR
     SPC --> ANO[("quality.anomaly")]
     CLEAN --> DB[("SQL Server<br/>공정 · 이상 · 규격 · 정비 · 부적합")]
     ANO --> DB
-    DB -- "미처리 경보" --> AG["원인 분석 에이전트<br/>(Spring AI + Gemini)<br/>도구 = 저장 프로시저"]
+    DB -- "미처리 경보" --> AG["에이전트 파이프라인 (Kafka agent.*)<br/>분류 → 원인 분석(Gemini, 도구=저장 프로시저)<br/>⇄ 검증(규칙) → 초안 작성(로컬/근거 표)"]
     AG -- "부적합 초안 · 분석 기록" --> DB
     DB --> QMS["QMS 검토 화면<br/>담당자 수정 · 승인 · 반려"]
     QMS -- "승인 + 이벤트 (같은 트랜잭션, 아웃박스)" --> APR[("quality.ncr.approved")] --> MES["가상 MES/ERP<br/>점검 지시 · 비용 전표 (중복 제거)"]
@@ -100,6 +101,7 @@ flowchart LR
 | [ADR-012](docs/decisions/ADR-012-mes-erp-ack.md) | MES/ERP **응답**은 단계 번호로 순서 유지, 응답 ID 로 중복 제거, **실패한 시스템에만** 다시 보내기 | 순서 뒤바뀜·중복·부분 실패에도 상태가 맞게 |
 | [ADR-013](docs/decisions/ADR-013-mcp-server.md) | 에이전트 도구를 **MCP 서버**(`/mcp`)로도 노출, 기준 시점은 기준 경보 ID 로만 | 다른 AI 클라이언트도 같은 데이터·같은 미래 정보 차단 원칙 |
 | [ADR-015](docs/decisions/ADR-015-mqtt-device-auth.md) | **MQTT 장비 인증 + 토픽 ACL**: 사용자명 = 설비 ID, 장비는 자기 토픽 쓰기만, 브리지는 읽기만 | 데이터 시스템의 입구는 사람이 아니라 설비 → 가짜 데이터 주입·도청 차단 |
+| [ADR-016](docs/decisions/ADR-016-multi-agent-pipeline.md) | **역할 분리형 멀티 에이전트**: 분류·검증은 규칙, 분석만 LLM, 작성은 로컬 모델, 단계마다 Kafka 토픽 | 자기 검증(근거 없는 결론 되돌림), 기밀 문장은 클라우드로 보내지 않음, 단계별 시간·실패 추적 |
 
 ---
 
@@ -122,7 +124,7 @@ flowchart LR
 | 경로 | 내용 |
 |---|---|
 | `simulator/` | 사출성형 라인 센서 시뮬레이터 (고장 시나리오 4종, 평가용 정답 기록) |
-| `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석 에이전트), `ncr/`(QMS 검토 API), `integration/`(아웃박스 발행·가상 MES/ERP), `resources/static/qms/`(검토 화면) |
+| `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석·검증 에이전트, `pipeline/` 분류·오케스트레이터·작성·Kafka 연결), `ncr/`(QMS 검토 API), `integration/`(아웃박스 발행·가상 MES/ERP), `resources/static/qms/`(검토 화면) |
 | `scripts/` | `mqtt_users.sh`·`test_mqtt_acl.sh`(MQTT 계정·권한 시험), `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가), `fetch_secom.sh`(공개 데이터 SECOM 받기) |
 | `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트(스키마·기준 데이터·저장 프로시저) |
 | `docs/` | 문제 정의, 아키텍처, 의사결정 기록(ADR), 장애 분석, 평가 결과 |
@@ -182,6 +184,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 | `sensor.raw` | 브리지가 검증해 기록한 원본 shot 데이터 (key = 설비 ID) |
 | `sensor.clean` | 중복 제거·범위 검사를 거친 정제 데이터 |
 | `quality.anomaly` | 이상 탐지 결과 + 에이전트용 근거(최근 값, 센서별 z 점수, 불량 유형) |
+| `agent.incident.triaged` 외 6개 | 에이전트 사이 전달 (분류 → 분석 요청·완료 → 검증 요청·완료 → 작성 요청·완료). 키 = 사건 ID ([ADR-016](docs/decisions/ADR-016-multi-agent-pipeline.md)) |
 | `quality.ncr.approved` | 담당자가 승인한 부적합 (아웃박스 발행 → 가상 MES/ERP 수신) |
 | `integration.ncr.ack` | 가상 MES/ERP 의 처리 결과 응답 (수신 확인·처리 완료·실패 → QMS 연계 상태) |
 | `quality.dlq` | 형식 오류 메시지 (오류 사유 헤더 포함) |

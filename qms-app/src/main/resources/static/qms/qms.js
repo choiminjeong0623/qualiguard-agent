@@ -141,7 +141,7 @@
       return '<div class="analysis"><div class="analysis-head">' + head + '</div>' +
         (r.reasoningSummary ? '<p>' + esc(r.reasoningSummary) + '</p>' : '') +
         ((r.similarCases && r.similarCases.length) ? '<p class="text-secondary">참고 사례: ' + esc(r.similarCases.join(', ')) + '</p>' : '') +
-        verifyNotes(g) +
+        verifyNotes(g) + pipelineNotes(g) +
         '<pre>' + esc(g.tool_trace || '') + '</pre></div>';
     }).join('') || '<p class="text-secondary mb-0">분석 기록 없음 (사람이 작성한 부적합)</p>');
 
@@ -178,9 +178,14 @@
 
   // 승인 → 전송 → MES → ERP 진행 단계 (가장 최근 이벤트 기준). 지난 단계까지 채우고, 실패한 시스템은 빨갛게.
   function drawFlow(d, ev) {
-    var acks = ev ? (d.integrationStatus || []).filter(function (s) { return s.event_id === ev.event_id; }) : [];
+    var all = d.integrationStatus || [];
+    var events = d.integration || [];
     function sys(name) {
-      var a = acks.filter(function (s) { return s.system_name === name; })[0];
+      // 가장 최근 이벤트부터 거슬러 올라가며 그 시스템의 응답을 찾는다 (재전송이 한 시스템에만 간 경우)
+      var a = null;
+      for (var i = events.length - 1; i >= 0 && !a; i--) {
+        a = all.filter(function (s) { return s.event_id === events[i].event_id && s.system_name === name; })[0] || null;
+      }
       if (!a) { return { done: false, label: name + ' 응답 대기' }; }
       var L = { RECEIVED: '수신 확인', PROCESSED: '처리 완료', FAILED: '실패' };
       return { done: a.status !== 'FAILED', failed: a.status === 'FAILED', label: name + ' ' + (L[a.status] || a.status) };
@@ -211,6 +216,27 @@
     var items = (v.fails || []).map(function (f) { return '<li class="text-danger">' + esc(f) + '</li>'; })
       .concat((v.warns || []).map(function (w) { return '<li class="text-secondary">' + esc(w) + '</li>'; }));
     return items.length ? '<ul class="qg-verify">' + items.join('') + '</ul>' : '';
+  }
+
+  // 역할 분리형 파이프라인 (ADR-016): 분류 결과와 에이전트 단계 기록
+  var STATE_LABEL = { TRIAGED: '분류', ANALYZING: '원인 분석', VERIFYING: '검증', WRITING: '초안 작성',
+    AWAITING_APPROVAL: '승인 대기', CLOSED: '종결', FAILED: '실패' };
+  var REPORT_LABEL = { ANALYSIS_TEXT: '분석 문장', LOCAL: '로컬 모델', TEMPLATE: '근거 표', TEMPLATE_FALLBACK: '근거 표 (로컬 실패)' };
+  function pipelineNotes(g) {
+    var p;
+    try { p = JSON.parse(g.pipeline_json || 'null'); } catch (e) { p = null; }
+    if (!p) { return ''; }
+    var t = p.triage || {};
+    var head = '<div class="qg-pipe-head"><span class="badge ' +
+      ({ HIGH: 'bg-red-lt', MEDIUM: 'bg-yellow-lt', LOW: 'bg-secondary-lt' }[t.severity] || 'bg-secondary-lt') + '">' +
+      esc('분류 ' + (t.severity || '-') + ' · ' + (t.type || '-')) + '</span>' +
+      (p.report ? '<span class="badge bg-azure-lt">' + esc('초안 문장: ' + (REPORT_LABEL[p.report.mode] || p.report.mode) +
+        ' · 클라우드 ' + (p.report.cloudCalls || 0) + '회') + '</span>' : '') + '</div>';
+    var steps = (p.timeline || []).map(function (s) {
+      return '<li class="' + (s.state === 'FAILED' ? 'failed' : '') + '"><span>' + esc(STATE_LABEL[s.state] || s.state) +
+        '</span><span class="muted">' + esc((s.atMs / 1000).toFixed(1) + '초' + (s.detail ? ' · ' + s.detail : '')) + '</span></li>';
+    }).join('');
+    return '<div class="qg-pipe">' + head + (steps ? '<ol class="qg-pipe-steps">' + steps + '</ol>' : '') + '</div>';
   }
 
   function editedFields() {
@@ -306,7 +332,8 @@
 
   $.getJSON('/api/qms/me').done(function (me) {
     state.me = me;
-    $('#me').text(me.displayName + ' (' + (me.role === 'REVIEWER' ? '품질 담당자' : '조회 전용') + ')');
+    var role = me.role === 'REVIEWER' ? '품질 담당자' : '조회 전용';
+    $('#me').text(me.displayName === role ? role : me.displayName + ' (' + role + ')');
     loadList();
     loadKb();
   });

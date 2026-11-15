@@ -19,4 +19,4 @@
 | [ADR-013](ADR-013-mcp-server.md) | 에이전트 도구를 MCP 서버로도 노출한다 — 기준 시점은 기준 경보로만 | 채택 |
 | ADR-014 | 유사 사례 의미 검색 (SQL Server VECTOR) — 브랜치 `feat/ncr-vector-search` 에만 있음 | 보류 ([향후 계획](../future-work.md)) |
 | [ADR-015](ADR-015-mqtt-device-auth.md) | MQTT 장비 인증과 토픽별 접근 권한 — 사용자명 = 설비 ID | 채택 |
-| [ADR-016](ADR-016-multi-agent-pipeline.md) | 역할 분리형 멀티 에이전트 — 분류·분석·검증·작성·오케스트레이터를 Kafka 이벤트로 잇는다 | 진행 중 |
+| [ADR-016](ADR-016-multi-agent-pipeline.md) | 역할 분리형 멀티 에이전트 — 분류·분석·검증·작성·오케스트레이터를 Kafka 이벤트로 잇는다 | 채택 |
