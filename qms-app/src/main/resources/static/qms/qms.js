@@ -100,6 +100,14 @@
         '<pre>' + esc(g.tool_trace || '') + '</pre></div>';
     }).join('') || '<p class="muted">분석 기록 없음 (사람이 작성한 부적합)</p>');
 
+    $('#integration').html((d.integration || []).map(function (o) {
+      var state = o.published_at ? ('전송됨 ' + time(o.published_at)) : ('전송 대기' + (o.attempts ? ' (시도 ' + o.attempts + '회)' : ''));
+      var line = (o.event_type === 'NCR_APPROVED' ? '승인 이벤트' : o.event_type) + ' · ' + state;
+      if (o.receipts) { line += ' · 수신: ' + o.receipts; } else if (o.published_at) { line += ' · 수신 확인 대기'; }
+      if (o.last_error && !o.published_at) { line += ' · 오류: ' + o.last_error; }
+      return '<li>' + esc(line) + '</li>';
+    }).join('') || '<li class="muted">승인하면 MES/ERP 로 보낼 이벤트가 만들어집니다.</li>');
+
     $('#history').html(d.history.map(function (h) {
       var line = time(h.created_at) + ' · ' + h.actor + ' · ' + (ACTION_LABEL[h.action] || h.action);
       if (h.comment) { line += ' — ' + h.comment; }

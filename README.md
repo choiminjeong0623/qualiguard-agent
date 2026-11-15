@@ -13,7 +13,7 @@
 | **문제** | 설비 상태가 서서히 나빠지면 불량이 생긴 뒤에야 알아채고, 원인을 찾으려면 담당자가 센서 그래프·검사 결과·과거 이력·정비 기록을 일일이 뒤져 부적합 보고서를 써야 함 | — |
 | **데이터** | 설비 센서 7종(온도·압력·쿠션량 등)의 shot 단위 공정 데이터, 비전 검사 결과, 검사 규격, 과거 부적합·조치 이력, 설비 정비 이력 | ✅ |
 | **엔지니어링** | ① 수집·정제: MQTT → Kafka 브리지(검증·중복 제거·DLQ) ② 탐지: SPC 관리도 4종(규칙 기반, LLM 미사용) ③ 원인 분석 에이전트: 경보를 사건 단위로 묶어, 센서 추이·공정 능력·불량·유사 사례·정비 이력을 도구(저장 프로시저)로 조회해 원인 추정 ④ 근거가 달린 부적합 보고서 초안 작성 → 담당자 승인 | ①②③④ ✅ / 검토 화면 ✅ |
-| **산출물** | 근거가 첨부된 부적합 보고서 초안(✅), 과거 부적합 사례 지식저장소(✅, 승인한 AI 초안이 다시 쌓임), 판단 과정을 남기는 분석 기록(✅), QMS 검토 화면(✅), MES/ERP 연계 이벤트(예정) | 일부 ✅ |
+| **산출물** | 근거가 첨부된 부적합 보고서 초안(✅), 과거 부적합 사례 지식저장소(✅, 승인한 AI 초안이 다시 쌓임), 판단 과정을 남기는 분석 기록(✅), QMS 검토 화면(✅), MES/ERP 연계 이벤트(✅, 가상 수신) | ✅ |
 | **성과** | (시뮬레이션) 고장 3종 모두 **첫 불량 발생 전에 감지**, 에이전트 시간 순 재생 평가 **15/15**(3회 반복, 잘못된 초안 0건, 히터·냉각·센서 이상을 첫 불량 전에 진단), 분석 1단계 평균 **44초**(일부 1분 초과), LLM 호출 대상을 전체 데이터의 **2.4%**로 제한 | 일부 ✅ |
 
 ### 핵심 성과 (시뮬레이션, 설비 2대 × 2,000 shot)
@@ -47,7 +47,7 @@ flowchart LR
     DB -- "미처리 경보" --> AG["원인 분석 에이전트<br/>(Spring AI + Gemini)<br/>도구 = 저장 프로시저"]
     AG -- "부적합 초안 · 분석 기록" --> DB
     DB --> QMS["QMS 검토 화면<br/>담당자 수정 · 승인 · 반려"]
-    QMS -.-> APR[("quality.ncr.approved")] -.-> MES["MES/ERP (예정)"]
+    QMS -- "승인 + 이벤트 (같은 트랜잭션, 아웃박스)" --> APR[("quality.ncr.approved")] --> MES["가상 MES/ERP<br/>점검 지시 · 비용 전표 (중복 제거)"]
 ```
 
 | 계층 | 기술 | 역할 |
@@ -76,6 +76,7 @@ flowchart LR
 | [ADR-007](docs/decisions/ADR-007-sqlserver-qms-schema.md) | shot 원본 저장 + 저장 프로시저 조회, **경보 당시까지의 데이터만** 분석 | 에이전트가 미래 데이터를 보지 않게 (평가 신뢰성) |
 | [ADR-008](docs/decisions/ADR-008-agent-design.md) | 사건 단위 분석, **대응표 없이 지식저장소로 추론**, 사람 승인 | 비용·중복 방지, 정답 주입 없는 추론, 책임 소재 |
 | [ADR-009](docs/decisions/ADR-009-qms-review-screen.md) | 검토 상태 규칙은 **저장 프로시저 한 트랜잭션**에, 승인에는 확정 원인 필수, 화면은 jQuery | 동시 요청에도 상태 규칙 유지, 지식저장소 품질, 라이선스·메모리 |
+| [ADR-010](docs/decisions/ADR-010-ncr-integration-outbox.md) | 승인 결과는 **트랜잭션 아웃박스**로 Kafka 에, 받는 쪽은 event_id 로 중복 제거 | 승인과 이벤트가 따로 성공·실패하지 않게 |
 
 ---
 
@@ -88,7 +89,7 @@ flowchart LR
 | 3 | 전처리·이상 탐지 (Kafka Streams + SPC 관리도 4종) | ✅ |
 | 4 | SQL Server 적재 (공정·이상·규격·정비·부적합, 저장 프로시저) | ✅ |
 | 5 | 원인 분석 에이전트 (Spring AI + Gemini, 도구 = 저장 프로시저) | ✅ (평가 개편·개선 진행 중) |
-| 6 | QMS 화면·승인·MES/ERP 연계 | 검토 화면 ✅ / 지식저장소 반영 ✅ / MES/ERP 연계 예정 |
+| 6 | QMS 화면·승인·MES/ERP 연계 | ✅ (검토 화면, 지식저장소 반영, 아웃박스 연계) |
 
 ---
 
@@ -97,7 +98,7 @@ flowchart LR
 | 경로 | 내용 |
 |---|---|
 | `simulator/` | 사출성형 라인 센서 시뮬레이터 (고장 시나리오 4종, 평가용 정답 기록) |
-| `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석 에이전트), `ncr/`(QMS 검토 API), `resources/static/qms/`(검토 화면) |
+| `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석 에이전트), `ncr/`(QMS 검토 API), `integration/`(아웃박스 발행·가상 MES/ERP), `resources/static/qms/`(검토 화면) |
 | `scripts/` | `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가) |
 | `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트(스키마·기준 데이터·저장 프로시저) |
 | `docs/` | 문제 정의, 아키텍처, 의사결정 기록(ADR), 장애 분석, 평가 결과 |
@@ -153,7 +154,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 | `sensor.raw` | 브리지가 검증해 기록한 원본 shot 데이터 (key = 설비 ID) |
 | `sensor.clean` | 중복 제거·범위 검사를 거친 정제 데이터 |
 | `quality.anomaly` | 이상 탐지 결과 + 에이전트용 근거(최근 값, 센서별 z 점수, 불량 유형) |
-| `quality.ncr.approved` | 담당자가 승인한 부적합 (MES/ERP 연계, 예정) |
+| `quality.ncr.approved` | 담당자가 승인한 부적합 (아웃박스 발행 → 가상 MES/ERP 수신) |
 | `quality.dlq` | 형식 오류 메시지 (오류 사유 헤더 포함) |
 
 ### 개발 환경 메모

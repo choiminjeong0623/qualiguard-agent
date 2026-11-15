@@ -102,6 +102,15 @@ public class NcrReviewService {
                        result_json, tool_trace, CONVERT(VARCHAR(33), created_at, 127) AS created_at
                 FROM dbo.agent_analysis WHERE ncr_id = ? ORDER BY analysis_id
                 """, ncrId));
+        // MES/ERP 연계 (F-09): 보낸 이벤트와 가상 수신 시스템이 기록한 업무
+        out.put("integration", jdbc.queryForList("""
+                SELECT CONVERT(VARCHAR(36), o.event_id) AS event_id, o.event_type, o.attempts, o.last_error,
+                       CONVERT(VARCHAR(33), o.created_at, 127)   AS created_at,
+                       CONVERT(VARCHAR(33), o.published_at, 127) AS published_at,
+                       (SELECT STRING_AGG(r.system_name + ': ' + r.action, ' / ')
+                          FROM dbo.integration_receipt AS r WHERE r.event_id = o.event_id) AS receipts
+                FROM dbo.integration_outbox AS o WHERE o.ncr_id = ? ORDER BY o.created_at
+                """, ncrId));
         out.put("history", jdbc.queryForList("""
                 SELECT action, actor, from_status, to_status, changes_json, comment,
                        CONVERT(VARCHAR(33), created_at, 127) AS created_at

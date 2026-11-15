@@ -158,6 +158,10 @@ BEGIN
 
         INSERT INTO dbo.ncr_history (ncr_id, action, actor, from_status, to_status, comment)
         VALUES (@id, @Decision, @Actor, 'DRAFT', @to, @Comment);
+
+        -- 승인 결과를 MES/ERP 로 보낼 이벤트를 같은 트랜잭션에서 아웃박스에 쓴다 (F-09, 08_integration.sql)
+        IF @to = 'APPROVED'
+            EXEC dbo.usp_EnqueueNcrApproved @id;
     COMMIT;
 END;
 GO
