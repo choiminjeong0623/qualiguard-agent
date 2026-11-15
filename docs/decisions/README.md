@@ -12,3 +12,4 @@
 | [ADR-006](ADR-006-kafka-streams-state.md) | 이상 탐지 상태를 Kafka Streams 저장소에 두고 exactly-once로 처리한다 | 채택 |
 | [ADR-007](ADR-007-sqlserver-qms-schema.md) | QMS 데이터는 shot 원본으로 저장하고, 조회는 저장 프로시저로 제공한다 | 채택 |
 | [ADR-008](ADR-008-agent-design.md) | 원인 분석 에이전트: 사건 단위 분석, 지식저장소 기반 추론, 사람 승인 | 채택 |
+| [ADR-009](ADR-009-qms-review-screen.md) | QMS 검토 화면: 상태 규칙은 저장 프로시저에, 화면은 jQuery 정적 페이지로 | 채택 |

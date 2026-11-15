@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QMS 부적합 검토</title>
+<link rel="stylesheet" href="qms.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+</head>
+<body>
+<header class="bar">
+  <h1>QMS 부적합 검토</h1>
+  <label class="who">검토자 <input id="actor" type="text" maxlength="50" placeholder="이름 (예: 품질팀 최민정)"></label>
+</header>
+
+<main class="layout">
+  <section class="list-pane" aria-label="부적합 목록">
+    <div class="filters" role="tablist">
+      <button class="tab active" data-status="DRAFT">검토 대기</button>
+      <button class="tab" data-status="APPROVED">승인</button>
+      <button class="tab" data-status="REJECTED">반려</button>
+      <button class="tab" data-status="CLOSED">조치 완료</button>
+      <button class="tab" data-status="">전체</button>
+    </div>
+    <table class="grid">
+      <thead><tr><th>번호</th><th>설비</th><th>제목</th><th>원인</th><th>확신도</th><th>작성</th><th>작성 시각</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="muted">불러오는 중…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="detail-pane" id="detail" aria-label="부적합 상세" hidden>
+    <div class="detail-head">
+      <h2 id="d-title"></h2>
+      <span id="d-status" class="badge"></span>
+    </div>
+    <p class="meta" id="d-meta"></p>
+
+    <form id="edit-form" autocomplete="off">
+      <div class="row2">
+        <label>원인 코드
+          <select name="causeCode">
+            <option>HEATER_DEGRADATION</option><option>COOLING_ISSUE</option><option>CHECK_RING_WEAR</option>
+            <option>SENSOR_FAULT</option><option>MATERIAL</option><option>NOISE</option><option>UNKNOWN</option>
+          </select>
+        </label>
+        <label>불량 유형 <input name="defectType" maxlength="20"></label>
+        <label>관련 센서 <input name="relatedSensors" maxlength="200" placeholder="barrelTemp,injectionPressure"></label>
+      </div>
+      <label>제목 <input name="title" maxlength="200"></label>
+      <label>현상 <textarea name="phenomenon" rows="3"></textarea></label>
+      <label>추정 원인 (AI 초안) <textarea name="suspectedCause" rows="3"></textarea></label>
+      <label class="key">확정 원인 <span class="hint">승인하려면 필요합니다. 다음 분석의 유사 사례로 쓰입니다.</span>
+        <textarea name="rootCause" rows="3"></textarea></label>
+      <label>근거 <textarea name="evidence" rows="5"></textarea></label>
+      <label>권고 조치 <textarea name="recommendedAction" rows="3"></textarea></label>
+      <div class="actions">
+        <button type="submit" id="btn-save">수정 저장</button>
+        <button type="button" id="btn-approve" class="primary">승인</button>
+        <span class="sep"></span>
+        <input id="reject-reason" maxlength="1000" placeholder="반려 사유">
+        <button type="button" id="btn-reject" class="danger">반려</button>
+      </div>
+      <p id="msg" class="msg" role="status"></p>
+    </form>
+
+    <details open>
+      <summary>연결된 경보 <span id="a-count"></span></summary>
+      <table class="grid small"><thead><tr><th>shot</th><th>규칙</th><th>센서</th><th>내용</th></tr></thead>
+        <tbody id="anomalies"></tbody></table>
+    </details>
+    <details>
+      <summary>에이전트 분석 기록</summary>
+      <div id="analyses"></div>
+    </details>
+    <details>
+      <summary>검토 이력</summary>
+      <ol id="history" class="history"></ol>
+    </details>
+  </section>
+</main>
+
+<script src="qms.js"></script>
+</body>
+</html>
