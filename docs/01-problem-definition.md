@@ -70,7 +70,7 @@
 | N-02 | 같은 설비의 데이터는 순서대로 처리한다 | Kafka 메시지 key = 설비 ID |
 | N-03 | 재시작해도 이상 탐지 기준값이 유지된다 | Kafka Streams 상태 저장소 ([ADR-006](decisions/ADR-006-kafka-streams-state.md)) |
 | N-04 | LLM 비용을 통제한다 | 탐지는 규칙, LLM은 경보 시에만 ([ADR-005](decisions/ADR-005-spc-detect-llm-reason.md)) |
-| N-05 | AI 판단을 사람이 검증할 수 있다 | 모든 추정에 근거 첨부, 사람 승인 |
+| N-05 | AI 판단을 사람이 검증할 수 있다 | 모든 추정에 근거 첨부, 로그인한 품질 담당자만 승인 ([ADR-011](decisions/ADR-011-qms-login.md)) |
 | N-06 | 8GB RAM 개발 PC에서 전체가 동작한다 | 컨테이너 메모리 상한, 단일 JVM |
 
 ## 7. 성공 지표
