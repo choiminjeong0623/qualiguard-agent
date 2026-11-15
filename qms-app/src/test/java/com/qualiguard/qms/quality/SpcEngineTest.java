@@ -107,4 +107,20 @@ class SpcEngineTest {
         }
         assertTrue(alerts.stream().anyMatch(a -> a.rule().equals("P_CHART")));
     }
+
+    @Test
+    void 다른_센서_목록으로도_같은_규칙을_적용한다() {
+        // 공개 데이터(SECOM) 보조 검증처럼 센서 정의를 바꿔 끼워도 판정 규칙은 같아야 한다
+        Map<String, SensorCatalog.Sensor> custom = new LinkedHashMap<>();
+        custom.put("f7", new SensorCatalog.Sensor("f7", "센서 7", "", -Double.MAX_VALUE, Double.MAX_VALUE));
+        SpcEngine other = new SpcEngine(custom);
+        EquipmentState s = new EquipmentState();
+        Random r = new Random(3);
+        for (int i = 0; i < 100; i++) {
+            other.process(s, new Shot("c-" + i, "L", "E", i, "", Map.of("f7", 10 + r.nextGaussian()), false, null));
+        }
+        var res = other.process(s, new Shot("c-x", "L", "E", 101, "", Map.of("f7", 30.0, "moldTemp", 60.0), false, null));
+        assertTrue(res.anomalies().stream().anyMatch(a -> a.rule().equals("INDIVIDUAL") && a.sensor().equals("f7")));
+        assertFalse(res.cleanValues().containsKey("moldTemp"), "목록에 없는 센서는 판정하지 않음");
+    }
 }

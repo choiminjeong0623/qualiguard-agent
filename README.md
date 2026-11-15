@@ -27,6 +27,7 @@
 | 에이전트 원인 추정 | 경보를 발생 순서대로, 그 시점까지의 데이터만으로 판단하는 **시간 순 재생 평가(5건 × 3회)에서 15/15**, 잘못 만든 초안 0건, 진단까지 LLM 호출 사례당 1~2회. 관찰 판단 뒤 40 shot이 지나면 다시 보는 규칙으로 **히터 열화를 첫 불량 3 shot 전(+65)에 진단, 불량 0건**(이전 +96, 불량 3건). 냉각 막힘·센서 이상은 첫 경보에서, 체크 링 마모는 3회 중 2회 첫 불량과 같은 shot. 정답 원인의 과거 사례를 숨겨도 15/15 → [평가 방식 허점 분석](docs/troubleshooting/04-agent-evaluation-leakage.md) |
 | 초안 작성 시간 | 분석 1단계 평균 **44초**, 33~74초 (1분 초과 3/23단계) |
 | 중복 메시지 | 재주입 50건 중 50건 차단 |
+| 공개 실제 데이터 (UCI SECOM) | 같은 탐지 규칙을 센서 448개에 적용하면 **경보 과다(100건당 205건), 불합격 구분 못함** → 규칙은 의미가 알려진 소수 센서용, 실제 적용에는 센서 고르기·다변량 관리도 필요 ([평가 2-9절](docs/evaluation.md)) |
 
 자세한 측정 방법과 한계는 [평가 결과](docs/evaluation.md)를 참고하세요.
 
@@ -103,7 +104,7 @@ flowchart LR
 |---|---|
 | `simulator/` | 사출성형 라인 센서 시뮬레이터 (고장 시나리오 4종, 평가용 정답 기록) |
 | `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석 에이전트), `ncr/`(QMS 검토 API), `integration/`(아웃박스 발행·가상 MES/ERP), `resources/static/qms/`(검토 화면) |
-| `scripts/` | `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가) |
+| `scripts/` | `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가), `fetch_secom.sh`(공개 데이터 SECOM 받기) |
 | `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트(스키마·기준 데이터·저장 프로시저) |
 | `docs/` | 문제 정의, 아키텍처, 의사결정 기록(ADR), 장애 분석, 평가 결과 |
 | `docker-compose.yml` | Mosquitto, Kafka(+토픽 생성), SQL Server(+DB 생성), Kafka UI(선택) |

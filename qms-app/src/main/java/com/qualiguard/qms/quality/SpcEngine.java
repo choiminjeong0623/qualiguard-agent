@@ -34,6 +34,22 @@ public class SpcEngine {
     public static final int RECENT_KEEP = 30;
     public static final int DEDUP_KEEP = 200;
 
+    private final Map<String, SensorCatalog.Sensor> sensors;
+
+    /** 사출성형기 센서 7종(SensorCatalog)으로 판정한다. */
+    public SpcEngine() {
+        this(SensorCatalog.SENSORS);
+    }
+
+    /**
+     * 다른 센서 목록으로 판정한다 (예: 공개 데이터 UCI SECOM 보조 검증). 판정 규칙은 같다.
+     *
+     * @param sensors 센서 키 → 정의(이름·단위·물리적으로 가능한 범위)
+     */
+    public SpcEngine(Map<String, SensorCatalog.Sensor> sensors) {
+        this.sensors = sensors;
+    }
+
     /** 처리 결과: 중복 여부, 정제된 값, 측정 범위를 벗어나 제외한 센서, 발생한 이상 목록 */
     public record Result(boolean duplicate, Map<String, Double> cleanValues, List<String> invalidSensors,
             List<Anomaly> anomalies) {
@@ -54,7 +70,7 @@ public class SpcEngine {
         List<Pending> pending = new ArrayList<>();
 
         // ── 센서별 처리 ──
-        for (SensorCatalog.Sensor def : SensorCatalog.SENSORS.values()) {
+        for (SensorCatalog.Sensor def : sensors.values()) {
             Double v = shot.values().get(def.key());
             if (v == null || v.isNaN() || v < def.min() || v > def.max()) {
                 invalid.add(def.key());                 // 전처리: 물리적으로 불가능한 값은 판정에서 제외

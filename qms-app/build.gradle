@@ -58,3 +58,13 @@ dependencyManagement {
 		mavenBom 'org.springframework.ai:spring-ai-bom:2.0.2'
 	}
 }
+
+// 공개 실제 데이터(UCI SECOM) 보조 검증: ./scripts/fetch_secom.sh 로 data/secom 을 받은 뒤 실행
+tasks.register('secomValidation', JavaExec) {
+	group = 'verification'
+	description = 'UCI SECOM 에 같은 SPC 엔진을 적용해 결과를 data/secom/secom_report.md 에 남긴다'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.qualiguard.qms.quality.SecomValidation'
+	args = ['../data/secom']
+	jvmArgs = ['-Xmx384m']
+}
