@@ -72,6 +72,8 @@
 | N-04 | LLM 비용을 통제한다 | 탐지는 규칙, LLM은 경보 시에만 ([ADR-005](decisions/ADR-005-spc-detect-llm-reason.md)) |
 | N-05 | AI 판단을 사람이 검증할 수 있다 | 모든 추정에 근거 첨부, 로그인한 품질 담당자만 승인 ([ADR-011](decisions/ADR-011-qms-login.md)) |
 | N-06 | 8GB RAM 개발 PC에서 전체가 동작한다 | 컨테이너 메모리 상한, 단일 JVM |
+| N-07 | 등록된 장비만 MQTT 브로커에 접속한다 | ✅ 장비별 계정, 익명 거부 ([ADR-015](decisions/ADR-015-mqtt-device-auth.md)) |
+| N-08 | 장비는 자기 토픽에만 쓰고 브리지만 읽는다 | ✅ 토픽 ACL, 거부 시험 6항목 ([ADR-015](decisions/ADR-015-mqtt-device-auth.md)) |
 
 ## 7. 성공 지표
 

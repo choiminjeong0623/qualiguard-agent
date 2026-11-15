@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import signal
 import sys
@@ -29,6 +30,24 @@ KST = ZoneInfo("Asia/Seoul")
 def load_config(path: Path) -> dict:
     with path.open(encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def load_dotenv(path: Path) -> dict:
+    """프로젝트 루트 .env 를 읽는다 (KEY=VALUE 줄만). 환경 변수가 있으면 그쪽이 우선."""
+    out: dict = {}
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                out[k.strip()] = v.strip()
+    out.update({k: v for k, v in os.environ.items() if k.startswith("MQTT_")})
+    return out
+
+
+def device_password(env: dict, equipment_id: str) -> str | None:
+    """장비 계정 비밀번호 (N-07): MQTT_DEVICE_PASSWORD_IMM_01 처럼 설비 ID 의 '-' 를 '_' 로."""
+    return env.get("MQTT_DEVICE_PASSWORD_" + equipment_id.replace("-", "_")) or None
 
 
 def build_payload(m: Machine, values: dict, defect: str | None) -> dict:
@@ -53,6 +72,8 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="MQTT로 보내지 않고 화면에 출력")
     ap.add_argument("--shots", type=int, help="설정의 shots 값을 덮어쓰기 (설비당 shot 수)")
     ap.add_argument("--interval", type=float, help="설정의 interval_sec 값을 덮어쓰기")
+    ap.add_argument("--env-file", default=str(Path(__file__).resolve().parent.parent.parent / ".env"),
+                    help="장비 비밀번호를 읽을 .env (기본: 프로젝트 루트)")
     args = ap.parse_args()
 
     # 1. 설정 파일 읽기
@@ -84,27 +105,40 @@ def main() -> None:
     gt = csv.writer(gt_file)
     gt.writerow(["ts", "equipmentId", "shotNo", "activeFault", "inspection", "defectType"])
 
-    client = None
+    clients: dict = {}      # 설비 ID → MQTT 클라이언트. 장비마다 자기 계정으로 따로 접속한다 (N-07, N-08)
     shutting_down = False   # 우리가 일부러 끊는 중인지 (정상 종료 메시지 구분용)
     pending = []            # 브로커 확인(PUBACK)을 아직 못 받은 QoS 1 메시지
     if not args.dry_run:
         import paho.mqtt.client as mqtt
 
         def on_connect(c, userdata, flags, reason_code, properties):
-            print(f"[MQTT] 연결: {reason_code}", flush=True)
+            print(f"[MQTT] {userdata} 연결: {reason_code}", flush=True)
 
         def on_disconnect(c, userdata, flags, reason_code, properties):
             if shutting_down:
-                print("[MQTT] 정상 종료", flush=True)
+                print(f"[MQTT] {userdata} 정상 종료", flush=True)
             else:
-                print(f"[MQTT] 연결 끊김: {reason_code} — 자동 재연결 시도", flush=True)
+                print(f"[MQTT] {userdata} 연결 끊김: {reason_code} — 자동 재연결 시도", flush=True)
 
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=mqtt_cfg.get("client_id", "qg-simulator"))
-        client.on_connect = on_connect
-        client.on_disconnect = on_disconnect
-        client.reconnect_delay_set(min_delay=1, max_delay=30)
-        client.connect(mqtt_cfg.get("host", "localhost"), mqtt_cfg.get("port", 1883), keepalive=30)
-        client.loop_start()
+        env = load_dotenv(Path(args.env_file))
+        for m in machines:
+            # 사용자명 = 설비 ID. 브로커 ACL 이 이 계정에 factory/<라인>/<설비 ID>/telemetry 쓰기만 허용한다
+            c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                            client_id=f'{mqtt_cfg.get("client_id", "qg-simulator")}-{m.equipment_id}',
+                            protocol=mqtt.MQTTv5)
+            c.user_data_set(m.equipment_id)
+            pw = device_password(env, m.equipment_id)
+            if pw:
+                c.username_pw_set(m.equipment_id, pw)
+            else:
+                print(f"[MQTT] {m.equipment_id}: .env 에 장비 비밀번호가 없어 익명으로 접속합니다 "
+                      f"(인증을 켠 브로커는 거부 → ./scripts/mqtt_users.sh)", flush=True)
+            c.on_connect = on_connect
+            c.on_disconnect = on_disconnect
+            c.reconnect_delay_set(min_delay=1, max_delay=30)
+            c.connect(mqtt_cfg.get("host", "localhost"), mqtt_cfg.get("port", 1883), keepalive=30)
+            c.loop_start()
+            clients[m.equipment_id] = c
 
     stop = False
 
@@ -139,8 +173,8 @@ def main() -> None:
             payload = build_payload(m, values, defect)
             topic = topic_tpl.format(line=m.line_id, equipment=m.equipment_id)
             body = json.dumps(payload, ensure_ascii=False)
-            if client:
-                pending.append(client.publish(topic, body, qos=qos))
+            if clients:
+                pending.append(clients[m.equipment_id].publish(topic, body, qos=qos))
                 if len(pending) > 1000:
                     pending = [i for i in pending if not i.is_published()]
             else:
@@ -156,7 +190,7 @@ def main() -> None:
             time.sleep(interval)
 
     gt_file.close()
-    if client:
+    if clients:
         # 끊기 전에 아직 브로커 확인을 못 받은 메시지를 최대 10초까지 기다린다 (유실 방지)
         deadline = time.time() + 10
         for info in pending:
@@ -171,8 +205,9 @@ def main() -> None:
         if unacked:
             print(f"[MQTT] 경고: {unacked}건은 브로커 확인을 받지 못했습니다", flush=True)
         shutting_down = True
-        client.disconnect()
-        client.loop_stop()
+        for c in clients.values():
+            c.disconnect()
+            c.loop_stop()
     print(f"종료: {sent}건 발행, 불량 {ng}건 ({(ng / sent if sent else 0):.1%}). 정답 기록: {gt_path}", flush=True)
 
 

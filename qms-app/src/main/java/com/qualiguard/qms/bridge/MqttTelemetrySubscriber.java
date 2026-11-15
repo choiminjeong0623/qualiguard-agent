@@ -79,6 +79,12 @@ public class MqttTelemetrySubscriber implements SmartLifecycle, MqttCallback {
         options.setSessionExpiryInterval(props.sessionExpirySeconds());
         options.setAutomaticReconnect(true);                       // 연결이 끊기면 자동 재접속
         options.setReceiveMaximum(100);                            // ack 안 된 메시지를 최대 100건까지만 받음(과부하 방지)
+        if (props.hasCredentials()) {                              // 장비 인증 (N-07): 브리지 계정으로 접속
+            options.setUserName(props.username());
+            options.setPassword(props.password().getBytes(StandardCharsets.UTF_8));
+        } else {
+            log.warn("MQTT 계정이 설정되지 않아 익명으로 접속합니다. 인증을 켠 브로커는 거부합니다 (.env 의 MQTT_BRIDGE_PASSWORD)");
+        }
         try {
             client.connect(options, null, new MqttActionListener() {
                 @Override
@@ -141,6 +147,14 @@ public class MqttTelemetrySubscriber implements SmartLifecycle, MqttCallback {
             token.setActionCallback(new MqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken t) {
+                    // 브로커가 구독을 거부하면 SUBACK 이유 코드가 0x80 이상 (N-08). Mosquitto 는 와일드카드 구독은 받아 두고
+                    // 전달 단계에서 ACL 로 거르므로, 이 경고가 없어도 계정이 틀리면 메시지가 오지 않을 수 있다
+                    int[] codes = t.getReasonCodes();
+                    if (codes != null && Arrays.stream(codes).anyMatch(c -> c >= 0x80)) {
+                        log.error("MQTT 구독 거부(권한 없음?): {} 이유 코드 {} — 브로커 ACL 과 계정({})을 확인하세요",
+                                String.join(", ", topics), Arrays.toString(codes), props.username());
+                        return;
+                    }
                     log.info("MQTT 구독 완료: {}", String.join(", ", topics));
                 }
 

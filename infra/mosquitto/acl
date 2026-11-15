@@ -1,0 +1,11 @@
+# MQTT 토픽별 접근 권한 (N-08, ADR-015)
+# 이 파일에 적지 않은 것은 모두 거부된다 (Mosquitto 기본 동작).
+
+# 브리지(qg-bridge): 모든 설비의 공정 데이터를 읽기만 한다
+user qg-bridge
+topic read factory/+/+/telemetry
+
+# 장비: 사용자명 = 설비 ID (예: IMM-01). 자기 설비 토픽에 쓰기만 한다.
+# %u 는 접속한 사용자명으로 바뀐다 → IMM-01 은 factory/<라인>/IMM-01/telemetry 에만 발행 가능.
+# 다른 설비 토픽 발행, 구독(읽기)은 모두 거부.
+pattern write factory/+/%u/telemetry
