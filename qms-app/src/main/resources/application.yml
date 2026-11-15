@@ -80,6 +80,7 @@ qg:
     merge-minutes: 60                 # 같은 설비·같은 원인 초안이 60분 안에 있으면 그 초안에 연결
     recheck-shots: 40                 # 관찰(OBSERVE) 판단 뒤 새 경보가 없어도 40 shot 이 지나면 다시 분석
     recheck-max: 3                    # 새 경보 없이 이어지는 재확인 최대 횟수 (LLM 비용 상한)
+    verify-max-retries: 1             # 검증 에이전트가 근거 부족으로 되돌리면 다시 분석하는 최대 횟수 (ADR-016)
   integration:
     publish-enabled: true             # 승인 이벤트 아웃박스를 Kafka(quality.ncr.approved)로 발행
     poll-ms: 2000

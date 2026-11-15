@@ -135,12 +135,13 @@
       try { r = JSON.parse(g.result_json || '{}'); } catch (e) { r = {}; }
       var head = '<strong>#' + esc(g.analysis_id) + '</strong>' +
         '<span class="badge ' + (g.trigger_type === 'RECHECK' ? 'bg-purple-lt">재확인' : 'bg-orange-lt">경보') + '</span>' +
-        '<span class="badge bg-secondary-lt">' + esc(g.decision) + '</span>' +
+        '<span class="badge bg-secondary-lt">' + esc(g.decision) + '</span>' + verifyTag(g) +
         '<span>' + esc((g.cause_code || '') + (g.as_of_shot != null ? ' · shot ' + g.as_of_shot : '') +
           ' · 확신도 ' + (g.confidence == null ? '-' : g.confidence) + ' · ' + Math.round((g.latency_ms || 0) / 1000) + '초') + '</span>';
       return '<div class="analysis"><div class="analysis-head">' + head + '</div>' +
         (r.reasoningSummary ? '<p>' + esc(r.reasoningSummary) + '</p>' : '') +
-        ((r.similarCases && r.similarCases.length) ? '<p class="muted">참고 사례: ' + esc(r.similarCases.join(', ')) + '</p>' : '') +
+        ((r.similarCases && r.similarCases.length) ? '<p class="text-secondary">참고 사례: ' + esc(r.similarCases.join(', ')) + '</p>' : '') +
+        verifyNotes(g) +
         '<pre>' + esc(g.tool_trace || '') + '</pre></div>';
     }).join('') || '<p class="text-secondary mb-0">분석 기록 없음 (사람이 작성한 부적합)</p>');
 
@@ -193,6 +194,23 @@
     $('#flow').html(steps.map(function (s) {
       return '<li class="qg-step' + (s.failed ? ' failed' : (s.done ? ' done' : '')) + '">' + esc(s.label) + '</li>';
     }).join(''));
+  }
+
+  // 검증 에이전트 결과 (ADR-016): 통과 / 재분석 뒤 통과 / 근거 부족
+  function verifyTag(g) {
+    if (!g.verify_status) { return ''; }
+    var retried = (g.attempts || 1) > 1;
+    var cls = g.verify_status === 'PASS' ? (retried ? 'bg-teal-lt' : 'bg-green-lt') : 'bg-red-lt';
+    var text = g.verify_status === 'PASS' ? (retried ? '검증 통과 (재분석 ' + (g.attempts - 1) + '회)' : '검증 통과')
+      : '근거 부족' + (retried ? ' (재분석 ' + (g.attempts - 1) + '회 후)' : '');
+    return '<span class="badge ' + cls + '">' + esc(text) + '</span>';
+  }
+  function verifyNotes(g) {
+    var v = {};
+    try { v = JSON.parse(g.verify_json || '{}'); } catch (e) { v = {}; }
+    var items = (v.fails || []).map(function (f) { return '<li class="text-danger">' + esc(f) + '</li>'; })
+      .concat((v.warns || []).map(function (w) { return '<li class="text-secondary">' + esc(w) + '</li>'; }));
+    return items.length ? '<ul class="qg-verify">' + items.join('') + '</ul>' : '';
   }
 
   function editedFields() {
