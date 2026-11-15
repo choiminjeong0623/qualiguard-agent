@@ -211,6 +211,7 @@ Kafka 메시지 key 는 부적합 번호.
 | `POST /api/agent/recheck/{analysisId}?asOfShot=` | 관찰 판단 재확인 |
 | `GET /api/agent/config` | 재확인 설정 |
 | `GET /api/agent/analyses` | 분석 기록 |
+| `POST /mcp` (MCP, streamable HTTP) | 같은 조회 도구 6개를 다른 AI 클라이언트에 제공. 기준 경보 ID 를 주면 그 시각까지만 ([ADR-013](decisions/ADR-013-mcp-server.md)) |
 
 자동 분석은 기본으로 꺼져 있습니다 (`qg.agent.auto-enabled`). 자세한 결정은 [ADR-008](decisions/ADR-008-agent-design.md)에 있습니다.
 

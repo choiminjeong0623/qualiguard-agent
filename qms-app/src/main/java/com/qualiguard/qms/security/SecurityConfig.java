@@ -30,7 +30,7 @@ import jakarta.servlet.http.HttpServletResponse;
  *   /qms/**            로그인 필요 (로그인 화면·스타일만 예외)
  *   GET  /api/qms/**   REVIEWER, VIEWER
  *   쓰기 /api/qms/**   REVIEWER (수정·승인·반려·조치 완료)
- *   /api/agent/**, /actuator/**   열어 둠 — 로컬 평가 스크립트·모니터링용. 운영에서는 내부망 제한 또는 별도 인증 필요
+ *   /api/agent/**, /actuator/**, /mcp   열어 둠 — 로컬 평가 스크립트·모니터링·MCP 클라이언트용. 운영에서는 내부망 제한 또는 별도 인증 필요
  *
  * CSRF: 화면은 쿠키(XSRF-TOKEN)에서 토큰을 읽어 X-XSRF-TOKEN 헤더로 보낸다. 에이전트 API 는 스크립트용이라 제외.
  * 로그인하지 않은 API 요청은 로그인 화면으로 보내지 않고 401 을 돌려준다.
@@ -65,7 +65,7 @@ public class SecurityConfig {
             .csrf(c -> c
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(csrfHandler)
-                .ignoringRequestMatchers(path.matcher("/api/agent/**")))
+                .ignoringRequestMatchers(path.matcher("/api/agent/**"), path.matcher("/mcp")))
             .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
             .exceptionHandling(e -> e
                 .defaultAuthenticationEntryPointFor(
