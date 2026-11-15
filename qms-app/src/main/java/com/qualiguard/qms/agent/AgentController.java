@@ -20,6 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
  *   POST /api/agent/analyze/{anomalyId}                       지정 경보를 시작점으로 분석
  *        ?replay=true&tag=...                                 시간 순 재생: 시작 경보 시각까지의 경보·데이터만 사용,
  *                                                             tag 는 평가 실행 구분(이전 판단도 같은 tag 에서만 찾음)
+ *   POST /api/agent/recheck/{analysisId}?asOfShot=...         관찰(OBSERVE) 판단 뒤 새 경보 없이 재확인
+ *                                                             (asOfShot 생략 시 관찰 기준 shot + recheck-shots)
+ *   GET  /api/agent/config                                    재확인 설정 (평가 스크립트용)
  *   GET  /api/agent/analyses?top=20                           분석 기록
  */
 @RestController
@@ -28,10 +31,12 @@ public class AgentController {
 
     private final IncidentAnalyzer analyzer;
     private final JdbcTemplate jdbc;
+    private final AgentProperties props;
 
-    public AgentController(IncidentAnalyzer analyzer, JdbcTemplate jdbc) {
+    public AgentController(IncidentAnalyzer analyzer, JdbcTemplate jdbc, AgentProperties props) {
         this.analyzer = analyzer;
         this.jdbc = jdbc;
+        this.props = props;
     }
 
     @GetMapping("/anomalies")
@@ -65,10 +70,27 @@ public class AgentController {
         }
     }
 
+    @PostMapping("/recheck/{analysisId}")
+    public ResponseEntity<?> recheck(@PathVariable int analysisId, @RequestParam(required = false) Long asOfShot) {
+        try {
+            return ResponseEntity.ok(analyzer.recheck(analysisId, asOfShot));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/config")
+    public Map<String, Object> config() {
+        return Map.of("recheckShots", props.recheckShots(), "recheckMax", props.recheckMax());
+    }
+
     @GetMapping("/analyses")
     public List<Map<String, Object>> analyses(@RequestParam(defaultValue = "20") int top) {
         return jdbc.queryForList("""
-                SELECT TOP (?) g.analysis_id, g.equipment_id, g.decision, g.cause_code, g.confidence,
+                SELECT TOP (?) g.analysis_id, g.equipment_id, g.trigger_type, g.as_of_shot, g.parent_analysis_id,
+                       g.decision, g.cause_code, g.confidence,
                        g.latency_ms, n.ncr_no, g.tool_trace, g.error_message,
                        CONVERT(VARCHAR(33), g.created_at, 127) AS created_at
                 FROM dbo.agent_analysis AS g

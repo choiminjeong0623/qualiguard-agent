@@ -45,6 +45,10 @@ final class AgentPrompts {
             [원인 코드] HEATER_DEGRADATION(히터 열화), COOLING_ISSUE(금형 냉각 문제), CHECK_RING_WEAR(체크 링 마모),
             SENSOR_FAULT(센서·측정 계통 이상), MATERIAL(원료 문제), NOISE(단발성 변동), UNKNOWN(판단 불가)
 
+            [재확인] 입력에 recheck 가 있으면, 관찰 판단 뒤 새 경보 없이 일정 shot 이 지나 다시 보는 것입니다.
+            앞선 판단의 watchItems 를 지금 시점 데이터로 하나씩 확인하고 판단을 갱신하세요.
+            새 경보가 없다는 것은 관리 한계를 넘는 새 변화가 없었다는 뜻일 뿐이므로, 추이와 불량을 직접 확인하세요.
+
             [작성 규칙]
             - 모든 문장은 한국어로 씁니다.
             - evidence 에는 도구에서 확인한 실제 수치를 넣습니다. 예: "실린더 온도 최근 20 shot 평균 224.1℃ (기준 230℃, 규격 하한 220℃)"
