@@ -10,6 +10,7 @@
 <body>
 <header class="bar">
   <h1>QMS 부적합 검토</h1>
+  <span id="kb" class="kb" title="승인·조치 완료된 부적합은 다음 분석에서 유사 사례로 검색됩니다"></span>
   <label class="who">검토자 <input id="actor" type="text" maxlength="50" placeholder="이름 (예: 품질팀 최민정)"></label>
 </header>
 
@@ -34,6 +35,7 @@
       <span id="d-status" class="badge"></span>
     </div>
     <p class="meta" id="d-meta"></p>
+    <p class="kb-note" id="d-kb" hidden>지식저장소에 반영됨 — 승인 시각 이후의 분석에서 유사 사례로 검색됩니다.</p>
 
     <form id="edit-form" autocomplete="off">
       <div class="row2">
@@ -59,6 +61,10 @@
         <span class="sep"></span>
         <input id="reject-reason" maxlength="1000" placeholder="반려 사유">
         <button type="button" id="btn-reject" class="danger">반려</button>
+      </div>
+      <div class="actions" id="close-box" hidden>
+        <input id="action-taken" maxlength="1000" placeholder="실제로 한 조치 (예: 2번 존 히터 밴드 교체 후 불량률 정상화)">
+        <button type="button" id="btn-close">조치 완료</button>
       </div>
       <p id="msg" class="msg" role="status"></p>
     </form>

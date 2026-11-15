@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   PUT  /api/qms/ncrs/{ncrNo}                            초안 수정  {"actor": "...", "fields": {...}}
  *   POST /api/qms/ncrs/{ncrNo}/approve                    승인      {"actor": "...", "comment": "..."}
  *   POST /api/qms/ncrs/{ncrNo}/reject                     반려      {"actor": "...", "reason": "..."}
+ *   POST /api/qms/ncrs/{ncrNo}/close                      조치 완료 {"actor": "...", "actionTaken": "..."}
+ *   GET  /api/qms/ncrs/knowledge                          지식저장소 현황 (유사 사례 검색 대상)
  *
  * 로그인은 없다(로컬 시연용). 검토자 이름은 요청마다 받아 이력에 남긴다.
  */
@@ -39,6 +41,11 @@ public class NcrController {
     public List<Map<String, Object>> list(@RequestParam(required = false) String status,
             @RequestParam(required = false) String equipmentId, @RequestParam(defaultValue = "100") int top) {
         return service.list(status, equipmentId, top);
+    }
+
+    @GetMapping("/knowledge")
+    public List<Map<String, Object>> knowledge() {
+        return service.knowledgeStats();
     }
 
     @GetMapping("/{ncrNo}")
@@ -62,6 +69,11 @@ public class NcrController {
     @PostMapping("/{ncrNo}/reject")
     public Map<String, Object> reject(@PathVariable String ncrNo, @RequestBody Map<String, String> body) {
         return service.reject(ncrNo, body.get("actor"), body.get("reason"));
+    }
+
+    @PostMapping("/{ncrNo}/close")
+    public Map<String, Object> close(@PathVariable String ncrNo, @RequestBody Map<String, String> body) {
+        return service.close(ncrNo, body.get("actor"), body.get("actionTaken"));
     }
 
     @ExceptionHandler(NcrReviewService.ReviewException.class)
