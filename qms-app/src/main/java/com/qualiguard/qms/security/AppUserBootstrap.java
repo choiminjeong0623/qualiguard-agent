@@ -45,6 +45,26 @@ public class AppUserBootstrap implements ApplicationRunner {
         }
     }
 
+    /**
+     * .env 를 properties 로 읽으면(spring.config.import ...[.properties]) ISO-8859-1 로 읽혀 한글이 깨진다.
+     * 글자가 모두 0~255 범위이고 그 바이트가 올바른 UTF-8 이면 UTF-8 로 다시 읽는다.
+     * 실제 환경 변수처럼 처음부터 올바른 한글은 0~255 범위를 넘으므로 그대로 둔다.
+     */
+    static String utf8FromLatin1(String s) {
+        if (s == null || s.chars().allMatch(c -> c < 0x80) || s.chars().anyMatch(c -> c > 0xFF)) {
+            return s;
+        }
+        try {
+            return java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(s.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)))
+                    .toString();
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return s;   // UTF-8 로 읽히지 않으면 원래 값 (예: 진짜 라틴 문자 이름)
+        }
+    }
+
     /** 계정이 없고 비밀번호가 주어졌으면 만든다. 만들었으면 true. */
     boolean create(String role, String prefix, String defaultUser, String defaultName) {
         String password = env.getProperty(prefix + "_PASSWORD", "");
@@ -52,7 +72,16 @@ public class AppUserBootstrap implements ApplicationRunner {
             return false;
         }
         String username = env.getProperty(prefix + "_USERNAME", defaultUser).strip();
-        String name = env.getProperty(prefix + "_NAME", defaultName).strip();
+        String raw = env.getProperty(prefix + "_NAME", defaultName).strip();
+        String name = utf8FromLatin1(raw);
+        if (!name.equals(raw)) {
+            // 예전에 깨진 채 저장된 이름을 바로잡는다 (비밀번호는 건드리지 않음)
+            int fixed = jdbc.update("UPDATE dbo.app_user SET display_name = ? WHERE username = ? AND display_name = ?",
+                    name, username, raw);
+            if (fixed > 0) {
+                log.info("[로그인] 계정 표시 이름의 한글 깨짐을 바로잡았습니다: {}", username);
+            }
+        }
         int rows = jdbc.update("""
                 INSERT INTO dbo.app_user (username, display_name, password_hash, role)
                 SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM dbo.app_user WHERE username = ?)
