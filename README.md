@@ -184,7 +184,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 | 수백 개 센서 데이터(SECOM)용 다변량 관리도 | Hotelling T²·PCA 검토 |
 | 작성·승인 분리, 에이전트 API·MCP 내부망 제한, 로그인 보강 | 운영 전 필요 |
 
-자세한 이유와 다음 할 일은 [향후 계획](docs/future-work.md)에 있습니다.
+자세한 이유와 다음 할 일은 [향후 계획](docs/future-work.md)에, 로컬 소형 LLM·MQTT 장비 인증·Redis 판단은 [별도 문서](docs/03-future-local-llm-and-device-security.md)에 있습니다.
 
 ---
 
@@ -197,5 +197,6 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 - [평가 결과](docs/evaluation.md) — 측정 방법, 결과, 한계
 - [품질 담당자용 요약](docs/for-quality-team.md) — 기술 용어 없이 쓴 한 장 소개
 - [향후 계획](docs/future-work.md) — 구현했지만 머지하지 않은 브랜치, 남은 측정, 탐지·운영 보강 후보
+- [향후 계획: 로컬 LLM·장비 보안](docs/03-future-local-llm-and-device-security.md) — 로컬 소형 LLM, MQTT 장비 인증·ACL, Redis 판단
 
 > 이 프로젝트의 데이터는 시뮬레이터가 만든 합성 데이터이며, 성과 수치는 모두 시뮬레이션 환경에서 측정한 값입니다.
