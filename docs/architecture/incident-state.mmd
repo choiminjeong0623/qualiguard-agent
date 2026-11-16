@@ -1,0 +1,12 @@
+stateDiagram-v2
+    [*] --> TRIAGED: 분류 에이전트 (규칙)
+    TRIAGED --> ANALYZING: 원인 분석 요청
+    ANALYZING --> VERIFYING: 분석 완료
+    ANALYZING --> FAILED: 분석 실패
+    VERIFYING --> ANALYZING: WEAK + 재분석 남음 (최대 1회)
+    VERIFYING --> WRITING: 결론 = 부적합 초안
+    VERIFYING --> CLOSED: 결론 = 관찰 · 센서 점검
+    WRITING --> AWAITING_APPROVAL: 초안 저장 (로컬 LLM 또는 근거 표)
+    AWAITING_APPROVAL --> [*]: QMS 화면에서 사람이 승인 · 반려
+    CLOSED --> [*]
+    FAILED --> [*]

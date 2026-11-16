@@ -1,0 +1,215 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1060" viewBox="0 0 1700 1060" font-family="Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'WenQuanYi Zen Hei', sans-serif">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="context-stroke"/></marker>
+<marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="context-stroke"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="44" font-size="26" font-weight="800" fill="#0f172a">QualiGuard Agent · 시스템 설계도</text>
+<text x="24" y="70" font-size="13.5" fill="#475569">사출성형 공정 이상 탐지 → 역할 분리형 멀티 에이전트 원인 분석 → 사람 승인 → MES/ERP 연계  ·  Java 21 · Spring Boot 4 · Spring AI 2 (Gemini) · Kafka · MQTT · SQL Server</text>
+<rect x="20" y="92" width="1430" height="215" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="40" y="120" font-size="15" font-weight="800" fill="#0f172a">① 현장 수집 · 실시간 이상 탐지</text>
+<text x="40" y="139" font-size="11.5" fill="#64748b">현장은 MQTT, 사내 연계는 Kafka</text>
+<rect x="20" y="322" width="1430" height="345" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="40" y="350" font-size="15" font-weight="800" fill="#0f172a">② 멀티 에이전트 원인 분석</text>
+<text x="40" y="369" font-size="11.5" fill="#64748b"></text>
+<text x="265" y="350" font-size="11.5" fill="#64748b">에이전트 사이는 Kafka agent.* 7토픽 (키 = 사건 ID, 에이전트마다 소비자 그룹)</text>
+<rect x="20" y="682" width="1430" height="240" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="40" y="710" font-size="15" font-weight="800" fill="#0f172a">③ 사람 승인 · MES/ERP 연계</text>
+<text x="40" y="729" font-size="11.5" fill="#64748b">최종 판단은 사람 · 승인과 이벤트는 아웃박스로 한 트랜잭션</text>
+<rect x="40" y="170" width="175" height="78" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.6"/>
+<text x="127.5" y="197.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#7c2d12">센서 시뮬레이터</text>
+<text x="127.5" y="214.0" text-anchor="middle" font-size="11.8" fill="#7c2d12" opacity=".85">Python · 사출성형기 2대</text>
+<text x="127.5" y="231.0" text-anchor="middle" font-size="11.8" fill="#7c2d12" opacity=".85">센서 7종 + 비전, 고장 4종</text>
+<rect x="250" y="170" width="165" height="78" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="1.6"/>
+<text x="332.5" y="197.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#7c2d12">Mosquitto</text>
+<text x="332.5" y="214.0" text-anchor="middle" font-size="11.8" fill="#7c2d12" opacity=".85">MQTT 브로커</text>
+<text x="332.5" y="231.0" text-anchor="middle" font-size="11.8" fill="#7c2d12" opacity=".85">장비별 계정 · 토픽 ACL</text>
+<rect x="450" y="170" width="185" height="78" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="542.5" y="197.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">MQTT→Kafka 브리지</text>
+<text x="542.5" y="214.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">형식 검증 · 중복 제거</text>
+<text x="542.5" y="231.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">지속 세션 · 수동 ack</text>
+<rect x="668" y="189" width="120" height="40" rx="20.0" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="728.0" y="213.5" text-anchor="middle" font-size="12.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#164e63">sensor.raw</text>
+<rect x="822" y="170" width="205" height="78" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="924.5" y="197.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">SPC 이상 탐지</text>
+<text x="924.5" y="214.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">Kafka Streams · exactly-once</text>
+<text x="924.5" y="231.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">관리도 4종 · 설비별 상태 저장소</text>
+<rect x="1060" y="164" width="160" height="40" rx="20.0" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="1140.0" y="188.5" text-anchor="middle" font-size="12.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#164e63">sensor.clean</text>
+<rect x="1060" y="214" width="160" height="40" rx="20.0" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="1140.0" y="238.5" text-anchor="middle" font-size="12.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#164e63">quality.anomaly</text>
+<rect x="1252" y="170" width="170" height="78" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="1337.0" y="197.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">DB 적재</text>
+<text x="1337.0" y="214.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">QualityStoreWriter</text>
+<text x="1337.0" y="231.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">read_committed · 중복 제외</text>
+<rect x="472" y="260" width="140" height="30" rx="15.0" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="542.0" y="279.5" text-anchor="middle" font-size="12.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#164e63">quality.dlq</text>
+<path d="M215 209 H248" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="210.56521739130434" y="189.5" width="42.869565217391305" height="17.5" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="232" y="200" text-anchor="middle" font-size="10.5" fill="#334155" font-weight="400">QoS 1</text>
+<path d="M415 209 H448" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M635 209 H666" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M542 248 V258" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="620" y="280" text-anchor="start" font-size="10.5" fill="#dc2626" font-weight="400">형식 오류</text>
+<path d="M788 209 H820" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1027 200 C1045 200 1042 184 1058 184" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1027 218 C1045 218 1042 234 1058 234" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1220 184 C1236 184 1234 200 1250 200" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1220 234 C1236 234 1234 218 1250 218" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1422 209 H1478" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1478 378 H125 V458" fill="none" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<rect x="205.62608695652176" y="371" width="248.7478260869565" height="18" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="330" y="382" text-anchor="middle" font-size="11" fill="#15803d" font-weight="400">미처리 경보 조회 (5초 폴링 · 분석 API)</text>
+<rect x="40" y="460" width="170" height="84" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="125.0" y="490.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">스케줄러 · 분석 API</text>
+<text x="125.0" y="507.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">미처리 경보 → 사건</text>
+<text x="125.0" y="524.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">진행 중이면 대기</text>
+<rect x="245" y="460" width="170" height="84" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+<text x="330.0" y="490.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#172554">분류 에이전트</text>
+<text x="330.0" y="507.0" text-anchor="middle" font-size="11.8" fill="#172554" opacity=".85">규칙 (LLM 호출 없음)</text>
+<text x="330.0" y="524.0" text-anchor="middle" font-size="11.8" fill="#172554" opacity=".85">심각도 · 유형 판정</text>
+<rect x="351" y="451" width="58" height="18" rx="9" fill="#2563eb"/>
+<text x="380.0" y="464" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Triage</text>
+<polygon points="465,502 488,456 632,456 655,502 632,548 488,548" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+<text x="560" y="494" text-anchor="middle" font-size="15" font-weight="800" fill="#172554">오케스트레이터</text>
+<text x="560" y="512" text-anchor="middle" font-size="11.8" fill="#172554">사건 상태 기계</text>
+<text x="560" y="528" text-anchor="middle" font-size="11.8" fill="#172554">판단 없이 다음 단계로 넘김</text>
+<path d="M210 502 H243" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M415 502 H463" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="439" y="494" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#0e7490" font-weight="400">triaged</text>
+<rect x="820" y="388" width="215" height="68" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.6"/>
+<text x="927.5" y="410.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#3b0764">원인 분석 에이전트</text>
+<text x="927.5" y="427.0" text-anchor="middle" font-size="11.8" fill="#3b0764" opacity=".85">Spring AI + Gemini</text>
+<text x="927.5" y="444.0" text-anchor="middle" font-size="11.8" fill="#3b0764" opacity=".85">도구 5개 = 저장 프로시저</text>
+<rect x="992" y="379" width="37" height="18" rx="9" fill="#7c3aed"/>
+<text x="1010.5" y="392" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">LLM</text>
+<rect x="820" y="468" width="215" height="68" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="1.6"/>
+<text x="927.5" y="490.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#172554">검증 에이전트</text>
+<text x="927.5" y="507.0" text-anchor="middle" font-size="11.8" fill="#172554" opacity=".85">규칙 5종 · 근거/모순 점검</text>
+<text x="927.5" y="524.0" text-anchor="middle" font-size="11.8" fill="#172554" opacity=".85">약하면 되돌림 (최대 1회)</text>
+<rect x="985" y="459" width="44" height="18" rx="9" fill="#2563eb"/>
+<text x="1007.0" y="472" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Rule</text>
+<rect x="820" y="548" width="215" height="68" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.6"/>
+<text x="927.5" y="570.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#3b0764">보고서 작성 에이전트</text>
+<text x="927.5" y="587.0" text-anchor="middle" font-size="11.8" fill="#3b0764" opacity=".85">로컬 Ollama qwen2.5 1.5B</text>
+<text x="927.5" y="604.0" text-anchor="middle" font-size="11.8" fill="#3b0764" opacity=".85">실패 시 근거 표 · 클라우드 0회</text>
+<rect x="950" y="539" width="79" height="18" rx="9" fill="#7c3aed"/>
+<text x="989.5" y="552" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">Local LLM</text>
+<path d="M632 480 C700 470 740 424 818 422" fill="none" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#as)"/>
+<path d="M655 502 H818" fill="none" stroke="#2563eb" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#as)"/>
+<path d="M632 524 C700 534 740 580 818 582" fill="none" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#as)"/>
+<rect x="731.695652173913" y="442" width="72.6086956521739" height="17" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="768" y="452" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#6d28d9" font-weight="400">analysis.*</text>
+<rect x="688.1739130434783" y="485" width="97.65217391304348" height="17" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="737" y="495" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#1d4ed8" font-weight="400">verification.*</text>
+<rect x="737.9565217391304" y="550" width="60.08695652173913" height="17" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="768" y="560" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#6d28d9" font-weight="400">report.*</text>
+<path d="M560 456 C560 412 580 402 620 402 H780 C800 402 810 404 818 408" fill="none" stroke="#dc2626" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#a)"/>
+<text x="612" y="422" text-anchor="start" font-size="10.5" fill="#b91c1c" font-weight="400">WEAK → 지적 붙여 재분석</text>
+<rect x="1095" y="396" width="165" height="46" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1177.5" y="415.5" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0f172a">Google Gemini</text>
+<text x="1177.5" y="432.5" text-anchor="middle" font-size="11.8" fill="#0f172a" opacity=".85">클라우드 LLM</text>
+<rect x="1095" y="560" width="165" height="46" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1177.5" y="579.5" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0f172a">Ollama</text>
+<text x="1177.5" y="596.5" text-anchor="middle" font-size="11.8" fill="#0f172a" opacity=".85">로컬 소형 LLM (기밀 문장)</text>
+<path d="M1035 419 H1093" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#as)"/>
+<path d="M1035 582 H1093" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#as)"/>
+<path d="M1035 449 H1478" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="1167.7965217391304" y="454.2" width="244.40695652173915" height="17.8" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="1290" y="465" text-anchor="middle" font-size="10.8" fill="#15803d" font-weight="400">조회 시점(as-of) 고정 · 미래 정보 차단</text>
+<path d="M1035 502 H1478" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="1155.8278260869565" y="495.2" width="208.344347826087" height="17.8" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="1260" y="506" text-anchor="middle" font-size="10.8" fill="#15803d" font-weight="400">도구 호출 기록 · 실제 불량률 대조</text>
+<path d="M560 548 V642 H1478" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#a)"/>
+<rect x="731.0" y="635" width="538.0" height="18" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="1000" y="646" text-anchor="middle" font-size="11" fill="#15803d" font-weight="700">agent_incident · agent_analysis · 부적합 초안(DRAFT) 저장 → AWAITING_APPROVAL</text>
+<text x="40" y="590" text-anchor="start" font-size="10.8" fill="#475569" font-weight="400">결과: 초안 → 승인 대기 · 관찰/센서 점검 → CLOSED · 실패 → FAILED</text>
+<text x="40" y="608" text-anchor="start" font-size="10.8" fill="#475569" font-weight="400">transport=direct: Kafka 없이 상태 기계 전체를 단위 시험</text>
+<rect x="40" y="778" width="120" height="60" rx="30" fill="#fdf2f8" stroke="#db2777" stroke-width="1.6"/>
+<text x="100.0" y="804.5" text-anchor="middle" font-size="14.5" font-weight="700" fill="#831843">품질 담당자</text>
+<text x="100.0" y="821.5" text-anchor="middle" font-size="11.8" fill="#831843" opacity=".85">폼 로그인 · BCrypt</text>
+<rect x="190" y="770" width="190" height="76" rx="10" fill="#fdf2f8" stroke="#db2777" stroke-width="1.6"/>
+<text x="285.0" y="796.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#831843">QMS 검토 화면</text>
+<text x="285.0" y="813.0" text-anchor="middle" font-size="11.8" fill="#831843" opacity=".85">jQuery + Tabler CSS</text>
+<text x="285.0" y="830.0" text-anchor="middle" font-size="11.8" fill="#831843" opacity=".85">초안 수정 · 승인 · 반려</text>
+<rect x="410" y="770" width="200" height="76" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="510.0" y="796.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">NcrReviewService</text>
+<text x="510.0" y="813.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">검토 이력 · CSRF · 역할 권한</text>
+<text x="510.0" y="830.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">승인 + 아웃박스 1 트랜잭션</text>
+<rect x="650" y="770" width="150" height="76" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="725.0" y="796.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">OutboxPublisher</text>
+<text x="725.0" y="813.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">2초 주기 발행</text>
+<text x="725.0" y="830.0" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">실패 시스템만 재전송</text>
+<rect x="830" y="788" width="180" height="40" rx="20.0" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="920.0" y="812.5" text-anchor="middle" font-size="12.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#164e63">quality.ncr.approved</text>
+<rect x="1040" y="770" width="165" height="76" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1122.5" y="796.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0f172a">가상 MES / ERP</text>
+<text x="1122.5" y="813.0" text-anchor="middle" font-size="11.8" fill="#0f172a" opacity=".85">점검 지시 · 비용 전표</text>
+<text x="1122.5" y="830.0" text-anchor="middle" font-size="11.8" fill="#0f172a" opacity=".85">event_id 중복 제거</text>
+<rect x="1235" y="788" width="180" height="40" rx="20.0" fill="#ecfeff" stroke="#0891b2" stroke-width="1.6"/>
+<text x="1325.0" y="812.5" text-anchor="middle" font-size="12.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#164e63">integration.ncr.ack</text>
+<path d="M160 808 H188" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M380 808 H408" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M510 770 V735 H1478" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#a)"/>
+<rect x="776.9130434782609" y="728" width="446.17391304347825" height="18" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="1000" y="739" text-anchor="middle" font-size="11" fill="#15803d" font-weight="700">ncr → APPROVED · ncr_history · integration_outbox (한 트랜잭션)</text>
+<path d="M1478 885 H725 V848" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="936.4608695652174" y="878" width="127.07826086956523" height="18" rx="4" fill="#ffffff" opacity=".92"/>
+<text x="1000" y="889" text-anchor="middle" font-size="11" fill="#15803d" font-weight="400">미발행 아웃박스 조회</text>
+<path d="M800 808 H828" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1010 808 H1038" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1205 808 H1233" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1415 808 H1478" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="1480" y="92" width="200" height="900" rx="14" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+<ellipse cx="1580" cy="96" rx="100" ry="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+<text x="1580" y="132" text-anchor="middle" font-size="16" font-weight="800" fill="#14532d">SQL Server 2025</text>
+<text x="1580" y="150" text-anchor="middle" font-size="11.5" fill="#14532d">QUALIGUARD DB</text>
+<text x="1496" y="175" font-size="12" font-weight="800" fill="#14532d">공정 · 이상</text>
+<text x="1504" y="193" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">process_shot</text>
+<text x="1504" y="210" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">anomaly_event</text>
+<text x="1504" y="227" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">equipment</text>
+<text x="1496" y="290" font-size="12" font-weight="800" fill="#14532d">기준 정보</text>
+<text x="1504" y="308" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">sensor_spec</text>
+<text x="1504" y="325" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">maintenance_history</text>
+<text x="1496" y="395" font-size="12" font-weight="800" fill="#14532d">에이전트</text>
+<text x="1504" y="413" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">agent_incident</text>
+<text x="1504" y="430" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">agent_incident_event</text>
+<text x="1504" y="447" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">agent_analysis</text>
+<text x="1496" y="520" font-size="12" font-weight="800" fill="#14532d">부적합 · 지식저장소</text>
+<text x="1504" y="538" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">ncr</text>
+<text x="1504" y="555" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">ncr_anomaly</text>
+<text x="1504" y="572" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">ncr_history</text>
+<text x="1496" y="690" font-size="12" font-weight="800" fill="#14532d">MES/ERP 연계</text>
+<text x="1504" y="708" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">integration_outbox</text>
+<text x="1504" y="725" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">integration_status</text>
+<text x="1504" y="742" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">integration_receipt</text>
+<text x="1504" y="759" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">integration_ack_log</text>
+<text x="1496" y="845" font-size="12" font-weight="800" fill="#14532d">보안</text>
+<text x="1504" y="863" font-size="11.5" font-family="'JetBrains Mono', Menlo, Consolas, 'WenQuanYi Zen Hei', monospace" fill="#14532d">app_user</text>
+<text x="1496" y="920" font-size="12" font-weight="800" fill="#14532d">저장 프로시저 13개</text>
+<text x="1504" y="938" font-size="11" fill="#14532d">usp_GetSensorTrend 외</text>
+<text x="1504" y="955" font-size="11" fill="#14532d">(에이전트 도구 = SP)</text>
+<rect x="1050" y="945" width="180" height="46" rx="23" fill="#f8fafc" stroke="#64748b" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1140.0" y="973.0" text-anchor="middle" font-size="14.5" font-weight="700" fill="#0f172a">외부 AI 클라이언트</text>
+<rect x="1265" y="945" width="180" height="46" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.6"/>
+<text x="1355.0" y="964.5" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1e1b4b">MCP 서버  /mcp</text>
+<text x="1355.0" y="981.5" text-anchor="middle" font-size="11.8" fill="#1e1b4b" opacity=".85">같은 조회 도구 6개</text>
+<path d="M1230 968 H1263" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1445 968 H1478" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="30" y="947" width="18" height="14" rx="3" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+<text x="56" y="958" font-size="12" fill="#334155">현장 (Python · MQTT)</text>
+<rect x="270" y="947" width="18" height="14" rx="3" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.5"/>
+<text x="296" y="958" font-size="12" fill="#334155">Spring Boot 컴포넌트</text>
+<rect x="510" y="947" width="18" height="14" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+<text x="536" y="958" font-size="12" fill="#334155">규칙 기반 에이전트</text>
+<rect x="750" y="947" width="18" height="14" rx="3" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+<text x="776" y="958" font-size="12" fill="#334155">LLM 에이전트</text>
+<rect x="30" y="973" width="18" height="14" rx="3" fill="#ecfeff" stroke="#0891b2" stroke-width="1.5"/>
+<text x="56" y="984" font-size="12" fill="#334155">Kafka 토픽</text>
+<rect x="270" y="973" width="18" height="14" rx="3" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+<text x="296" y="984" font-size="12" fill="#334155">저장소</text>
+<rect x="510" y="973" width="18" height="14" rx="3" fill="#fdf2f8" stroke="#db2777" stroke-width="1.5"/>
+<text x="536" y="984" font-size="12" fill="#334155">사람 · 화면</text>
+<rect x="750" y="973" width="18" height="14" rx="3" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/>
+<text x="776" y="984" font-size="12" fill="#334155">외부 / 가상 시스템</text>
+</svg>
