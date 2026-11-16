@@ -1,0 +1,21 @@
+flowchart LR
+    classDef ai fill:#f5f3ff,stroke:#7c3aed,color:#3b0764
+    classDef rule fill:#eef2ff,stroke:#4f46e5,color:#1e1b4b
+    classDef topic fill:#ecfeff,stroke:#0891b2,color:#164e63
+    classDef human fill:#fdf2f8,stroke:#db2777,color:#831843
+    classDef end_ fill:#f1f5f9,stroke:#64748b,color:#0f172a
+
+    A(["미처리 경보<br/>quality.anomaly → DB"]):::end_ --> TRI["분류 에이전트<br/>(규칙)"]:::rule
+    TRI --> T1[("agent.incident.triaged")]:::topic --> ORC{{"오케스트레이터<br/>(상태 기계)"}}:::rule
+
+    ORC --> T2[("agent.analysis.requested")]:::topic --> ANA["원인 분석 에이전트<br/>(LLM · Gemini)"]:::ai
+    ANA --> T3[("agent.analysis.completed")]:::topic --> ORC
+    ORC --> T4[("agent.verification.requested")]:::topic --> VER["검증 에이전트<br/>(규칙)"]:::rule
+    VER --> T5[("agent.verification.completed")]:::topic --> ORC
+    ORC -- "PASS · 부적합 초안" --> T6[("agent.report.requested")]:::topic --> WRI["보고서 작성 에이전트<br/>(로컬 LLM / 근거 표)"]:::ai
+    WRI --> T7[("agent.report.completed")]:::topic --> ORC
+
+    ORC -. "WEAK · 재분석 남음<br/>지적을 붙여 되돌림" .-> T2
+    ORC -- "초안 작성 완료" --> H(["AWAITING_APPROVAL<br/>사람 승인 대기"]):::human
+    ORC -- "관찰 · 센서 점검" --> C(["CLOSED"]):::end_
+    ORC -- "분석 실패" --> F(["FAILED<br/>경보는 다시 분석 대상"]):::end_

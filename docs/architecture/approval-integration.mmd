@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    actor U as 품질 담당자
+    participant UI as QMS 검토 화면<br/>(jQuery + Tabler)
+    participant API as NcrController /<br/>NcrReviewService
+    participant DB as SQL Server
+    participant OB as OutboxPublisher<br/>(2초 주기)
+    participant K as Kafka
+    participant M as 가상 MES / ERP
+    participant AL as IntegrationAckListener
+
+    U->>UI: 로그인 (폼 로그인, BCrypt)
+    UI->>API: GET /api/qms/ncrs?status=DRAFT
+    API->>DB: AI 초안 · 분석 기록 · 검증 결과 조회
+    U->>UI: 초안 수정 후 승인 (확정 원인 · 원인 코드)
+    UI->>API: POST /api/qms/ncrs/{ncrNo}/approve (CSRF)
+    rect rgb(240, 253, 244)
+    note over API,DB: 한 트랜잭션
+    API->>DB: ncr → APPROVED, 검토 이력
+    API->>DB: integration_outbox 이벤트 INSERT
+    end
+    OB->>DB: 미발행 아웃박스 조회
+    OB->>K: quality.ncr.approved
+    K->>M: 소비 (별도 소비자 그룹, event_id 중복 제거)
+    M->>K: integration.ncr.ack (수신 확인 → 처리 완료 번호 / 실패 사유)
+    K->>AL: 소비
+    AL->>DB: 시스템별 연계 상태 갱신
+    UI->>API: 상세 조회 → MES/ERP 진행 단계 표시
+    note over U,UI: 실패한 시스템에만 다시 보내기 · 조치 완료 시 CLOSED<br/>승인 사례는 이후 분석의 유사 사례(지식저장소)로 재사용

@@ -71,6 +71,10 @@
 
 ## 아키텍처
 
+![QualiGuard Agent 시스템 설계도](docs/architecture/qualiguard-architecture.png)
+
+> 에이전트 파이프라인·사건 상태·승인 연계 순서도는 [시스템 설계도 문서](docs/04-architecture-diagram.md)에 있습니다. 아래는 텍스트로 본 같은 흐름입니다.
+
 ```mermaid
 flowchart LR
     SIM["센서 시뮬레이터<br/>(Python, 사출성형기 2대)"] -- "MQTT QoS 1" --> MQ["Mosquitto"]
@@ -245,6 +249,7 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 
 - [문제 정의](docs/01-problem-definition.md) — 누구의 어떤 문제를 풀려는가
 - [아키텍처](docs/02-architecture.md) — 구성 요소, 메시지 형식, 전달 보장 설계
+- [시스템 설계도](docs/04-architecture-diagram.md) — 전체 시스템, 에이전트 파이프라인, 사건 상태, 승인·연계 순서 그림
 - [의사결정 기록](docs/decisions/README.md) — ADR-001 ~ 015
 - [장애 분석](docs/troubleshooting/README.md) — 개발 중 겪은 문제와 해결 과정 (평가 방식의 허점을 찾은 과정 포함)
 - [평가 결과](docs/evaluation.md) — 측정 방법, 결과, 한계
