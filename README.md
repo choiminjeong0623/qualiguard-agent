@@ -229,6 +229,8 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 | 실행 간 편차 | 처음 보는 고장 실험에서 같은 입력에도 냉각 막힘 진단 시점이 +35~+71 shot으로 흔들립니다. |
 | 운영 보안 | MQTT 장비 인증·ACL은 있지만 평문(1883)이라 TLS가 필요합니다. 작성·승인 분리, 내부망 제한은 아직 없습니다. |
 
+Kafka 내구성, MQTT 유실 방지 범위, exactly-once 경계, 심각도 규칙, `/mcp` 인증 등 면접관 관점의 반박 9가지와 보완 우선순위는 [한계와 보완할 점](docs/05-limitations-and-improvements.md)에 코드 확인 결과와 함께 정리했습니다.
+
 ---
 
 ## 향후 계획
@@ -256,5 +258,6 @@ python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장�
 - [품질 담당자용 요약](docs/for-quality-team.md) — 기술 용어 없이 쓴 한 장 소개
 - [향후 계획](docs/future-work.md) — 구현했지만 머지하지 않은 브랜치, 남은 측정, 탐지·운영 보강 후보
 - [향후 계획: 로컬 LLM·장비 보안](docs/03-future-local-llm-and-device-security.md) — 로컬 소형 LLM, MQTT 장비 인증·ACL, Redis 판단
+- [한계와 보완할 점](docs/05-limitations-and-improvements.md) — 면접관 관점의 반박 9가지: 현재 상태, 한계, 보완 우선순위
 
 > 이 프로젝트의 데이터는 시뮬레이터가 만든 합성 데이터이며, 성과 수치는 모두 시뮬레이션 환경에서 측정한 값입니다.
