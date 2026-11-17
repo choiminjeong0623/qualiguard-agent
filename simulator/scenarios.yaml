@@ -14,6 +14,23 @@ simulation:
   seed: 42                                # 같은 seed면 같은 데이터 → 데모·평가 재현 가능
   ground_truth_csv: ../data/ground_truth.csv
 
+# 결측·미할당 (실제 설비 데이터 흉내, ADR-017). 모두 0 이면 예전처럼 빠짐없는 메시지를 보낸다.
+# 결측은 측정·전송 문제라 불량 판정과 정답 기록(ground_truth.csv)은 실제 값 기준 그대로다.
+missing:
+  sensor_null_rate: 0.03          # 센서마다 "value": null 로 보낼 확률
+  sensor_drop_rate: 0.02          # 센서마다 키 자체를 빼고 보낼 확률
+  inspection_missing_rate: 0.01   # 비전 검사 결과 없이(inspection: null) 보낼 확률
+  shotno_missing_rate: 0.005      # shotNo 없이 보낼 확률
+  serial_unassigned_rate: 0.05    # 시리얼 미할당(serialNo: null) 확률. 할당돼도 공정 중에는 임시값(TMP-…)
+  serial_duplicate_rate: 0.02     # 직전 임시 시리얼을 다시 쓸 확률 (확정 시리얼은 출하 때, 그때만 고유)
+  sensor_outage_rate: 0.01        # shot 마다 센서 하나가 끊기기 시작할 확률 (끊긴 동안 그 센서는 계속 null)
+  sensor_outage_min: 5            # 끊김 길이(shot)
+  sensor_outage_max: 30
+  message_drop_rate: 0.005        # shot 메시지를 통째로 보내지 않을 확률 (정답 기록에 dropped)
+  resend_rate: 0.02               # 같은 messageId 를 한 번 더 보낼 확률 (수신 측 멱등 처리 시험)
+  delay_rate: 0.01                # 메시지를 늦춰 뒤 shot 보다 늦게 보낼 확률 (순서 어긋남)
+  delay_max_shots: 5              # 늦출 때 최대 몇 shot 뒤
+
 # 고장 시나리오 (FAULT_CATALOG 참고). start_shot부터 duration shot 동안 진행된다.
 faults:
   - name: heater_degradation

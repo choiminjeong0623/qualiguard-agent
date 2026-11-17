@@ -212,6 +212,7 @@ public class VerifierAgent {
                                  ROW_NUMBER() OVER (ORDER BY shot_ts DESC, shot_id DESC) AS rn
                           FROM dbo.process_shot
                           WHERE equipment_id = ? AND shot_ts <= CAST(? AS DATETIMEOFFSET(3))
+                            AND inspection_result IS NOT NULL   -- 검사 결과 없는 shot 은 OK 로 세지 않음 (ADR-017)
                           ORDER BY shot_ts DESC, shot_id DESC) AS s
                     """, recent, recent, recent, recent, recent + baseline, equipmentId, asOf);
             if (rows.isEmpty()) {

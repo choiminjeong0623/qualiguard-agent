@@ -18,6 +18,17 @@ import java.util.UUID;
  *    - S_CHART    : 부분군 표준편차가 1.964σ(B6, n=5)를 연속 2회 넘음 → 산포(흔들림) 증가
  *    - P_CHART    : 50 shot 구간 불량률이 p̄ + 4√(p̄(1-p̄)/50) 를 넘음 → 불량률 증가
  * 3) 같은 규칙·센서의 경보는 100 shot 동안 다시 내지 않는다 (경보 폭주 방지, 에이전트 호출 비용 절감).
+ *
+ * 결측 처리(ADR-017): 값이 없는 센서는 그 shot 에서 invalid 로 빼고 나머지 센서만 판정한다.
+ * 검사 결과가 없는 shot 은 불량률(기준 불량률·p 관리도)에 넣지 않는다. 기준 불량률은 검사 결과가 있는
+ * 처음 100 shot 으로 정한다.
+ *
+ * 전송 이상(ADR-017):
+ * - 중복(같은 messageId)은 최근 200개 안에서 한 번만 반영한다.
+ * - 늦게 온 shot(그 설비에서 이미 판정한 shot 보다 ts 가 앞섬)은 값 정리만 하고 관리도·불량률·기준값에 넣지 않는다.
+ *   부분군·연속 판정은 시간 순서를 전제로 하므로, 순서가 어긋난 값을 넣으면 판정이 흔들린다. 저장은 하류에서 그대로 한다.
+ * - shot 이 통째로 빠져 shotNo 가 건너뛰어도 받은 shot 만으로 판정한다(빈 shot 을 채우지 않음).
+ * - 센서 값이 OUTAGE_SHOTS 번 연속 비면 '센서 끊김'으로 알린다(경보가 아니라 결과의 outageStarted, 회복은 outageEnded).
  */
 public class SpcEngine {
 
@@ -33,6 +44,7 @@ public class SpcEngine {
     public static final int COOLDOWN_SHOTS = 100;
     public static final int RECENT_KEEP = 30;
     public static final int DEDUP_KEEP = 200;
+    public static final int OUTAGE_SHOTS = 5;
 
     private final Map<String, SensorCatalog.Sensor> sensors;
 
@@ -50,34 +62,69 @@ public class SpcEngine {
         this.sensors = sensors;
     }
 
-    /** 처리 결과: 중복 여부, 정제된 값, 측정 범위를 벗어나 제외한 센서, 발생한 이상 목록 */
-    public record Result(boolean duplicate, Map<String, Double> cleanValues, List<String> invalidSensors,
-            List<Anomaly> anomalies) {
+    /**
+     * 처리 결과: 중복 여부, 늦게 와서 판정을 건너뛰었는지, 정제된 값, 값이 없거나 측정 범위를 벗어나 제외한 센서,
+     * 발생한 이상 목록, 이번 shot 에서 끊김이 시작된·회복된 센서.
+     */
+    public record Result(boolean duplicate, boolean late, Map<String, Double> cleanValues, List<String> invalidSensors,
+            List<Anomaly> anomalies, List<String> outageStarted, List<String> outageEnded) {
     }
 
     public Result process(EquipmentState s, Shot shot) {
         // ── 중복 제거 (MQTT QoS 1 재전송, 브리지 재시작 후 중복 등) ──
         if (s.recentMessageIds.contains(shot.messageId())) {
-            return new Result(true, Map.of(), List.of(), List.of());
+            return new Result(true, false, Map.of(), List.of(), List.of(), List.of(), List.of());
         }
         s.recentMessageIds.add(shot.messageId());
         trim(s.recentMessageIds, DEDUP_KEEP);
-        s.count++;
 
         Map<String, Double> clean = new LinkedHashMap<>();
         List<String> invalid = new ArrayList<>();
+
+        // ── 늦게 온 shot: 값 정리만 하고 판정 상태는 건드리지 않는다 ──
+        Long tsMillis = epochMillis(shot.ts());
+        if (tsMillis != null && s.lastTsMillis != null && tsMillis < s.lastTsMillis) {
+            s.lateCount++;
+            for (SensorCatalog.Sensor def : sensors.values()) {
+                Double v = shot.values().get(def.key());
+                if (v == null || v.isNaN() || v < def.min() || v > def.max()) {
+                    invalid.add(def.key());
+                } else {
+                    clean.put(def.key(), v);
+                }
+            }
+            return new Result(false, true, clean, invalid, List.of(), List.of(), List.of());
+        }
+        if (tsMillis != null) {
+            s.lastTsMillis = tsMillis;
+        }
+        s.count++;
+
         List<Anomaly> out = new ArrayList<>();
         List<Pending> pending = new ArrayList<>();
+        List<String> outageStarted = new ArrayList<>();
+        List<String> outageEnded = new ArrayList<>();
 
         // ── 센서별 처리 ──
         for (SensorCatalog.Sensor def : sensors.values()) {
             Double v = shot.values().get(def.key());
-            if (v == null || v.isNaN() || v < def.min() || v > def.max()) {
+            EquipmentState.SensorState ss = s.sensors.computeIfAbsent(def.key(), k -> new EquipmentState.SensorState());
+            if (v == null || v.isNaN()) {
+                invalid.add(def.key());                 // 값 없음(결측): 이 shot 에서는 판정하지 않는다
+                if (++ss.missingRun == OUTAGE_SHOTS) {
+                    outageStarted.add(def.key());
+                }
+                continue;
+            }
+            if (ss.missingRun >= OUTAGE_SHOTS) {
+                outageEnded.add(def.key());
+            }
+            ss.missingRun = 0;
+            if (v < def.min() || v > def.max()) {
                 invalid.add(def.key());                 // 전처리: 물리적으로 불가능한 값은 판정에서 제외
                 continue;
             }
             clean.put(def.key(), v);
-            EquipmentState.SensorState ss = s.sensors.computeIfAbsent(def.key(), k -> new EquipmentState.SensorState());
             ss.recent.add(v);
             trim(ss.recent, RECENT_KEEP);
 
@@ -132,17 +179,21 @@ public class SpcEngine {
             }
         }
 
-        // ── 검사 결과(불량률) 처리 ──
-        s.recentDefects.add(shot.ng() ? nz(shot.defectType(), "UNKNOWN") : "");
-        trim(s.recentDefects, P_WINDOW);
-        if (s.baselineNgRate < 0) {
+        // ── 검사 결과(불량률) 처리: 검사 결과가 없는 shot 은 OK 로 세지 않고 건너뛴다 ──
+        if (!shot.inspected()) {
+            // 불량률 집계 없음
+        } else if (s.baselineNgRate < 0) {
+            s.inspectedCount++;
+            recordDefect(s, shot);
             if (shot.ng()) {
                 s.baselineNg++;
             }
-            if (s.count == BASELINE_SHOTS) {
+            if (s.inspectedCount == BASELINE_SHOTS) {
                 s.baselineNgRate = (double) s.baselineNg / BASELINE_SHOTS;
             }
         } else {
+            s.inspectedCount++;
+            recordDefect(s, shot);
             s.ngWindow.add(shot.ng() ? 1 : 0);
             if (s.ngWindow.size() == P_WINDOW) {
                 double p = s.ngWindow.stream().mapToInt(Integer::intValue).sum() / (double) P_WINDOW;
@@ -156,6 +207,11 @@ public class SpcEngine {
         }
 
         // ── 경보 생성 (반복 억제 적용) ──
+        boolean estimated = shot.shotNo() == null;
+        long shotNo = estimated ? (s.lastShotNo == null ? s.count : s.lastShotNo) : shot.shotNo();
+        if (!estimated) {
+            s.lastShotNo = shot.shotNo();
+        }
         for (Pending p : pending) {
             String key = p.rule + "|" + (p.def == null ? "inspection" : p.def.key());
             Long last = s.lastAlertAt.get(key);
@@ -163,15 +219,36 @@ public class SpcEngine {
                 continue;
             }
             s.lastAlertAt.put(key, s.count);
-            out.add(toAnomaly(s, shot, p));
+            out.add(toAnomaly(s, shot, p, shotNo, estimated));
         }
-        return new Result(false, clean, invalid, out);
+        return new Result(false, false, clean, invalid, out, outageStarted, outageEnded);
+    }
+
+    /** ts(ISO-8601) → epoch ms. 시간대가 없으면 UTC 로 보고, 읽을 수 없으면 null (순서 판단 안 함). */
+    static Long epochMillis(String ts) {
+        if (ts == null || ts.isBlank()) {
+            return null;
+        }
+        try {
+            return java.time.OffsetDateTime.parse(ts).toInstant().toEpochMilli();
+        } catch (java.time.format.DateTimeParseException e) {
+            try {
+                return java.time.LocalDateTime.parse(ts).toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
+            } catch (java.time.format.DateTimeParseException e2) {
+                return null;
+            }
+        }
+    }
+
+    private static void recordDefect(EquipmentState s, Shot shot) {
+        s.recentDefects.add(shot.ng() ? nz(shot.defectType(), "UNKNOWN") : "");
+        trim(s.recentDefects, P_WINDOW);
     }
 
     private record Pending(String rule, SensorCatalog.Sensor def, double observed, double lower, double upper) {
     }
 
-    private Anomaly toAnomaly(EquipmentState s, Shot shot, Pending p) {
+    private Anomaly toAnomaly(EquipmentState s, Shot shot, Pending p, long shotNo, boolean shotNoEstimated) {
         String sensorKey = p.def == null ? "inspection" : p.def.key();
         String sensorName = p.def == null ? "검사 불량률" : p.def.name();
         String unit = p.def == null ? "ratio" : p.def.unit();
@@ -179,13 +256,13 @@ public class SpcEngine {
 
         String id = UUID.nameUUIDFromBytes((shot.messageId() + "|" + p.rule + "|" + sensorKey)
                 .getBytes(StandardCharsets.UTF_8)).toString();
-        return new Anomaly(id, shot.lineId(), shot.equipmentId(), shot.shotNo(), shot.ts(),
+        return new Anomaly(id, shot.lineId(), shot.equipmentId(), shotNo, shot.ts(),
                 p.rule, ruleName(p.rule), sensorKey, sensorName, unit,
                 round(p.observed), ss == null ? round(Math.max(s.baselineNgRate, 0)) : round(ss.mean),
                 ss == null ? 0 : round(ss.sigma), round(p.lower), round(p.upper),
                 ss == null ? List.of() : ss.recent.stream().map(SpcEngine::round).toList(),
                 zScores(s), round(recentNgRate(s)), defectCounts(s),
-                describe(shot.equipmentId(), p, sensorName, unit));
+                describe(shot.equipmentId(), p, sensorName, unit), shotNoEstimated);
     }
 
     /** 모든 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ(평균의 표준오차 기준) 떨어져 있는지. */

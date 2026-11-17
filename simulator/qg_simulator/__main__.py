@@ -2,7 +2,7 @@
 
 예)
   uv run qg-simulator                       # scenarios.yaml 설정으로 Mosquitto에 발행
-  uv run qg-simulator --dry-run --shots 5   # 브로커 없이 화면에 출력만
+  uv run qg-simulator --dry-run --shots 5   # 브로커 없이 화면에 출력만 (정답 파일은 쓰지 않음)
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 from .faults import FAULT_CATALOG, Fault, effects_for
+from .missing import Delivery, MissingConfig, OutageTracker, SerialIssuer, apply_missing, serial_for
 from .process import SENSORS, Machine
 
 KST = ZoneInfo("Asia/Seoul")
@@ -50,16 +51,33 @@ def device_password(env: dict, equipment_id: str) -> str | None:
     return env.get("MQTT_DEVICE_PASSWORD_" + equipment_id.replace("-", "_")) or None
 
 
-def build_payload(m: Machine, values: dict, defect: str | None) -> dict:
+def build_payload(m: Machine, values: dict, defect: str | None, serial_no: str | None = None,
+                  now: datetime | None = None) -> dict:
+    """결측이 없는 완전한 페이로드. 결측은 missing.apply_missing 이 나중에 섞는다."""
+    now = now or datetime.now(KST)
     return {
-        "messageId": str(uuid.uuid4()),          # 중복 수신 시 멱등 처리용
+        "messageId": str(uuid.uuid4()),          # 중복 수신 시 멱등 처리용 (유일한 추적 키)
         "lineId": m.line_id,
         "equipmentId": m.equipment_id,
         "shotNo": m.shot_no,
-        "ts": datetime.now(KST).isoformat(timespec="milliseconds"),
+        "serialNo": serial_no,                   # 공정 중 임시값(TMP-…)·null·중복 가능, 확정은 출하 때 (ADR-017)
+        "ts": now.isoformat(timespec="milliseconds"),
         "sensors": {k: {"value": v, "unit": SENSORS[k][1]} for k, v in values.items()},
         "inspection": {"result": "NG" if defect else "OK", "defectType": defect},
     }
+
+
+def missing_fields(payload: dict) -> list[str]:
+    """정답 기록용: 이 메시지에서 비었거나 빠진 항목 (센서는 sensors.<키>)."""
+    out = [f"sensors.{k}" for k in SENSORS
+           if k not in (payload.get("sensors") or {}) or payload["sensors"][k].get("value") is None]
+    if payload.get("inspection") is None:
+        out.append("inspection")
+    if payload.get("shotNo") is None:
+        out.append("shotNo")
+    if payload.get("serialNo") is None:
+        out.append("serialNo")
+    return out
 
 
 def main() -> None:
@@ -86,9 +104,15 @@ def main() -> None:
     shots = args.shots or sim["shots"]
     interval = args.interval if args.interval is not None else sim["interval_sec"]
     rng = random.Random(sim.get("seed"))
+    # 결측은 공정 모델과 다른 난수를 써서, 확률 0 이면 예전과 같은 공정 값이 나오게 한다
+    missing = MissingConfig.from_dict(cfg.get("missing"))
+    miss_rng = random.Random(f'{sim.get("seed")}-missing')
 
     # 설비 목록을 순회하면서 각 설비마다 Machine 객체를 초기화
     machines = [Machine(sim["line_id"], eq, random.Random(rng.random())) for eq in sim["equipment"]]
+    serials = {m.equipment_id: SerialIssuer(m.line_id, m.equipment_id) for m in machines}
+    outages = {m.equipment_id: OutageTracker() for m in machines}
+    delivery = Delivery(missing, miss_rng)
     # 설정 파일에 적힌 고장 시나리오들을 읽어서, 각각을 Fault 객체로 만든다.
     faults = [Fault(f["name"], f["equipment"], f["start_shot"], f["duration"]) for f in cfg.get("faults", [])]
     for f in faults:
@@ -100,10 +124,17 @@ def main() -> None:
     gt_path = Path(sim.get("ground_truth_csv", "../data/ground_truth.csv"))
     if not gt_path.is_absolute():
         gt_path = (Path(args.config).resolve().parent / gt_path).resolve()
-    gt_path.parent.mkdir(parents=True, exist_ok=True)
-    gt_file = gt_path.open("w", newline="", encoding="utf-8")
+    if args.dry_run:
+        # dry-run 은 화면 확인용이라 실제 발행 때 만든 정답 파일을 덮어쓰지 않는다
+        gt_file = open(os.devnull, "w", newline="", encoding="utf-8")
+    else:
+        gt_path.parent.mkdir(parents=True, exist_ok=True)
+        gt_file = gt_path.open("w", newline="", encoding="utf-8")
     gt = csv.writer(gt_file)
-    gt.writerow(["ts", "equipmentId", "shotNo", "activeFault", "inspection", "defectType"])
+    # shotNo·inspection 은 실제 값(보낸 메시지에서 빠졌어도 기록), missingFields 는 보낼 때 비운 항목
+    # delivery: sent / dropped(통째 누락) / delayed(늦게 보냄) 에 +resent(같은 messageId 한 번 더)
+    gt.writerow(["ts", "equipmentId", "shotNo", "activeFault", "inspection", "defectType",
+                 "messageId", "serialNo", "missingFields", "delivery"])
 
     clients: dict = {}      # 설비 ID → MQTT 클라이언트. 장비마다 자기 계정으로 따로 접속한다 (N-07, N-08)
     shutting_down = False   # 우리가 일부러 끊는 중인지 (정상 종료 메시지 구분용)
@@ -153,8 +184,23 @@ def main() -> None:
     sent = ng = 0
     print(f"시작: 설비 {len(machines)}대 × {shots} shot, 간격 {interval}s, 고장 시나리오 {len(faults)}개"
           f"{' (dry-run)' if args.dry_run else ''}", flush=True)
+    if missing.any_active():
+        print("결측 섞기: " + ", ".join(f"{k}={v:g}" for k, v in vars(missing).items()
+                                     if v and k.endswith("_rate")), flush=True)
+    missed = published = 0
 
-    for _ in range(shots):
+    def publish(equipment_id: str, body: str) -> None:
+        nonlocal pending, published
+        published += 1
+        if clients:
+            pending.append(clients[equipment_id].publish(
+                topic_tpl.format(line=sim["line_id"], equipment=equipment_id), body, qos=qos))
+            if len(pending) > 1000:
+                pending = [i for i in pending if not i.is_published()]
+        else:
+            print(topic_tpl.format(line=sim["line_id"], equipment=equipment_id), body)
+
+    for step in range(shots):
         if stop:
             break
         for m in machines:
@@ -170,25 +216,28 @@ def main() -> None:
                         scale[k] = scale.get(k, 1.0) * v
                     active.append(f.name)
             values, defect = m.next_shot(add, scale)
-            payload = build_payload(m, values, defect)
-            topic = topic_tpl.format(line=m.line_id, equipment=m.equipment_id)
-            body = json.dumps(payload, ensure_ascii=False)
-            if clients:
-                pending.append(clients[m.equipment_id].publish(topic, body, qos=qos))
-                if len(pending) > 1000:
-                    pending = [i for i in pending if not i.is_published()]
-            else:
-                print(topic, body)
+            now = datetime.now(KST)
+            payload = build_payload(m, values, defect, serial_for(serials[m.equipment_id], missing, miss_rng, now), now)
+            apply_missing(payload, missing, miss_rng,
+                          outages[m.equipment_id].step(list(SENSORS), missing, miss_rng))
+            gaps = missing_fields(payload)
+            missed += any(g != "serialNo" for g in gaps)
+            how = delivery.plan(step, m.equipment_id, json.dumps(payload, ensure_ascii=False))
             gt.writerow([payload["ts"], m.equipment_id, m.shot_no, "|".join(active) or "NONE",
-                         payload["inspection"]["result"], defect or ""])
+                         "NG" if defect else "OK", defect or "",
+                         payload["messageId"], payload["serialNo"] or "", "|".join(gaps), how])
             sent += 1
             ng += defect is not None
+        for eq, body in delivery.due(step):
+            publish(eq, body)
         if sent and sent % (len(machines) * 50) == 0:
-            print(f"  진행: {sent}건 발행, 불량 {ng}건 ({ng / sent:.1%})", flush=True)
+            print(f"  진행: shot {sent}건, 전송 {published}건, 불량 {ng}건 ({ng / sent:.1%})", flush=True)
             gt_file.flush()
         if interval > 0:
             time.sleep(interval)
 
+    for eq, body in delivery.due(None):       # 늦춰 둔 메시지를 마저 보낸다
+        publish(eq, body)
     gt_file.close()
     if clients:
         # 끊기 전에 아직 브로커 확인을 못 받은 메시지를 최대 10초까지 기다린다 (유실 방지)
@@ -208,7 +257,11 @@ def main() -> None:
         for c in clients.values():
             c.disconnect()
             c.loop_stop()
-    print(f"종료: {sent}건 발행, 불량 {ng}건 ({(ng / sent if sent else 0):.1%}). 정답 기록: {gt_path}", flush=True)
+    print(f"종료: shot {sent}건, 불량 {ng}건 ({(ng / sent if sent else 0):.1%}), 결측 있는 메시지 {missed}건, "
+          f"센서 끊김 구간 {sum(o.started for o in outages.values())}개", flush=True)
+    print(f"      전송 {published}건 = shot {sent} - 통째 누락 {delivery.dropped} + 재전송 {delivery.resent}, "
+          f"늦게 보냄 {delivery.delayed}건. "
+          f"정답 기록: {'(dry-run 이라 쓰지 않음)' if args.dry_run else gt_path}", flush=True)
 
 
 if __name__ == "__main__":
