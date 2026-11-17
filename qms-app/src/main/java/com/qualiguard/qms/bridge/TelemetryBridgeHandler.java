@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import com.qualiguard.qms.quality.SensorCatalog;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.validation.ConstraintViolation;
@@ -25,7 +27,9 @@ import tools.jackson.databind.node.ObjectNode;
  * MQTT 에 ack 해도 되는지(true/false)를 돌려준다. MQTT 연결·ack 는 MqttTelemetrySubscriber 가 맡는다.
  *
  * - 정상: sensor.raw 토픽, key = equipmentId (같은 설비의 메시지는 같은 파티션 → 순서 보장) → ack
- * - 형식 오류: quality.dlq 토픽 (오류 사유를 헤더에 기록) → ack
+ * - 결측(센서 값·shotNo·inspection·serialNo 없음): 정상으로 보고 sensor.raw 로 보낸다(ADR-017).
+ *   빠진 항목은 qg.bridge.missing_fields 카운터(field, kind 태그)로 센다
+ * - 형식 오류(필수 항목 messageId·lineId·equipmentId·ts 없음, JSON 깨짐 등): quality.dlq 토픽 (오류 사유를 헤더에 기록) → ack
  * - 중복: 버림 (QoS 1 은 같은 메시지가 두 번 올 수 있음) → ack
  * - Kafka 기록 실패: ack 하지 않음 → 재접속 시 브로커가 다시 보내 준다
  */
@@ -45,6 +49,7 @@ public class TelemetryBridgeHandler {
     private final Counter duplicate;
     private final Counter invalid;
     private final Counter failed;
+    private final MeterRegistry meters;
 
     public TelemetryBridgeHandler(KafkaTemplate<String, String> kafka, ObjectMapper objectMapper,
             Validator validator, MessageIdDeduplicator deduplicator, BridgeProperties.Bridge props,
@@ -58,6 +63,7 @@ public class TelemetryBridgeHandler {
         this.duplicate = counter(meters, "duplicate");
         this.invalid = counter(meters, "invalid");
         this.failed = counter(meters, "failed");
+        this.meters = meters;
     }
 
     private static Counter counter(MeterRegistry meters, String result) {
@@ -107,7 +113,45 @@ public class TelemetryBridgeHandler {
         }
         deduplicator.markProcessed(telemetry.messageId());
         published.increment();
+        countMissing(telemetry);
         return true;                                                         // ack 허용
+    }
+
+    /**
+     * 빠진 항목을 센다. 태그 수가 늘지 않도록 센서는 알려진 센서(SensorCatalog)만 이름을 붙인다.
+     * kind: absent(키 없음) / null(키는 있고 값이 비어 있음)
+     */
+    private void countMissing(TelemetryMessage t) {
+        if (t.shotNo() == null) {
+            missing("shotNo", "absent");
+        }
+        if (t.inspection() == null || t.inspection().result() == null) {
+            missing("inspection", "absent");
+        }
+        if (t.serialNo() == null || t.serialNo().isBlank()) {
+            missing("serialNo", "absent");
+        }
+        if (t.sensors() == null || t.sensors().isEmpty()) {
+            missing("sensors", "absent");
+            return;
+        }
+        for (String key : SensorCatalog.SENSORS.keySet()) {
+            TelemetryMessage.SensorValue sv = t.sensors().get(key);
+            if (sv == null) {
+                missing("sensors." + key, t.sensors().containsKey(key) ? "null" : "absent");
+            } else if (sv.value() == null) {
+                missing("sensors." + key, "null");
+            }
+        }
+    }
+
+    private void missing(String field, String kind) {
+        Counter.builder("qg.bridge.missing_fields")
+                .description("브리지가 받은 메시지에서 비었거나 빠진 항목 수 (DLQ 로 보내지 않음)")
+                .tag("field", field)
+                .tag("kind", kind)
+                .register(meters)
+                .increment();
     }
 
     /** 원본 JSON 에 브리지 처리 정보를 덧붙인다 (추적용). */

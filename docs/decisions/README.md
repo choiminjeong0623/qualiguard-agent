@@ -20,3 +20,4 @@
 | ADR-014 | 유사 사례 의미 검색 (SQL Server VECTOR) — 브랜치 `feat/ncr-vector-search` 에만 있음 | 보류 ([향후 계획](../future-work.md)) |
 | [ADR-015](ADR-015-mqtt-device-auth.md) | MQTT 장비 인증과 토픽별 접근 권한 — 사용자명 = 설비 ID | 채택 |
 | [ADR-016](ADR-016-multi-agent-pipeline.md) | 역할 분리형 멀티 에이전트 — 분류·분석·검증·작성·오케스트레이터를 Kafka 이벤트로 잇는다 | 채택 |
+| [ADR-017](ADR-017-telemetry-nulls-serial.md) | 장비 데이터 결측 허용과 시리얼 번호 비고유 — 필수는 messageId·lineId·equipmentId·ts 뿐, 늦게 온 shot 은 저장만 | 채택 |

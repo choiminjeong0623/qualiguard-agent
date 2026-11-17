@@ -18,6 +18,16 @@ public class EquipmentState {
     public List<String> recentMessageIds = new ArrayList<>();
     public Map<String, SensorState> sensors = new LinkedHashMap<>();
 
+    /** 마지막으로 받은 shot 번호 (shotNo 가 빠진 메시지의 경보 위치를 어림할 때 씀). 아직 없으면 null */
+    public Long lastShotNo;
+
+    /** 실시간 판정에 쓴 마지막 shot 의 시각(epoch ms). 이보다 앞선 ts 로 늦게 온 shot 은 판정하지 않는다 */
+    public Long lastTsMillis;
+    /** 늦게 와서 판정을 건너뛴 shot 수 */
+    public long lateCount;
+
+    /** 검사 결과가 있었던 shot 수 (검사 결과가 없는 shot 은 불량률 집계에서 뺀다) */
+    public long inspectedCount;
     /** 기준 구간 불량 수 / 불량률 (기준 구간이 끝나기 전에는 -1) */
     public long baselineNg;
     public double baselineNgRate = -1;
@@ -46,5 +56,7 @@ public class EquipmentState {
         public int xbarLowRun;
         /** 부분군 표준편차가 연속으로 상한을 넘은 횟수 */
         public int sHighRun;
+        /** 값이 연속으로 비어 있는 shot 수 (센서 끊김 판단) */
+        public int missingRun;
     }
 }

@@ -80,6 +80,7 @@ flowchart LR
   "lineId": "LINE1",
   "equipmentId": "IMM-01",
   "shotNo": 301,
+  "serialNo": "TMP-LINE1-IMM-01-261117-00301",
   "ts": "2026-11-14T16:20:01.123+09:00",
   "sensors": {
     "moldTemp":          {"value": 60.3,   "unit": "C"},
@@ -91,6 +92,14 @@ flowchart LR
 }
 ```
 `bridge` 항목은 브리지가 추적용으로 덧붙입니다. Kafka 메시지 key는 `equipmentId`입니다.
+
+**결측 허용 ([ADR-017](decisions/ADR-017-telemetry-nulls-serial.md))**: 필수는 `messageId`·`lineId`·`equipmentId`·`ts` 뿐이고,
+없으면 DLQ 로 갑니다. `shotNo`·`inspection`·`serialNo` 는 없을 수 있고, `sensors` 는 비었거나 센서 일부가 빠지거나 `value` 가 null 일 수 있습니다.
+- 값이 없는 센서는 SPC 에서 그 shot 만 invalid 로 빼고, 검사 결과가 없는 shot 은 불량률 집계에서 뺍니다(OK 로 세지 않음).
+- 추적 키는 `messageId`(중복 제거)와 `equipmentId + shotNo + ts` 입니다. `serialNo` 는 공정 중 null·임시값(`TMP-…`)·중복이 정상이라 고유 키로 쓰지 않고 전달·적재만 합니다. 확정 시리얼은 출하 때 `shipment_serial_link` 에서만 고유합니다(표만 있음, 로직은 향후).
+- 중복(같은 `messageId`)은 브리지·SPC·DB 세 층에서 거릅니다. 늦게 온 shot(`ts` 가 이미 판정한 shot 보다 앞섬)은 저장만 하고 실시간 관리도 판정은 건너뜁니다(`arrival_late`).
+- 같은 센서가 5 shot 연속 비면 `[센서 끊김]` 로그와 `qg.spc.sensor_outage` 지표로 알립니다(이상 경보는 아님).
+- 브리지는 빠진 항목을 `qg.bridge.missing_fields`(field, kind) 지표로 셉니다.
 
 ### `quality.anomaly` — 이상 탐지 1건 (에이전트 입력)
 

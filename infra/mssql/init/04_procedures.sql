@@ -59,6 +59,7 @@ BEGIN
            MAX(b.val)                                 AS max_value,
            CAST(STDEV(b.val) AS DECIMAL(12, 4))       AS stdev_value,
            SUM(CASE WHEN b.inspection_result = 'NG' THEN 1 ELSE 0 END) AS ng_count,
+           COUNT(b.inspection_result)                 AS inspected,   -- 검사 결과가 있는 shot 수 (ADR-017)
            s.lsl, s.target, s.usl, s.unit
     FROM bucketed AS b
     JOIN dbo.sensor_spec AS s
@@ -164,8 +165,10 @@ BEGIN
            MIN(shot_no)                                                   AS from_shot_no,
            MAX(shot_no)                                                   AS to_shot_no,
            COUNT(*)                                                       AS shots,
+           COUNT(inspection_result)                                       AS inspected,   -- 검사 결과 없는 shot 은 불량률 분모에서 뺌 (ADR-017)
            SUM(CASE WHEN inspection_result = 'NG' THEN 1 ELSE 0 END)      AS ng_count,
-           CAST(100.0 * SUM(CASE WHEN inspection_result = 'NG' THEN 1 ELSE 0 END) / COUNT(*) AS DECIMAL(5, 1)) AS ng_rate_pct,
+           CAST(100.0 * SUM(CASE WHEN inspection_result = 'NG' THEN 1 ELSE 0 END)
+                / NULLIF(COUNT(inspection_result), 0) AS DECIMAL(5, 1))  AS ng_rate_pct,
            SUM(CASE WHEN defect_type = 'SHORT_SHOT' THEN 1 ELSE 0 END)    AS short_shot,
            SUM(CASE WHEN defect_type = 'FLASH'      THEN 1 ELSE 0 END)    AS flash,
            SUM(CASE WHEN defect_type = 'DIMENSION'  THEN 1 ELSE 0 END)    AS dimension,

@@ -17,6 +17,7 @@ import com.qualiguard.qms.quality.EquipmentState;
 import com.qualiguard.qms.quality.Shot;
 import com.qualiguard.qms.quality.SpcEngine;
 
+import io.micrometer.core.instrument.Metrics;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -65,21 +66,40 @@ public class SpcProcessor implements Processor<String, String, String, String> {
         String equipmentId = t.equipmentId();
         EquipmentState state = load(equipmentId);
 
+        // 결측 허용(ADR-017): sensors 가 없으면 빈 맵, 값이 없는 센서는 SpcEngine 이 invalid 로 처리한다
         Map<String, Double> values = new LinkedHashMap<>();
-        t.sensors().forEach((key, sv) -> values.put(key, sv == null ? null : sv.value()));
-        boolean ng = t.inspection() != null && "NG".equals(t.inspection().result());
-        String defectType = t.inspection() == null ? null : t.inspection().defectType();
-        Shot shot = new Shot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(), values, ng, defectType);
+        t.sensorsOrEmpty().forEach((key, sv) -> values.put(key, sv == null ? null : sv.value()));
+        // 검사 결과가 없거나 result 가 비면 '검사 안 함' — OK 로 세지 않는다
+        boolean inspected = t.inspection() != null && t.inspection().result() != null;
+        boolean ng = inspected && "NG".equals(t.inspection().result());
+        String defectType = inspected ? t.inspection().defectType() : null;
+        Shot shot = new Shot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(), values, ng, defectType,
+                inspected, t.serialNo());
 
         SpcEngine.Result result = engine.process(state, shot);
         if (result.duplicate()) {
             log.debug("중복 shot 무시: {}", t.messageId());
+            Metrics.counter("qg.spc.duplicate_shots", "equipment", equipmentId).increment();
             return;
         }
         store.put(equipmentId, objectMapper.writeValueAsString(state));
+        if (result.late()) {
+            // 순서가 어긋난 shot: 저장은 하되 관리도 판정은 건너뜀 (ADR-017)
+            log.info("늦게 온 shot — 저장만 하고 판정 건너뜀: {} shotNo={} ts={}", equipmentId, t.shotNo(), t.ts());
+            Metrics.counter("qg.spc.late_shots", "equipment", equipmentId).increment();
+        }
+        for (String sensor : result.outageStarted()) {
+            // 경보(이상 탐지)로 만들지 않고 운영 지표·로그로만 알린다
+            log.warn("[센서 끊김] {} {} 값이 {} shot 연속 비어 있음", equipmentId, sensor, SpcEngine.OUTAGE_SHOTS);
+            Metrics.counter("qg.spc.sensor_outage", "equipment", equipmentId, "sensor", sensor).increment();
+        }
+        for (String sensor : result.outageEnded()) {
+            log.info("[센서 회복] {} {} 값이 다시 들어옴", equipmentId, sensor);
+        }
 
         CleanShot clean = new CleanShot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(),
-                result.cleanValues(), result.invalidSensors(), ng ? "NG" : "OK", defectType);
+                result.cleanValues(), result.invalidSensors(), inspected ? (ng ? "NG" : "OK") : null, defectType,
+                t.serialNo(), result.late());
         context.forward(new Record<>(equipmentId, CLEAN + objectMapper.writeValueAsString(clean), record.timestamp()));
 
         for (Anomaly anomaly : result.anomalies()) {
