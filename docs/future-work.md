@@ -34,6 +34,7 @@
 | **작성·승인 분리** | 초안을 고친 사람이 같은 건을 승인할 수 있음 ([ADR-011](decisions/ADR-011-qms-login.md)) | 시연 환경 검토자가 한 명이라 넣지 않음 | `usp_ReviewNcr` 에서 마지막 수정자와 승인자 비교, 역할 추가(작성자/승인자) |
 | **내부망 제한** (`/api/agent/**`, `/mcp`, actuator) | 로컬 평가 스크립트·MCP 클라이언트용으로 인증 없이 열어 둠 ([ADR-011](decisions/ADR-011-qms-login.md), [ADR-013](decisions/ADR-013-mcp-server.md)) | 로컬 전용 | 서비스 토큰 인증 또는 내부망·리버스 프록시 제한 |
 | 로그인 보강 | 비밀번호 변경·잠금(실패 횟수)·로그인 감사 기록 없음 | 폼 로그인·역할 2개 | 사내 SSO(OIDC) 연동 또는 위 기능 추가 |
+| **MES/ERP 연계를 인터페이스(EAI) 서버로** | 승인은 하루 수십 건이라 Kafka 처리량이 필요 없고, 현장에서는 EAI·인터페이스 서버 연계가 흔함 ([ADR-018](decisions/ADR-018-mes-erp-eai-interface-server.md)) | 아웃박스 → Kafka → 가상 MES/ERP (같은 앱) | [06 문서](06-mes-erp-eai-plan.md) 7장 손코딩 체크리스트 순서대로 |
 | MES/ERP **응답 시간 초과** 감시 | 응답이 오지 않으면 화면에 "응답 대기"로만 보임 ([ADR-012](decisions/ADR-012-mes-erp-ack.md)) | 실패 응답과 다시 보내기는 구현 | 일정 시간 응답이 없으면 상태 표시·알림 |
 | Kafka Streams **상태 폴더를 `build/` 밖으로** | 개발 중 `gradlew clean` 이 실행 중인 앱의 상태 폴더(`build/kafka-streams-state`)까지 지운 일이 있음 ([장애 분석 08](troubleshooting/08-local-dev-environment.md)) | 재시작하면 changelog 에서 복구되지만 위험 | `spring.kafka.streams.state-dir` 을 `build/` 밖(예: `~/.qualiguard/streams`)으로 |
 | 통합 테스트에서 **Kafka 끄기** | `QmsAppApplicationTests` 가 실제 앱 ID 로 Kafka Streams·소비자를 띄워, 실행 중인 앱의 소비자 그룹이 잠깐 재조정됨 | 테스트는 통과 | 테스트 프로필에서 `spring.kafka.streams.auto-startup=false`, `spring.kafka.listener.auto-startup=false` |

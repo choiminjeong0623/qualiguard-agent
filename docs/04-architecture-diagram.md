@@ -112,6 +112,8 @@ sequenceDiagram
     note over U,UI: 실패한 시스템에만 다시 보내기 · 조치 완료 시 CLOSED<br/>승인 사례는 이후 분석의 유사 사례(지식저장소)로 재사용
 ```
 
+> ④는 **현재 구현(Kafka)** 순서입니다. 인터페이스(EAI) 서버로 바꾼 뒤의 계획 순서도는 [06. MES/ERP 연계 EAI 계획](06-mes-erp-eai-plan.md) 3장에 있습니다.
+
 ## 다시 렌더링하기
 
 ```bash

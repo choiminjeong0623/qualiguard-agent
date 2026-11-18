@@ -1,6 +1,6 @@
-# 05. 한계와 보완할 점 — 면접관 관점의 반박 9가지
+# 05. 한계와 보완할 점 — 면접관 관점의 반박 10가지
 
-면접에서 나올 만한 반박 9가지를 코드와 설정으로 직접 확인해 정리했습니다. 항목마다 **현재 상태**(코드가 실제로 하는 일), **한계**, **보완할 점**을 적고, 보완할 점에는 우선순위를 붙였습니다.
+면접에서 나올 만한 반박 10가지를 코드와 설정으로 직접 확인해 정리했습니다. 항목마다 **현재 상태**(코드가 실제로 하는 일), **한계**, **보완할 점**을 적고, 보완할 점에는 우선순위를 붙였습니다.
 
 - 우선순위 기준: **높음** = 운영 전에 반드시 필요, **중간** = 규모가 커지거나 실데이터를 붙일 때 필요, **낮음** = 있으면 좋음
 - 이 문서는 코드 동작을 바꾸지 않습니다. 확인한 파일 위치를 함께 적었습니다.
@@ -18,6 +18,7 @@
 | 7 | 중복 제거 캐시 10만 건 | 크기 근거 문서 없음, 재시작 시 소실, 여러 대면 무력 (하류 DB 고유 키가 최종 방어) | 중간 |
 | 8 | LLM 환각·MCP 보안 | 검증 에이전트가 사례 실재·조사 여부·불량률은 대조하지만 수치 값 자체는 대조 안 함. `/mcp` 인증 없음 | 높음 |
 | 9 | 합성 데이터만 검증 | 결측·재전송·지연·임시 시리얼은 흉내 냈지만 실데이터 미검증, 시리얼 연결·늦은 shot 재판정 미구현 | 높음 |
+| 10 | MES/ERP 연계에 Kafka가 꼭 필요한가 | 아니다. 승인은 하루 수십 건. 보장은 아웃박스·재시도·중복 제거가 만든다. 인터페이스(EAI) 서버로 바꾸는 계획 수립 | 중간 |
 
 ---
 
@@ -200,8 +201,26 @@
 
 ---
 
+## 10. MES/ERP 연계에 Kafka가 꼭 필요한가
+
+**현재 상태**
+- 승인 → `integration_outbox`(같은 트랜잭션) → `OutboxPublisher` → Kafka `quality.ncr.approved` → 같은 앱의 `MesErpReceiver`(소비자 그룹 `qg-mes-erp-sim`) → `integration.ncr.ack` → `IntegrationAckListener`(그룹 `qg-qms-ack`).
+- Kafka 를 고른 이유는 "센서용 Kafka 가 이미 있어서"였고, 양 때문은 아니었습니다.
+
+**한계**
+- NCR 승인은 하루 몇 건~몇십 건이라 Kafka 의 처리량·보관 장점이 거의 쓰이지 않습니다.
+- 현장의 MES/ERP 담당자는 EAI·인터페이스 서버와 연계 이력 테이블로 운영하는 데 익숙하고, Kafka 토픽·오프셋은 낯섭니다.
+- 가상 MES/ERP 가 QMS 와 같은 앱 안에 있어 "다른 시스템과의 연계"라는 경계가 약합니다.
+
+**보완할 점**
+- (중간) 아웃박스는 유지하고 발행 대상만 **인터페이스 서버 REST**로 바꾸기: 지수 백오프 재시도, `Idempotency-Key`, 어댑터 라우팅, `(event_id, 시스템)` 중복 제거, 콜백으로 RECEIVED/PROCESSED/FAILED(seq) → [06. MES/ERP 연계 EAI 계획](06-mes-erp-eai-plan.md), [ADR-018](decisions/ADR-018-mes-erp-eai-interface-server.md)
+- 면접 답: "양 때문이 아니라 기존 인프라 재사용으로 Kafka 를 썼다. 한 번만 처리는 아웃박스·재시도·중복 제거가 보장하므로, 양이 적은 MES/ERP 연계는 인터페이스 서버로 바꾸는 것이 더 맞다."
+
+---
+
 ## 관련 문서
 - [아키텍처](02-architecture.md) — 전달 보장 설계
 - [향후 계획: 로컬 LLM·장비 보안·Redis](03-future-local-llm-and-device-security.md)
 - [향후 계획](future-work.md)
+- [06. MES/ERP 연계 EAI 계획](06-mes-erp-eai-plan.md)
 - [ADR-004 Paho 직접 사용](decisions/ADR-004-paho-direct-client.md), [ADR-013 MCP 서버](decisions/ADR-013-mcp-server.md), [ADR-016 멀티 에이전트](decisions/ADR-016-multi-agent-pipeline.md), [ADR-017 결측·시리얼](decisions/ADR-017-telemetry-nulls-serial.md)
