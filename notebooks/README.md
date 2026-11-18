@@ -10,7 +10,7 @@ Kaggle Learn(Pandas · Data Cleaning · Intermediate ML)에서 배운 개념을 
 
 - **결측치는 지우지 않고 채운다.** 행 삭제는 0행, 결측 있는 센서 전부 삭제는 AUC 약 0.52. 50% 넘게 빈 센서와 값이 하나뿐인 센서만 지우고 중앙값으로 채운다(채우는 방법끼리의 차이는 흔들림 범위 안).
 - **스케일링·정규화는 모델에 맞춘다.** 트리 모델(RF, XGBoost, Isolation Forest)에는 필요 없고, KNN·로지스틱 회귀에는 필요하다. 쏠림이 심한 SECOM에서는 Yeo-Johnson이 Standard보다 나았다(KNN 0.642 → 0.682).
-- **QualiGuard 적용**: 트리 계열 이상탐지는 결측 처리만, 거리 기반 이상탐지(KNN, LOF)는 Yeo-Johnson 후 사용.
+- **QualiGuard 연결 (모델은 아직 정하지 않음)**: 지금 QualiGuard의 이상 탐지는 SPC 관리도 규칙이다. ML 판정을 더한다면 모델에 따라 전처리를 다르게 한다(트리 계열은 결측 처리만, 거리 기반 KNN·LOF는 Yeo-Johnson 후). 이번 결과는 SECOM 기준이므로, 어떤 모델을 쓸지는 주력 데이터인 사출성형 합성 데이터로 같은 기준(5겹 교차검증 AUC)으로 비교한 뒤 정한다.
 
 ## 실행 방법
 
