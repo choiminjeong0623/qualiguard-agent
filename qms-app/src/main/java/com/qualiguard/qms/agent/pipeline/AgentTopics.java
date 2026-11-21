@@ -18,11 +18,12 @@ public final class AgentTopics {
     public static final String ANALYSIS_COMPLETED = "agent.analysis.completed";
     public static final String VERIFICATION_REQUESTED = "agent.verification.requested";
     public static final String VERIFICATION_COMPLETED = "agent.verification.completed";
+    public static final String ACTION_REQUESTED = "agent.action.requested";
     public static final String REPORT_REQUESTED = "agent.report.requested";
     public static final String REPORT_COMPLETED = "agent.report.completed";
 
     public static final List<String> ALL = List.of(TRIAGED, ANALYSIS_REQUESTED, ANALYSIS_COMPLETED,
-            VERIFICATION_REQUESTED, VERIFICATION_COMPLETED, REPORT_REQUESTED, REPORT_COMPLETED);
+            VERIFICATION_REQUESTED, VERIFICATION_COMPLETED, REPORT_REQUESTED, REPORT_COMPLETED, ACTION_REQUESTED);
 
     private AgentTopics() {
     }

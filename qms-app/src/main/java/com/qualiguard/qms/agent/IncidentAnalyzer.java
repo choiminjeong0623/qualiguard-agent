@@ -166,6 +166,18 @@ public class IncidentAnalyzer {
      * @throws IllegalStateException    재확인 횟수 상한에 닿았거나 그 shot 의 데이터가 아직 없을 때
      */
     public synchronized Job prepareRecheck(int parentAnalysisId, Long asOfShot) {
+        return prepareFollowUp(parentAnalysisId, asOfShot, null);
+    }
+
+    /**
+     * 조치 효과가 없을 때 다시 분석한다: 앞 분석이 고른 원인(excludedCause)으로 조치했지만 이상이 남았으니,
+     * 지금 시점의 데이터로 그 원인을 뺀 다른 가설을 찾게 한다. 재확인과 같은 횟수 상한(recheck-max)을 쓴다.
+     */
+    public synchronized Job prepareRetry(int parentAnalysisId, String excludedCause) {
+        return prepareFollowUp(parentAnalysisId, null, excludedCause);
+    }
+
+    private Job prepareFollowUp(int parentAnalysisId, Long asOfShot, String excludedCause) {
         Map<String, Object> parent;
         try {
             parent = jdbc.queryForMap("""
@@ -180,7 +192,7 @@ public class IncidentAnalyzer {
         } catch (EmptyResultDataAccessException e) {
             throw new IllegalArgumentException("분석 기록을 찾을 수 없습니다: " + parentAnalysisId);
         }
-        if (!"OBSERVE".equals(parent.get("decision"))) {
+        if (excludedCause == null && !"OBSERVE".equals(parent.get("decision"))) {
             throw new IllegalArgumentException("관찰(OBSERVE) 판단만 재확인할 수 있습니다: " + parent.get("decision"));
         }
         int depth = recheckDepth(parentAnalysisId);
@@ -189,7 +201,8 @@ public class IncidentAnalyzer {
         }
         String equipmentId = (String) parent.get("equipment_id");
         long baseShot = ((Number) parent.get("base_shot")).longValue();
-        long target = asOfShot != null ? asOfShot : baseShot + props.recheckShots();
+        long target = asOfShot != null ? asOfShot
+                : excludedCause != null ? latestShot(equipmentId) : baseShot + props.recheckShots();
         if (target <= baseShot) {
             throw new IllegalArgumentException("재확인 shot 은 관찰 기준 shot(" + baseShot + ")보다 뒤여야 합니다");
         }
@@ -217,9 +230,18 @@ public class IncidentAnalyzer {
         info.put("currentShot", target);
         info.put("shotsSinceObservation", target - baseShot);
         info.put("recheckCount", depth + 1);
+        if (excludedCause != null) {
+            info.put("excludedCause", excludedCause);
+        }
         return new Job("RECHECK", equipmentId, (String) parent.get("seed_anomaly_id"),
                 (String) parent.get("seed_ts"), observedAlarms, anomalyIds, false, null, asOf, target, asOf,
                 parentAnalysisId, (String) parent.get("run_tag"), info);
+    }
+
+    private long latestShot(String equipmentId) {
+        Long max = jdbc.queryForObject("SELECT MAX(shot_no) FROM dbo.process_shot WHERE equipment_id = ?", Long.class,
+                equipmentId);
+        return max == null ? 0 : max;
     }
 
     /**
@@ -503,6 +525,14 @@ public class IncidentAnalyzer {
             incident.put("firstAlarmEvidence", job.seedEvidence());
             sb.append("다음 경보 사건을 조사하고 분석 결과를 작성해 주세요.\n")
                     .append("firstAlarmEvidence.sensorZScores 는 각 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ 떨어졌는지입니다.\n");
+        } else if (job.recheckInfo().containsKey("excludedCause")) {
+            incident.put("retry", job.recheckInfo());
+            incident.put("observedAlarms", alarmList);
+            sb.append("조치 효과 확인 결과 재분석 요청입니다. 앞 분석이 고른 원인(")
+                    .append(job.recheckInfo().get("excludedCause"))
+                    .append(")에 맞춰 조치했지만 이상이 해소되지 않았습니다. 그 원인은 제외하고, 지금(shot ")
+                    .append(job.asOfShot()).append(") 시점의 데이터로 다른 원인 가설을 조사해 분석 결과를 작성해 주세요.\n")
+                    .append("다른 원인을 뒷받침할 근거가 부족하면 causeCode 를 UNKNOWN 으로 두세요.\n");
         } else {
             incident.put("recheck", job.recheckInfo());
             incident.put("observedAlarms", alarmList);

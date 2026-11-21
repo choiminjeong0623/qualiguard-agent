@@ -71,6 +71,12 @@ public class KafkaEventBus implements EventBus {
         dispatch(r);
     }
 
+    @KafkaListener(id = "qg-agent-action", groupId = "qg-agent-action", topics = AgentTopics.ACTION_REQUESTED,
+        properties = { "auto.offset.reset=earliest", "isolation.level=read_uncommitted" })
+    public void action(ConsumerRecord<String, String> r) {
+        dispatch(r);
+    }
+
     private void dispatch(ConsumerRecord<String, String> r) {
         AgentEvent e;
         try {

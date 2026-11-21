@@ -60,6 +60,11 @@ public class TriageAgent {
         return open(analyzer.prepareRecheck(parentAnalysisId, asOfShot));
     }
 
+    /** 조치 효과가 없어 그 원인을 빼고 다시 보는 사건. */
+    public Incident openRetry(int parentAnalysisId, String excludedCause) {
+        return open(analyzer.prepareRetry(parentAnalysisId, excludedCause));
+    }
+
     private Incident open(IncidentAnalyzer.Job job) {
         Triage t = classify(job.trigger(), job.alarms());
         Incident i = new Incident(UUID.randomUUID().toString(), job, t);

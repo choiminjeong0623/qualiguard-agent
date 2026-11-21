@@ -84,8 +84,10 @@ public class PipelineConfig {
 
     @Bean
     IncidentOrchestrator incidentOrchestrator(IncidentAnalyzer analyzer, IncidentStore store, EventBus bus,
-            ObjectMapper objectMapper, AgentProperties props, AgentEventRouter router) {
-        return new IncidentOrchestrator(analyzer, store, bus, objectMapper, props.verifyMaxRetries(), router);
+            ObjectMapper objectMapper, AgentProperties props, AgentEventRouter router,
+            @Value("${qg.agent.action.enabled:false}") boolean actionStage) {
+        return new IncidentOrchestrator(analyzer, store, bus, objectMapper, props.verifyMaxRetries(), router,
+                actionStage);
     }
 
     @Bean
