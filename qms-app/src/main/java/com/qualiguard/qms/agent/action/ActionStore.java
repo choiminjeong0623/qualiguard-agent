@@ -1,0 +1,127 @@
+package com.qualiguard.qms.agent.action;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+/** 조치 기록(dbo.agent_action)과 효과 확인에 필요한 센서 조회. */
+@Repository
+public class ActionStore {
+
+    /** 센서 키 → process_shot 컬럼. SQL 에 이름을 끼워 넣으므로 여기 있는 것만 허용한다. */
+    private static final Map<String, String> COLUMNS = Map.of(
+            "barrelTemp", "barrel_temp", "moldTemp", "mold_temp", "injectionPressure", "injection_pressure",
+            "cushion", "cushion", "cycleTime", "cycle_time", "motorCurrent", "motor_current");
+
+    private final JdbcTemplate jdbc;
+
+    public ActionStore(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    public int insert(int analysisId, String equipmentId, String causeCode, ActionCatalog.Action a,
+            ActionPolicy.Decision d, int attempt, Integer parentActionId) {
+        boolean auto = d.mode() == ActionPolicy.Mode.AUTO;
+        return jdbc.queryForObject("""
+                INSERT INTO dbo.agent_action (analysis_id, equipment_id, cause_code, action_code, risk, mode, reasons,
+                                              status, attempt, parent_action_id, decided_by)
+                OUTPUT INSERTED.action_id
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, Integer.class, analysisId, equipmentId, causeCode, a.code(), a.risk().name(), d.mode().name(),
+                String.join(" / ", d.reasons()), auto ? "EXECUTED" : "WAITING_APPROVAL", attempt, parentActionId,
+                auto ? "AGENT" : null);
+    }
+
+    /** 실행 표시: 지금 설비의 마지막 shot 을 효과 확인 구간의 시작으로 잡는다. */
+    public void markExecuted(int actionId, String decidedBy) {
+        jdbc.update("""
+                UPDATE dbo.agent_action
+                SET status = 'EXECUTED', executed_at = SYSDATETIMEOFFSET(), decided_by = COALESCE(?, decided_by),
+                    base_shot = (SELECT MAX(shot_no) FROM dbo.process_shot WHERE equipment_id = agent_action.equipment_id)
+                WHERE action_id = ? AND status IN ('EXECUTED', 'WAITING_APPROVAL')
+                """, decidedBy, actionId);
+    }
+
+    /** 사람이 승인 대기 조치를 반려. 바뀐 행이 없으면 false (이미 처리됨). */
+    public boolean reject(int actionId, String by) {
+        return jdbc.update("UPDATE dbo.agent_action SET status = 'REJECTED', decided_by = ? "
+                + "WHERE action_id = ? AND status = 'WAITING_APPROVAL'", by, actionId) == 1;
+    }
+
+    public boolean isWaiting(int actionId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM dbo.agent_action WHERE action_id = ? AND status = 'WAITING_APPROVAL'",
+                Integer.class, actionId) == 1;
+    }
+
+    public int autoCountLast24h(String equipmentId) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM dbo.agent_action
+                WHERE equipment_id = ? AND mode = 'AUTO' AND created_at >= DATEADD(HOUR, -24, SYSDATETIMEOFFSET())
+                """, Integer.class, equipmentId);
+    }
+
+    /** 이 분석이 "효과 없음" 때문에 다시 한 분석이면, 그 원인이 된 앞 조치. */
+    public Optional<Map<String, Object>> retriedFrom(Integer parentAnalysisId) {
+        if (parentAnalysisId == null) {
+            return Optional.empty();
+        }
+        return jdbc.queryForList("""
+                SELECT TOP 1 action_id, attempt FROM dbo.agent_action
+                WHERE analysis_id = ? AND status = 'NOT_RESOLVED' ORDER BY action_id DESC
+                """, parentAnalysisId).stream().findFirst();
+    }
+
+    /** 실행했고, 실행 뒤 checkShots 만큼 shot 이 쌓인 조치들. */
+    public List<Map<String, Object>> dueForCheck(int checkShots) {
+        return jdbc.queryForList("""
+                SELECT a.action_id, a.analysis_id, a.equipment_id, a.action_code, a.cause_code, a.attempt, a.base_shot
+                FROM dbo.agent_action AS a
+                WHERE a.status = 'EXECUTED' AND a.base_shot IS NOT NULL
+                  AND (SELECT MAX(shot_no) FROM dbo.process_shot WHERE equipment_id = a.equipment_id)
+                      >= a.base_shot + ?
+                ORDER BY a.action_id
+                """, checkShots);
+    }
+
+    /** 조치 전(base 앞 before 개)·뒤(base 뒤 after 개) 구간의 센서 평균, 규격 목표, 뒤 구간 경보 수. */
+    public EffectEvaluator.Window window(String equipmentId, String sensorKey, long baseShot, int before, int after) {
+        int shotsAfter = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM dbo.process_shot WHERE equipment_id = ? AND shot_no > ? AND shot_no <= ?
+                """, Integer.class, equipmentId, baseShot, baseShot + after);
+        // 목표 센서가 있으면 지속 경보(평균 이동·산포·불량률)만, 없으면 단발 튐까지 센다
+        int alarms = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM dbo.anomaly_event
+                WHERE equipment_id = ? AND shot_no > ? AND shot_no <= ? AND (? = 1 OR rule_code <> 'INDIVIDUAL')
+                """, Integer.class, equipmentId, baseShot, baseShot + after, sensorKey == null ? 1 : 0);
+        String col = sensorKey == null ? null : COLUMNS.get(sensorKey);
+        if (col == null) {
+            return new EffectEvaluator.Window(null, null, null, alarms, shotsAfter);
+        }
+        String avg = "SELECT CAST(AVG(" + col + ") AS FLOAT) FROM dbo.process_shot "
+                + "WHERE equipment_id = ? AND shot_no > ? AND shot_no <= ?";
+        Double meanBefore = jdbc.queryForObject(avg, Double.class, equipmentId, baseShot - before, baseShot);
+        Double meanAfter = jdbc.queryForObject(avg, Double.class, equipmentId, baseShot, baseShot + after);
+        Double target = jdbc.queryForList("SELECT CAST(target AS FLOAT) FROM dbo.sensor_spec "
+                + "WHERE equipment_id = ? AND sensor_key = ?", Double.class, equipmentId, sensorKey)
+                .stream().findFirst().orElse(null);
+        return new EffectEvaluator.Window(meanBefore, meanAfter, target, alarms, shotsAfter);
+    }
+
+    public void markChecked(int actionId, String status, String detail) {
+        jdbc.update("UPDATE dbo.agent_action SET status = ?, effect_detail = ?, checked_at = SYSDATETIMEOFFSET() "
+                + "WHERE action_id = ?", status, detail.length() > 500 ? detail.substring(0, 500) : detail, actionId);
+    }
+
+    public List<Map<String, Object>> recent(int top) {
+        return jdbc.queryForList("""
+                SELECT TOP (?) a.action_id, a.analysis_id, a.equipment_id, a.cause_code, a.action_code, a.risk, a.mode,
+                       a.reasons, a.status, a.attempt, a.parent_action_id, a.base_shot, a.effect_detail, a.decided_by,
+                       CONVERT(VARCHAR(33), a.created_at, 127) AS created_at,
+                       CONVERT(VARCHAR(33), a.checked_at, 127) AS checked_at
+                FROM dbo.agent_action AS a ORDER BY a.action_id DESC
+                """, top);
+    }
+}

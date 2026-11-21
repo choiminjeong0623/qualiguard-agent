@@ -23,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
  *                └──────────── (지적을 붙여) ─────┘    분석 실패 → FAILED (경보는 다시 분석 대상으로)
  * </pre>
  * 사람 승인은 이 파이프라인 밖(QMS 화면)에서 항상 마지막에 한다.
+ * actionStage 가 켜져 있으면 결과를 저장한 뒤 조치 에이전트에게 agent.action.requested 를 보낸다 (평가 재생은 제외).
  */
 public class IncidentOrchestrator {
 
@@ -33,9 +34,16 @@ public class IncidentOrchestrator {
     private final EventBus bus;
     private final ObjectMapper objectMapper;
     private final int verifyMaxRetries;
+    private final boolean actionStage;
 
     public IncidentOrchestrator(IncidentAnalyzer analyzer, IncidentStore store, EventBus bus, ObjectMapper objectMapper,
             int verifyMaxRetries, AgentEventRouter router) {
+        this(analyzer, store, bus, objectMapper, verifyMaxRetries, router, false);
+    }
+
+    public IncidentOrchestrator(IncidentAnalyzer analyzer, IncidentStore store, EventBus bus, ObjectMapper objectMapper,
+            int verifyMaxRetries, AgentEventRouter router, boolean actionStage) {
+        this.actionStage = actionStage;
         this.analyzer = analyzer;
         this.store = store;
         this.bus = bus;
@@ -108,7 +116,29 @@ public class IncidentOrchestrator {
                 i.attempts, i.verification, i.written, pipelineJson(i));
         store.transitionLogged(i, topic, end, detail + (o.ncrNo() == null ? "" : " → " + o.ncrNo()));
         store.close(i, o.analysisId(), o.ncrNo());
+        if (actionStage && i.job.tag() == null && o.analysisId() != null) {
+            requestAction(i, o);
+        }
         i.done.complete(o.withPipeline(i.id, i.triage.toMap(), i.report, List.copyOf(i.timeline)));
+    }
+
+    /** 조치 에이전트가 판단에 쓸 요약만 싣는다 (사건은 이미 닫혀 메모리에 없다). */
+    private void requestAction(Incident i, IncidentAnalyzer.Outcome o) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("analysisId", o.analysisId());
+        data.put("parentAnalysisId", o.parentAnalysisId());
+        data.put("equipmentId", o.equipmentId());
+        data.put("decision", o.decision());
+        data.put("causeCode", o.causeCode());
+        data.put("confidence", o.confidence());
+        data.put("severity", i.triage.severity());
+        data.put("verified", i.verification != null && i.verification.passed());
+        try {
+            bus.publish(AgentTopics.ACTION_REQUESTED, new AgentEvent(i.id, i.attempts, data));
+        } catch (RuntimeException ex) {
+            // 분석 결과는 이미 저장됐다. 조치 요청 실패는 사건을 실패로 만들지 않는다
+            log.warn("[오케스트레이터] 조치 요청 실패 (사건 {}): {}", i.id, ex.toString());
+        }
     }
 
     private void finishFailed(Incident i, String topic, String error) {
