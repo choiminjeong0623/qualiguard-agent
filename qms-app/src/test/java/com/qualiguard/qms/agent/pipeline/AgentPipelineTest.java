@@ -45,7 +45,7 @@ class AgentPipelineTest {
         FakeAnalyzer() {
             super(null, JsonMapper.builder().build(), null,
                     new AgentProperties(false, 5000, 100, 30, 60, 40, 3, 1),
-                    org.mockito.Mockito.mock(ObjectProvider.class), "test-model");
+                    org.mockito.Mockito.mock(ObjectProvider.class), "test-model", null);
         }
 
         @Override
@@ -92,7 +92,7 @@ class AgentPipelineTest {
             completedPipeline = pipelineJson;
             return new Outcome(1, job.equipmentId(), job.trigger(), job.asOfShot(), null, result.decision(),
                     result.causeCode(), result.confidence(), "NCR_DRAFT".equals(result.decision()) ? "NCR-T-1" : null,
-                    false, job.anomalyIds(), ms, trace, result, null, attempts, verified, null, null, null, null);
+                    false, job.anomalyIds(), ms, trace, result, null, attempts, verified, null, null, null, null, null);
         }
 
         @Override
@@ -100,7 +100,7 @@ class AgentPipelineTest {
                 String pipelineJson) {
             failedError = error;
             return new Outcome(2, job.equipmentId(), job.trigger(), job.asOfShot(), null, "FAILED", null, null, null,
-                    false, job.anomalyIds(), ms, trace, null, error, attempts, null, null, null, null, null);
+                    false, job.anomalyIds(), ms, trace, null, error, attempts, null, null, null, null, null, null);
         }
     }
 

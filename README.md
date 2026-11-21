@@ -122,6 +122,7 @@ flowchart LR
 | [ADR-011](docs/decisions/ADR-011-qms-login.md) | QMS **로그인**(DB 사용자·BCrypt), 역할 품질 담당자/조회 전용, 비밀번호는 `.env` 로만 | 승인자를 확실히, 비밀번호를 저장소에 남기지 않음 |
 | [ADR-012](docs/decisions/ADR-012-mes-erp-ack.md) | MES/ERP **응답**은 단계 번호로 순서 유지, 응답 ID 로 중복 제거, **실패한 시스템에만** 다시 보내기 | 순서 뒤바뀜·중복·부분 실패에도 상태가 맞게 |
 | [ADR-013](docs/decisions/ADR-013-mcp-server.md) | 에이전트 도구를 **MCP 서버**(`/mcp`)로도 노출, 기준 시점은 기준 경보 ID 로만 | 다른 AI 클라이언트도 같은 데이터·같은 미래 정보 차단 원칙 |
+| [ADR-014](docs/decisions/ADR-014-ncr-vector-search.md) | 유사 사례 **의미 검색**: SQL Server 2025 `VECTOR` + Gemini 임베딩, 센서 일치 점수에 유사도를 더함 | 같은 DB·프로시저에서 상태·기준 시점 조건과 함께, 엉뚱한 사례가 앞서지 않게 |
 | [ADR-015](docs/decisions/ADR-015-mqtt-device-auth.md) | **MQTT 장비 인증 + 토픽 ACL**: 사용자명 = 설비 ID, 장비는 자기 토픽 쓰기만, 브리지는 읽기만 | 데이터 시스템의 입구는 사람이 아니라 설비 → 가짜 데이터 주입·도청 차단 |
 | [ADR-016](docs/decisions/ADR-016-multi-agent-pipeline.md) | **역할 분리형 멀티 에이전트**: 분류·검증은 규칙, 분석만 LLM, 작성은 로컬 모델, 단계마다 Kafka 토픽 | 자기 검증(근거 없는 결론 되돌림), 기밀 문장은 클라우드로 보내지 않음, 단계별 시간·실패 추적 |
 
@@ -237,8 +238,8 @@ Kafka 내구성, MQTT 유실 방지 범위, exactly-once 경계, 심각도 규�
 
 | 항목 | 상태 |
 |---|---|
-| 유사 사례 의미 검색 (SQL Server 2025 VECTOR + Gemini 임베딩) | 브랜치 `feat/ncr-vector-search` 에 구현·테스트 통과, 재생 평가 후 머지 |
-| 분석 1단계 1분 이내 (평균 44~49초) | 토큰 기록 계측(`feat/agent-token-usage`)까지 준비 |
+| 유사 사례 의미 검색 (SQL Server 2025 VECTOR + Gemini 임베딩) | main 에 머지(2026-11-21), 재생 평가는 아직 (`qg.knowledge.vector-enabled` 로 끌 수 있음) |
+| 분석 1단계 1분 이내 (평균 44~49초) | 분석마다 토큰 기록(`agent_analysis` 토큰 열)까지 준비 |
 | 체크 링 마모 탐지 시점 앞당기기 | 병목은 탐지(첫 경보와 첫 불량 사이 4 shot) → EWMA·CUSUM 검토 |
 | 수백 개 센서 데이터(SECOM)용 다변량 관리도 | Hotelling T²·PCA 검토 |
 | 작성·승인 분리, 에이전트 API·MCP 내부망 제한, 로그인 보강 | 운영 전 필요 |

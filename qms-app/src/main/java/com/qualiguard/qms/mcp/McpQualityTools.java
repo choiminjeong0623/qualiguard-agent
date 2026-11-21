@@ -3,6 +3,7 @@ package com.qualiguard.qms.mcp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -19,9 +20,15 @@ import com.qualiguard.qms.agent.QualityTools;
 public class McpQualityTools {
 
     private final JdbcTemplate jdbc;
+    private final Function<String, String> vectorizer;
 
     public McpQualityTools(JdbcTemplate jdbc) {
+        this(jdbc, null);
+    }
+
+    public McpQualityTools(JdbcTemplate jdbc, Function<String, String> vectorizer) {
         this.jdbc = jdbc;
+        this.vectorizer = vectorizer;
     }
 
     /** 기준 경보의 발생 시각. 경보가 없으면 null(지금까지), 없는 번호면 예외. */
@@ -39,7 +46,7 @@ public class McpQualityTools {
     }
 
     private QualityTools tools(String anomalyId) {
-        return new QualityTools(jdbc, new ArrayList<>(), asOf(anomalyId));
+        return new QualityTools(jdbc, new ArrayList<>(), asOf(anomalyId), System.nanoTime(), vectorizer);
     }
 
     @Tool(description = "설비의 이상 경보 목록을 최근 순으로 조회한다. 결과의 anomaly_id 를 다른 도구의 기준 경보로 쓰면 "
@@ -95,8 +102,9 @@ public class McpQualityTools {
             @ToolParam(description = "설비 ID") String equipmentId,
             @ToolParam(description = "이상이 보인 센서 키, 쉼표 구분") String sensorKeys,
             @ToolParam(description = "가장 많은 불량 유형", required = false) String defectType,
+            @ToolParam(description = "지금 관찰한 현상 요약 (의미 검색, 선택)", required = false) String situation,
             @ToolParam(description = "기준 경보 ID (없으면 지금까지)", required = false) String anomalyId) {
-        return tools(anomalyId).findSimilarNcr(equipmentId, sensorKeys, defectType);
+        return tools(anomalyId).findSimilarNcr(equipmentId, sensorKeys, defectType, situation);
     }
 
     @Tool(description = "설비 정비 이력(정비일, 유형, 부품, 내용, 경과 일수) 최근 순.")
