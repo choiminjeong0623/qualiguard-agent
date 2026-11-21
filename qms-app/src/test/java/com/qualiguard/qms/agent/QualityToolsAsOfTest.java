@@ -32,10 +32,22 @@ class QualityToolsAsOfTest {
     void 유사_사례_검색에_기준_시점을_넘긴다() {
         Capture jdbc = new Capture();
         List<String> trace = new ArrayList<>();
-        new QualityTools(jdbc, trace, "2026-11-14T10:24:48.942Z").findSimilarNcr("IMM-01", "barrelTemp", "");
+        new QualityTools(jdbc, trace, "2026-11-14T10:24:48.942Z").findSimilarNcr("IMM-01", "barrelTemp", "", null);
         assertTrue(jdbc.sql.contains("usp_FindSimilarNcr"));
-        assertEquals("2026-11-14T10:24:48.942Z", jdbc.args[jdbc.args.length - 1]);
+        assertEquals("2026-11-14T10:24:48.942Z", jdbc.args[4]);
+        assertEquals(null, jdbc.args[5], "현상 설명이 없으면 의미 검색 벡터도 없음");
         assertEquals(null, jdbc.args[2], "빈 불량 유형은 NULL 로");
         assertTrue(trace.get(0).startsWith("findSimilarNcr("));
+    }
+
+    @Test
+    void 현상_설명을_주면_벡터를_넘기고_기록에는_설명만_남긴다() {
+        Capture jdbc = new Capture();
+        List<String> trace = new ArrayList<>();
+        new QualityTools(jdbc, trace, "2026-11-14T10:24:48.942Z", System.nanoTime(), s -> "[0.1,0.2]")
+                .findSimilarNcr("IMM-01", "barrelTemp", null, "온도가 서서히 낮아짐");
+        assertEquals("[0.1,0.2]", jdbc.args[5]);
+        assertTrue(trace.get(0).contains("situation=\"온도가 서서히 낮아짐\"") && trace.get(0).contains("+의미검색"));
+        assertTrue(!trace.get(0).contains("[0.1,0.2]"), "벡터 값은 기록에 남기지 않음");
     }
 }

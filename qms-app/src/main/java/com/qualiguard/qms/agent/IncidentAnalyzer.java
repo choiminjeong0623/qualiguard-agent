@@ -9,6 +9,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -16,12 +18,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.google.genai.metadata.GoogleGenAiUsage;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import com.qualiguard.qms.knowledge.NcrEmbeddingService;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -58,14 +63,63 @@ public class IncidentAnalyzer {
             Integer parentAnalysisId, String decision, String causeCode, Integer confidence, String ncrNo,
             boolean mergedIntoExistingNcr, List<String> anomalyIds, long latencyMs, List<String> toolTrace,
             AnalysisResult result, String error, int attempts, VerifierAgent.Verification verification,
-            String incidentId, Map<String, Object> triage, Map<String, Object> report, List<Map<String, Object>> timeline) {
+            String incidentId, Map<String, Object> triage, Map<String, Object> report, List<Map<String, Object>> timeline,
+            Tokens tokens) {
 
         /** 파이프라인(오케스트레이터)이 사건 번호·분류·작성 결과·단계 기록을 붙인다. */
         public Outcome withPipeline(String incidentId, Map<String, Object> triage, Map<String, Object> report,
                 List<Map<String, Object>> timeline) {
             return new Outcome(analysisId, equipmentId, triggerType, asOfShot, parentAnalysisId, decision, causeCode,
                     confidence, ncrNo, mergedIntoExistingNcr, anomalyIds, latencyMs, toolTrace, result, error, attempts,
-                    verification, incidentId, triage, report, timeline);
+                    verification, incidentId, triage, report, timeline, tokens);
+        }
+    }
+
+    /** 응답이 알려 준 토큰 수 (입력·출력·생각). 모르면 null. 재분석·형식 수정까지 한 사건의 LLM 호출을 모두 더한다. */
+    public record Tokens(Integer prompt, Integer output, Integer thought) {
+
+        static final String TRACE_PREFIX = "  ↳ 토큰: ";
+        private static final Pattern TRACE = Pattern.compile("입력 (\\d+|-), 출력 (\\d+|-), 생각 (\\d+|-)");
+
+        static Tokens of(ChatResponse r) {
+            if (r == null || r.getMetadata() == null || r.getMetadata().getUsage() == null) {
+                return new Tokens(null, null, null);
+            }
+            var u = r.getMetadata().getUsage();
+            Integer thought = u instanceof GoogleGenAiUsage g ? g.getThoughtsTokenCount() : null;
+            return new Tokens(u.getPromptTokens(), u.getCompletionTokens(), thought);
+        }
+
+        /** 도구 기록에 한 줄로 남긴다 ("  ↳" 로 시작하는 줄은 도구 호출로 세지 않는다). */
+        String traceLine() {
+            return TRACE_PREFIX + "입력 " + str(prompt) + ", 출력 " + str(output) + ", 생각 " + str(thought);
+        }
+
+        /** 도구 기록의 토큰 줄을 모두 더한다. 줄이 없으면 전부 null. */
+        static Tokens fromTrace(List<String> trace) {
+            Integer p = null, o = null, t = null;
+            if (trace != null) {
+                for (String line : List.copyOf(trace)) {
+                    if (line == null || !line.startsWith(TRACE_PREFIX)) {
+                        continue;
+                    }
+                    Matcher m = TRACE.matcher(line);
+                    if (m.find()) {
+                        p = add(p, m.group(1));
+                        o = add(o, m.group(2));
+                        t = add(t, m.group(3));
+                    }
+                }
+            }
+            return new Tokens(p, o, t);
+        }
+
+        private static Integer add(Integer sum, String v) {
+            return "-".equals(v) ? sum : (sum == null ? 0 : sum) + Integer.parseInt(v);
+        }
+
+        private static String str(Integer v) {
+            return v == null ? "-" : v.toString();
         }
     }
 
@@ -82,17 +136,20 @@ public class IncidentAnalyzer {
     private final AgentProperties props;
     private final ObjectProvider<ChatClient.Builder> chatClientBuilder;
     private final String model;
+    private final NcrEmbeddingService embeddings;
     private volatile ChatClient chatClient;
 
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
             AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
-            @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model) {
+            @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model,
+            NcrEmbeddingService embeddings) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.tx = tx;
         this.props = props;
         this.chatClientBuilder = chatClientBuilder;
         this.model = model;
+        this.embeddings = embeddings;
     }
 
     /** 가장 오래된 미처리 경보 (같은 경보로 2번 실패했으면 건너뛴다). */
@@ -318,7 +375,8 @@ public class IncidentAnalyzer {
                 incidentId, pipelineJson);
         log.error("[에이전트] 분석 실패 — {} {} 경보 {}건: {}", job.equipmentId(), job.trigger(), job.anomalyIds().size(), error);
         return new Outcome(id, job.equipmentId(), job.trigger(), job.asOfShot(), job.parentId(), "FAILED", null, null,
-                null, false, job.anomalyIds(), ms, trace, null, error, attempts, null, null, null, null, null);
+                null, false, job.anomalyIds(), ms, trace, null, error, attempts, null, null, null, null, null,
+                Tokens.fromTrace(trace));
     }
 
     /**
@@ -395,7 +453,7 @@ public class IncidentAnalyzer {
                     null, attemptCount, verified, incidentId, pipelineJson);
             return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
                     causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, attemptCount, verified,
-                    null, null, null, null);
+                    null, null, null, null, Tokens.fromTrace(trace));
         });
 
         log.info("[에이전트] {} {} (shot {}) 경보 {}건 → {} / {} (확신도 {}) {}{} — 분석 {}회, 검증 {}, 도구 {}회, {}ms",
@@ -413,19 +471,22 @@ public class IncidentAnalyzer {
         ChatResponse response = chatClient().prompt()
                 .system(AgentPrompts.SYSTEM)
                 .user(userPrompt)
-                .tools(new QualityTools(jdbc, trace, asOf, t0))
+                .tools(new QualityTools(jdbc, trace, asOf, t0, embeddings::queryVector))
                 .call()
                 .chatResponse();
+        trace.add(Tokens.of(response).traceLine());
         String text = allText(response);
         AnalysisResult parsed = parseResult(text);
         if (parsed == null) {
             // 형식만 다시 요청 (도구 없이 1회 — 조사를 반복하지 않으므로 비용이 적다)
             trace.add("repairJsonFormat()");
-            String repaired = allText(chatClient().prompt()
+            ChatResponse repairResponse = chatClient().prompt()
                     .system(AgentPrompts.REPAIR)
                     .user(text)
                     .call()
-                    .chatResponse());
+                    .chatResponse();
+            trace.add(Tokens.of(repairResponse).traceLine());
+            String repaired = allText(repairResponse);
             parsed = parseResult(repaired);
             if (parsed == null) {
                 throw new IllegalStateException("분석 결과를 JSON 으로 읽지 못함. 응답 앞부분: " + preview(text));
@@ -565,19 +626,21 @@ public class IncidentAnalyzer {
     private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,
             String resultJson, List<String> trace, long ms, Integer ncrId, String error, int attempts,
             VerifierAgent.Verification verification, String incidentId, String pipelineJson) {
+        Tokens tokens = Tokens.fromTrace(trace);
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
                     confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag,
                     trigger_type, as_of, as_of_shot, parent_analysis_id, attempts, verify_status, verify_json,
-                    incident_id, pipeline_json)
+                    incident_id, pipeline_json, prompt_tokens, output_tokens, thought_tokens)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, Integer.class,
                 job.equipmentId(), job.seedAnomalyId(), String.join(",", job.anomalyIds()), decision, causeCode,
                 confidence, resultJson, String.join("\n", trace), model, (int) ms, ncrId,
                 error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
                 job.parentId(), attempts, verification == null ? null : verification.status(),
-                verification == null ? null : objectMapper.writeValueAsString(verification), incidentId, pipelineJson);
+                verification == null ? null : objectMapper.writeValueAsString(verification), incidentId, pipelineJson,
+                tokens.prompt(), tokens.output(), tokens.thought());
     }
 
     @SuppressWarnings("unchecked")

@@ -190,7 +190,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_FindSimilarNcr
     @SensorKeys   VARCHAR(200) = NULL,     -- 쉼표 구분
     @DefectType   VARCHAR(20)  = NULL,
     @Top          INT          = 5,
-    @AsOf         DATETIMEOFFSET(3) = NULL  -- 이 시점까지 승인된 사례만 (지난 경보 분석 시 미래 지식 차단)
+    @AsOf         DATETIMEOFFSET(3) = NULL, -- 이 시점까지 승인된 사례만 (지난 경보 분석 시 미래 지식 차단)
+    @QueryVector  NVARCHAR(MAX)     = NULL  -- 현재 현상 설명의 임베딩 '[...]' (768차원). 있으면 의미 유사도를 점수에 더함 (ADR-014)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -205,6 +206,9 @@ BEGIN
         SELECT n.ncr_no, n.equipment_id, n.defect_type, n.related_sensors, n.title, n.phenomenon,
                n.root_cause, n.evidence, n.action_taken, n.occurred_at, n.cause_code,
                CASE WHEN n.created_by = 'AGENT' THEN N'AI 초안을 사람이 승인' ELSE N'사람이 작성' END AS source,
+               CASE WHEN @QueryVector IS NULL OR OBJECT_ID(N'dbo.ncr_embedding', N'U') IS NULL THEN NULL
+                    ELSE (SELECT 1 - VECTOR_DISTANCE('cosine', e.embedding, CAST(@QueryVector AS VECTOR(768)))
+                          FROM dbo.ncr_embedding AS e WHERE e.ncr_id = n.ncr_id) END AS semantic_similarity,
                (SELECT COUNT(*)
                   FROM STRING_SPLIT(ISNULL(n.related_sensors, ''), ',') AS s
                   JOIN @keys AS q ON q.k = LTRIM(RTRIM(s.value)))                     AS sensor_match,
@@ -218,9 +222,11 @@ BEGIN
            ncr_no, equipment_id, defect_type, related_sensors, title, phenomenon,
            root_cause, evidence, action_taken, occurred_at, cause_code, source,
            sensor_match, defect_match, same_equipment,
-           sensor_match * 2 + defect_match * 2 + same_equipment AS score
+           CAST(ROUND(semantic_similarity, 3) AS DECIMAL(5, 3)) AS semantic_similarity,
+           sensor_match * 2 + defect_match * 2 + same_equipment
+             + CASE WHEN semantic_similarity >= 0.6 THEN CAST(ROUND((semantic_similarity - 0.6) * 10, 0) AS INT) ELSE 0 END AS score
     FROM scored
-    WHERE sensor_match > 0 OR defect_match = 1
+    WHERE sensor_match > 0 OR defect_match = 1 OR semantic_similarity >= 0.75
     ORDER BY score DESC, occurred_at DESC;
 END;
 GO

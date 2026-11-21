@@ -17,7 +17,7 @@
 | [ADR-011](ADR-011-qms-login.md) | QMS 로그인: DB 사용자 + BCrypt, 역할 두 가지, 에이전트 API 는 로컬 도구용으로 열어 둠 | 채택 |
 | [ADR-012](ADR-012-mes-erp-ack.md) | MES/ERP 응답: 단계 번호로 순서를 지키고, 응답 ID 로 중복을 거르고, 실패한 시스템에만 다시 보낸다 | 채택 |
 | [ADR-013](ADR-013-mcp-server.md) | 에이전트 도구를 MCP 서버로도 노출한다 — 기준 시점은 기준 경보로만 | 채택 |
-| ADR-014 | 유사 사례 의미 검색 (SQL Server VECTOR) — 브랜치 `feat/ncr-vector-search` 에만 있음 | 보류 ([향후 계획](../future-work.md)) |
+| [ADR-014](ADR-014-ncr-vector-search.md) | 유사 사례 의미 검색: SQL Server 2025 VECTOR + Gemini 임베딩, 키워드 점수에 더하는 방식 | 채택 |
 | [ADR-015](ADR-015-mqtt-device-auth.md) | MQTT 장비 인증과 토픽별 접근 권한 — 사용자명 = 설비 ID | 채택 |
 | [ADR-016](ADR-016-multi-agent-pipeline.md) | 역할 분리형 멀티 에이전트 — 분류·분석·검증·작성·오케스트레이터를 Kafka 이벤트로 잇는다 | 채택 |
 | [ADR-017](ADR-017-telemetry-nulls-serial.md) | 장비 데이터 결측 허용과 시리얼 번호 비고유 — 필수는 messageId·lineId·equipmentId·ts 뿐, 늦게 온 shot 은 저장만 | 채택 |
