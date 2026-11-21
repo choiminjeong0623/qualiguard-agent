@@ -130,6 +130,11 @@ class AgentPipelineTest {
     }
 
     static Wired wire(String writerMode, ReportWriterAgent.LocalModel local) {
+        return wire(writerMode, local, null);
+    }
+
+    /** actionEvents 가 null 이 아니면 조치 단계를 켜고, 조치 에이전트 대신 받은 이벤트를 모은다. */
+    static Wired wire(String writerMode, ReportWriterAgent.LocalModel local, List<AgentEvent> actionEvents) {
         var analyzer = new FakeAnalyzer();
         var json = JsonMapper.builder().build();
         var router = new AgentEventRouter();
@@ -139,7 +144,10 @@ class AgentPipelineTest {
         new VerifierStage(new VerifierAgent(new NoFacts()), analyzer, store, bus, router);
         new ReportWriterAgent(new ReportWriterAgent.Settings(writerMode, "http://x", "m", 5), local, null, json, store,
                 bus, router);
-        new IncidentOrchestrator(analyzer, store, bus, json, 1, router);
+        new IncidentOrchestrator(analyzer, store, bus, json, 1, router, actionEvents != null);
+        if (actionEvents != null) {
+            router.register(AgentTopics.ACTION_REQUESTED, actionEvents::add);
+        }
         return new Wired(analyzer, new AgentPipeline(new TriageAgent(analyzer, store, bus), store, Duration.ofSeconds(5)),
                 store);
     }
@@ -253,5 +261,23 @@ class AgentPipelineTest {
         var multi = TriageAgent.classify("ALARM", List.of(Map.of("rule_code", "INDIVIDUAL", "sensor_key", "cushion"),
                 Map.of("rule_code", "INDIVIDUAL", "sensor_key", "injectionPressure")));
         assertEquals("MEDIUM", multi.severity(), "여러 센서 동시 경보는 한 단계 올린다");
+    }
+
+    @Test
+    void 조치_단계가_켜져_있으면_결과_저장_뒤_조치_에이전트에게_요약을_넘긴다() {
+        List<AgentEvent> events = new ArrayList<>();
+        Wired w = wire("analysis-text", null, events);
+        w.analyzer.answers.add(draft(80, List.of("온도 224.1℃", "불량률 6%", "전류 +1.8σ")));
+        w.pipeline.analyzeAndWait("a-1", false, null);
+        assertEquals(1, events.size());
+        var d = events.get(0).data();
+        assertEquals("HEATER_DEGRADATION", d.get("causeCode"));
+        assertEquals("MEDIUM", d.get("severity"));
+        assertEquals(true, d.get("verified"));
+
+        // 평가 재생(tag 있음)은 조치를 요청하지 않는다
+        w.analyzer.answers.add(draft(80, List.of("온도 224.1℃", "불량률 6%", "전류 +1.8σ")));
+        w.pipeline.analyzeAndWait("a-1", true, "t1");
+        assertEquals(1, events.size());
     }
 }

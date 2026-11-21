@@ -31,6 +31,10 @@ public class AgentPipeline {
         return triage.openRecheck(parentAnalysisId, asOfShot);
     }
 
+    public Incident startRetry(int parentAnalysisId, String excludedCause) {
+        return triage.openRetry(parentAnalysisId, excludedCause);
+    }
+
     public IncidentAnalyzer.Outcome analyzeAndWait(String seedAnomalyId, boolean replay, String runTag) {
         return await(startAlarm(seedAnomalyId, replay, runTag));
     }

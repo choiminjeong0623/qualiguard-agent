@@ -84,6 +84,12 @@ qg:
     pipeline:
       transport: kafka                # 에이전트 사이 전달: kafka(agent.incident.* 토픽) / direct(같은 스레드, Kafka 없이 시험)
       wait-seconds: 600               # API 가 사건 결과를 기다리는 최대 시간 (넘어도 파이프라인은 계속 진행)
+    action:
+      enabled: false                  # true 면 분석 뒤 조치 에이전트가 위험도에 따라 자동 실행·승인 대기를 정함 (가상 실행)
+      max-auto-per-day: 3             # 설비별 24시간 자동 실행 한도 (넘으면 사람 승인)
+      check-shots: 40                 # 실행 뒤 이 shot 수가 쌓이면 조치 전후를 비교해 효과 판정
+      max-attempts: 2                 # 효과 없을 때 다른 원인으로 다시 해 보는 최대 조치 수 (넘으면 사람에게)
+      poll-ms: 5000
     writer:
       mode: analysis-text             # 초안 문장: analysis-text(분석 문장 그대로) / local(Ollama) / template(근거 표만)
       ollama-url: http://localhost:11434

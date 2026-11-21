@@ -1,0 +1,94 @@
+/* 에이전트 조치 화면 — 백엔드: /api/qms/actions (자동 처리 · 승인 대기 · 효과 검증 결과) */
+(function ($) {
+  'use strict';
+
+  var API = '/api/qms/actions';
+  var ACTION_LABEL = {
+    HEATER_TEMP_COMPENSATE: '히터 설정 온도 +5℃', COOLING_FLOW_INCREASE: '냉각수 유량 +10%',
+    CHECK_RING_REPLACE: '라인 정지·체크 링 교체', SENSOR_RECALIBRATE: '센서 점검·교정',
+    MATERIAL_LOT_HOLD: '원재료 로트 보류', EXTRA_INSPECTION: '50 shot 전수 재검사'
+  };
+  var STATUS_LABEL = {
+    WAITING_APPROVAL: '승인 대기', EXECUTED: '효과 확인 중', RESOLVED: '해소', NOT_RESOLVED: '효과 없음 · 재분석',
+    ESCALATED: '사람 확인 필요', REJECTED: '반려'
+  };
+  var STATUS_COLOR = {
+    WAITING_APPROVAL: 'bg-yellow-lt', EXECUTED: 'bg-blue-lt', RESOLVED: 'bg-green-lt', NOT_RESOLVED: 'bg-orange-lt',
+    ESCALATED: 'bg-red-lt', REJECTED: 'bg-secondary-lt'
+  };
+  var RISK_COLOR = { LOW: 'bg-green-lt', MEDIUM: 'bg-yellow-lt', HIGH: 'bg-red-lt' };
+  var state = { rows: [], filter: '', me: null };
+
+  function csrf() {
+    var c = document.cookie.split('; ').find(function (x) { return x.indexOf('XSRF-TOKEN=') === 0; });
+    return c ? decodeURIComponent(c.split('=')[1]) : '';
+  }
+  $.ajaxSetup({ beforeSend: function (xhr, s) { if (s.type !== 'GET') { xhr.setRequestHeader('X-XSRF-TOKEN', csrf()); } } });
+  $(document).ajaxError(function (e, xhr) { if (xhr.status === 401) { location.href = 'login.html'; } });
+  function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+  function badge(text, color) { return '<span class="badge ' + color + '">' + esc(text) + '</span>'; }
+  function canWrite() { return state.me && state.me.role === 'REVIEWER'; }
+
+  function matches(r, f) {
+    if (!f) { return true; }
+    if (f === 'AUTO') { return r.mode === 'AUTO'; }
+    if (f === 'ESCALATED') { return r.status === 'ESCALATED' || r.status === 'NOT_RESOLVED'; }
+    return r.status === f;
+  }
+
+  function load() {
+    $.getJSON(API, { top: 100 }).done(function (rows) {
+      state.rows = rows;
+      $('[data-count]').each(function () {
+        var f = $(this).attr('data-count');
+        $(this).text(rows.filter(function (r) { return matches(r, f); }).length);
+      });
+      draw();
+    }).fail(function (xhr) { $('#msg').text('불러오기 실패 (' + xhr.status + ')').attr('class', 'msg err'); });
+  }
+
+  function draw() {
+    var rows = state.rows.filter(function (r) { return matches(r, state.filter); });
+    if (!rows.length) { $('#rows').html('<tr><td colspan="8" class="text-secondary">조치가 없습니다.</td></tr>'); return; }
+    $('#rows').html(rows.map(function (r) {
+      var buttons = r.status === 'WAITING_APPROVAL' && canWrite()
+        ? '<button class="btn btn-sm btn-primary" data-act="approve" data-id="' + r.action_id + '">승인·실행</button> '
+          + '<button class="btn btn-sm btn-outline-danger" data-act="reject" data-id="' + r.action_id + '">반려</button>'
+        : '';
+      var note = (r.reasons ? '<div class="text-secondary small">' + esc(r.reasons) + '</div>' : '')
+        + (r.effect_detail ? '<div class="small">' + esc(r.effect_detail) + '</div>' : '');
+      return '<tr><td>' + r.action_id + (r.attempt > 1 ? '<div class="small text-secondary">' + r.attempt + '번째</div>' : '')
+        + '</td><td>' + esc(r.equipment_id) + '</td>'
+        + '<td>' + esc(r.cause_code) + ' → ' + esc(ACTION_LABEL[r.action_code] || r.action_code) + '</td>'
+        + '<td>' + badge(r.risk, RISK_COLOR[r.risk] || '') + '</td>'
+        + '<td>' + (r.mode === 'AUTO' ? '에이전트 자동' : '사람 승인' + (r.decided_by ? ' · ' + esc(r.decided_by) : '')) + '</td>'
+        + '<td>' + badge(STATUS_LABEL[r.status] || r.status, STATUS_COLOR[r.status] || '') + '</td>'
+        + '<td>' + note + '</td><td class="text-nowrap">' + buttons + '</td></tr>';
+    }).join(''));
+  }
+
+  $('#tiles').on('click', '.tab', function () {
+    $('#tiles .tab').removeClass('active');
+    $(this).addClass('active');
+    state.filter = $(this).attr('data-filter');
+    draw();
+  });
+
+  $('#rows').on('click', 'button[data-act]', function () {
+    var id = $(this).attr('data-id'), act = $(this).attr('data-act');
+    $.ajax({ method: 'POST', url: API + '/' + id + '/' + act }).done(function () {
+      $('#msg').text('조치 ' + id + (act === 'approve' ? ' 승인 · 실행 표시했습니다. 40 shot 뒤 효과를 확인합니다.' : ' 반려했습니다.'))
+        .attr('class', 'msg ok');
+      load();
+    }).fail(function (xhr) {
+      $('#msg').text((xhr.responseJSON && xhr.responseJSON.error) || '실패 (' + xhr.status + ')').attr('class', 'msg err');
+    });
+  });
+
+  $.getJSON('/api/qms/me').done(function (me) {
+    state.me = me;
+    $('#me').text(me.displayName + (me.role === 'REVIEWER' ? ' (품질 담당자)' : ' (조회 전용)'));
+    load();
+    setInterval(load, 10000);   // 효과 검증은 서버가 주기적으로 하므로 화면도 10초마다 새로 읽는다
+  });
+}(jQuery));
