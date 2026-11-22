@@ -26,6 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.qualiguard.qms.agent.hold.JudgementHoldPolicy;
 import com.qualiguard.qms.knowledge.NcrEmbeddingService;
 
 import tools.jackson.databind.ObjectMapper;
@@ -45,6 +46,7 @@ import tools.jackson.databind.ObjectMapper;
  *    - SENSOR_CHECK → 경보 종결(DISMISSED), 측정 계통 점검 권고는 분석 기록에 남김
  *    - OBSERVE      → 경보 종결(DISMISSED)
  *    모든 분석은 판단 근거·도구 호출 순서·소요 시간과 함께 agent_analysis 에 기록한다.
+ * 4) 판단 보류: 재확인 상한까지 관찰이거나, 검증 지적이 남은 채 경보를 닫는 경우 사람 검토 대기로 표시 (JudgementHoldPolicy)
  */
 @Service
 public class IncidentAnalyzer {
@@ -458,6 +460,7 @@ public class IncidentAnalyzer {
             }
             Integer analysisId = insertAnalysis(job, decision, causeCode, confidence, resultJson, trace, ms, ncrId,
                     null, attemptCount, verified, incidentId, pipelineJson);
+            markHoldIfNeeded(analysisId, job, decision, verified);
             return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
                     causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, attemptCount, verified,
                     null, null, null, null, Tokens.fromTrace(trace));
@@ -634,6 +637,22 @@ public class IncidentAnalyzer {
         args.addAll(anomalyIds);
         jdbc.update("UPDATE dbo.anomaly_event SET status = ? WHERE anomaly_id IN (" + placeholders + ")",
                 args.toArray());
+    }
+
+    /** 판단 보류 규칙(JudgementHoldPolicy)에 걸리면 사람 검토 대기로 표시한다 (로드맵 F2). */
+    private void markHoldIfNeeded(Integer analysisId, Job job, String decision, VerifierAgent.Verification verified) {
+        Object count = job.recheckInfo() == null ? null : job.recheckInfo().get("recheckCount");
+        int recheckCount = count instanceof Number n ? n.intValue() : 0;
+        JudgementHoldPolicy.evaluate(job.trigger(), decision, recheckCount, props.recheckMax(),
+                verified == null ? null : verified.status()).ifPresent(hold -> {
+                    jdbc.update("""
+                            UPDATE dbo.agent_analysis
+                            SET hold_status = 'PENDING', hold_reason = ?, hold_detail = ?
+                            WHERE analysis_id = ?
+                            """, hold.reason(), hold.detail(), analysisId);
+                    log.warn("[에이전트] {} 분석 {} 판단 보류 → 사람 검토 ({}): {}", job.equipmentId(), analysisId,
+                            hold.reason(), hold.detail());
+                });
     }
 
     private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,
