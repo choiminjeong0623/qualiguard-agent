@@ -23,7 +23,7 @@ public class EquipmentState {
 
     /** 실시간 판정에 쓴 마지막 shot 의 시각(epoch ms). 이보다 앞선 ts 로 늦게 온 shot 은 판정하지 않는다 */
     public Long lastTsMillis;
-    /** 늦게 와서 판정을 건너뛴 shot 수 */
+    /** 늦게 온 shot 수 (시간 순서에 끼워 다시 판정한 것과 범위 밖이라 순서 무관 규칙만 본 것 모두) */
     public long lateCount;
 
     /** 검사 결과가 있었던 shot 수 (검사 결과가 없는 shot 은 불량률 집계에서 뺀다) */
@@ -49,6 +49,8 @@ public class EquipmentState {
         public double sigma;
         /** 최근 값 (최대 30개) */
         public List<Double> recent = new ArrayList<>();
+        /** recent 와 같은 순서의 shot 시각(epoch ms, 모르면 null). 늦게 온 shot 을 시간 순서에 끼워 다시 판정할 때 씀 */
+        public List<Long> recentTs = new ArrayList<>();
         /** 진행 중인 부분군 (5개 모이면 판정) */
         public List<Double> subgroup = new ArrayList<>();
         /** 부분군 평균이 연속으로 상한/하한을 벗어난 횟수 */

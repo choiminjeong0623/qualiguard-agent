@@ -25,8 +25,8 @@ import java.util.UUID;
  *
  * 전송 이상(ADR-017):
  * - 중복(같은 messageId)은 최근 200개 안에서 한 번만 반영한다.
- * - 늦게 온 shot(그 설비에서 이미 판정한 shot 보다 ts 가 앞섬)은 값 정리만 하고 관리도·불량률·기준값에 넣지 않는다.
- *   부분군·연속 판정은 시간 순서를 전제로 하므로, 순서가 어긋난 값을 넣으면 판정이 흔들린다. 저장은 하류에서 그대로 한다.
+ * - 늦게 온 shot(그 설비에서 이미 판정한 shot 보다 ts 가 앞섬)은 실시간 상태(부분군·연속 횟수·기준값)를 건드리지 않고
+ *   따로 다시 판정한다(ADR-019, processLate). 부분군·연속 판정은 시간 순서를 전제로 하므로 실시간 흐름에는 넣지 않는다.
  * - shot 이 통째로 빠져 shotNo 가 건너뛰어도 받은 shot 만으로 판정한다(빈 shot 을 채우지 않음).
  * - 센서 값이 OUTAGE_SHOTS 번 연속 비면 '센서 끊김'으로 알린다(경보가 아니라 결과의 outageStarted, 회복은 outageEnded).
  */
@@ -67,34 +67,28 @@ public class SpcEngine {
      * 발생한 이상 목록, 이번 shot 에서 끊김이 시작된·회복된 센서.
      */
     public record Result(boolean duplicate, boolean late, Map<String, Double> cleanValues, List<String> invalidSensors,
-            List<Anomaly> anomalies, List<String> outageStarted, List<String> outageEnded) {
+            List<Anomaly> anomalies, List<String> outageStarted, List<String> outageEnded, String lateStatus) {
     }
+
+    /** 늦게 온 shot 재판정 결과 (CleanShot.lateStatus, process_shot.late_status). */
+    public static final String LATE_REJUDGED = "REJUDGED";
+    public static final String LATE_OUT_OF_WINDOW = "OUT_OF_WINDOW";
 
     public Result process(EquipmentState s, Shot shot) {
         // ── 중복 제거 (MQTT QoS 1 재전송, 브리지 재시작 후 중복 등) ──
         if (s.recentMessageIds.contains(shot.messageId())) {
-            return new Result(true, false, Map.of(), List.of(), List.of(), List.of(), List.of());
+            return new Result(true, false, Map.of(), List.of(), List.of(), List.of(), List.of(), null);
         }
         s.recentMessageIds.add(shot.messageId());
         trim(s.recentMessageIds, DEDUP_KEEP);
 
-        Map<String, Double> clean = new LinkedHashMap<>();
-        List<String> invalid = new ArrayList<>();
-
-        // ── 늦게 온 shot: 값 정리만 하고 판정 상태는 건드리지 않는다 ──
+        // ── 늦게 온 shot: 실시간 판정 상태는 건드리지 않고 따로 다시 판정한다 ──
         Long tsMillis = epochMillis(shot.ts());
         if (tsMillis != null && s.lastTsMillis != null && tsMillis < s.lastTsMillis) {
-            s.lateCount++;
-            for (SensorCatalog.Sensor def : sensors.values()) {
-                Double v = shot.values().get(def.key());
-                if (v == null || v.isNaN() || v < def.min() || v > def.max()) {
-                    invalid.add(def.key());
-                } else {
-                    clean.put(def.key(), v);
-                }
-            }
-            return new Result(false, true, clean, invalid, List.of(), List.of(), List.of());
+            return processLate(s, shot, tsMillis);
         }
+        Map<String, Double> clean = new LinkedHashMap<>();
+        List<String> invalid = new ArrayList<>();
         if (tsMillis != null) {
             s.lastTsMillis = tsMillis;
         }
@@ -125,8 +119,7 @@ public class SpcEngine {
                 continue;
             }
             clean.put(def.key(), v);
-            ss.recent.add(v);
-            trim(ss.recent, RECENT_KEEP);
+            addRecent(ss, v, tsMillis);
 
             if (!ss.ready) {
                 ss.n++;
@@ -179,7 +172,132 @@ public class SpcEngine {
             }
         }
 
-        // ── 검사 결과(불량률) 처리: 검사 결과가 없는 shot 은 OK 로 세지 않고 건너뛴다 ──
+        judgeInspection(s, shot, pending);
+
+        out.addAll(emit(s, shot, pending, false));
+        return new Result(false, false, clean, invalid, out, outageStarted, outageEnded, null);
+    }
+
+    /**
+     * 늦게 온 shot 다시 판정 (ADR-019). 실시간 상태(부분군·연속 횟수·기준값·최근 값)는 바꾸지 않는다.
+     *
+     * - 개별값(INDIVIDUAL)은 순서와 무관하므로 언제 와도 판정한다.
+     * - 부분군 규칙(XBAR·S_CHART)은 보관 중인 최근 30 shot 안이면 그 값을 시간 순서 자리에 끼워 넣고,
+     *   그 값을 포함하는 5 shot 구간마다 바로 앞·뒤 5 shot 구간과 함께 '연속 2회'를 다시 본다 (REJUDGED).
+     *   그보다 더 늦으면 순서를 맞출 이웃 값이 없어 부분군 규칙은 보지 않는다 (OUT_OF_WINDOW).
+     * - 불량률(P_CHART)은 50 shot 구간의 개수 비율이라 순서와 무관하므로 지금 구간에 넣는다(불량을 놓치지 않게).
+     *   단 기준 불량률을 정하는 처음 100 shot 에는 넣지 않는다.
+     * - 경보는 실시간 경보와 같은 반복 억제(규칙·센서별 100 shot)를 거친다 → 이미 낸 경보를 다시 내지 않는다.
+     */
+    private Result processLate(EquipmentState s, Shot shot, long tsMillis) {
+        s.lateCount++;
+        Map<String, Double> clean = new LinkedHashMap<>();
+        List<String> invalid = new ArrayList<>();
+        List<Pending> pending = new ArrayList<>();
+        boolean inWindow = false;
+        for (SensorCatalog.Sensor def : sensors.values()) {
+            Double v = shot.values().get(def.key());
+            if (v == null || v.isNaN() || v < def.min() || v > def.max()) {
+                invalid.add(def.key());
+                continue;
+            }
+            clean.put(def.key(), v);
+            EquipmentState.SensorState ss = s.sensors.get(def.key());
+            if (ss == null) {
+                continue;
+            }
+            int pos = positionByTime(ss, tsMillis);
+            inWindow |= pos >= 0;
+            if (!ss.ready) {
+                continue;                               // 기준 구간 중: 순서가 어긋난 값으로 기준값을 만들지 않는다
+            }
+            double lo = ss.mean - INDIVIDUAL_K * ss.sigma;
+            double hi = ss.mean + INDIVIDUAL_K * ss.sigma;
+            if (v < lo || v > hi) {
+                pending.add(new Pending("INDIVIDUAL", def, v, lo, hi));
+            }
+            if (pos >= 0) {
+                List<Double> merged = new ArrayList<>(ss.recent);
+                merged.add(pos, v);
+                rejudgeSubgroups(ss, def, merged, pos, pending);
+            }
+        }
+        if (s.baselineNgRate >= 0) {
+            judgeInspection(s, shot, pending);          // 기준 불량률이 정해진 뒤에만 (기준 구간에는 넣지 않음)
+        }
+        List<Anomaly> out = emit(s, shot, pending, true);
+        return new Result(false, true, clean, invalid, out, List.of(), List.of(),
+                inWindow ? LATE_REJUDGED : LATE_OUT_OF_WINDOW);
+    }
+
+    /**
+     * 늦은 값이 들어갈 시간 순서 자리 (최근 값 목록의 몇 번째). 순서를 맞출 수 없으면 -1:
+     * 최근 값의 시각을 모르는 것이 섞여 있거나(이전 버전 상태), 보관한 30 shot 보다도 더 앞선 값일 때.
+     */
+    static int positionByTime(EquipmentState.SensorState ss, long tsMillis) {
+        List<Long> ts = ss.recentTs;
+        if (ts.isEmpty() || ts.size() != ss.recent.size()) {
+            return -1;
+        }
+        int pos = 0;
+        for (Long t : ts) {
+            if (t == null) {
+                return -1;
+            }
+            if (t <= tsMillis) {
+                pos++;
+            }
+        }
+        if (pos == 0 && ts.size() >= RECENT_KEEP) {
+            return -1;
+        }
+        return pos;
+    }
+
+    /** 늦은 값(merged 의 pos 번째)을 포함하는 5 shot 구간과 그 바로 앞·뒤 구간으로 '연속 2회'를 다시 본다. */
+    private static void rejudgeSubgroups(EquipmentState.SensorState ss, SensorCatalog.Sensor def, List<Double> merged,
+            int pos, List<Pending> pending) {
+        double xLo = ss.mean - XBAR_K * ss.sigma / Math.sqrt(SUBGROUP_SIZE);
+        double xHi = ss.mean + XBAR_K * ss.sigma / Math.sqrt(SUBGROUP_SIZE);
+        double sUcl = S_CHART_B6 * ss.sigma;
+        int n = merged.size();
+        boolean xbar = false;
+        boolean sChart = false;
+        for (int i = Math.max(0, pos - SUBGROUP_SIZE + 1); i <= Math.min(pos, n - SUBGROUP_SIZE); i++) {
+            List<Double> w = merged.subList(i, i + SUBGROUP_SIZE);
+            double m = mean(w);
+            double sd = stdev(w, m);
+            for (int j : new int[] { i - SUBGROUP_SIZE, i + SUBGROUP_SIZE }) {
+                if (j < 0 || j + SUBGROUP_SIZE > n) {
+                    continue;
+                }
+                List<Double> nb = merged.subList(j, j + SUBGROUP_SIZE);
+                double nm = mean(nb);
+                if (!xbar && ((m > xHi && nm > xHi) || (m < xLo && nm < xLo))) {
+                    pending.add(new Pending("XBAR", def, m, xLo, xHi));
+                    xbar = true;
+                }
+                if (!sChart && sd > sUcl && stdev(nb, nm) > sUcl) {
+                    pending.add(new Pending("S_CHART", def, sd, 0, sUcl));
+                    sChart = true;
+                }
+            }
+        }
+    }
+
+    /** 최근 값과 그 시각을 같은 순서로 보관한다. 이전 버전 상태라 시각 목록이 없으면 '모름(null)'으로 맞춘다. */
+    private static void addRecent(EquipmentState.SensorState ss, double v, Long tsMillis) {
+        if (ss.recentTs.size() != ss.recent.size()) {
+            ss.recentTs = new ArrayList<>(java.util.Collections.nCopies(ss.recent.size(), (Long) null));
+        }
+        ss.recent.add(v);
+        ss.recentTs.add(tsMillis);
+        trim(ss.recent, RECENT_KEEP);
+        trim(ss.recentTs, RECENT_KEEP);
+    }
+
+    /** 검사 결과(불량률) 처리: 검사 결과가 없는 shot 은 OK 로 세지 않고 건너뛴다. */
+    private static void judgeInspection(EquipmentState s, Shot shot, List<Pending> pending) {
         if (!shot.inspected()) {
             // 불량률 집계 없음
         } else if (s.baselineNgRate < 0) {
@@ -205,11 +323,14 @@ public class SpcEngine {
                 }
             }
         }
+    }
 
-        // ── 경보 생성 (반복 억제 적용) ──
+    /** 경보 생성 (반복 억제 적용). 늦게 온 shot 은 마지막 shot 번호를 바꾸지 않는다. */
+    private List<Anomaly> emit(EquipmentState s, Shot shot, List<Pending> pending, boolean late) {
+        List<Anomaly> out = new ArrayList<>();
         boolean estimated = shot.shotNo() == null;
         long shotNo = estimated ? (s.lastShotNo == null ? s.count : s.lastShotNo) : shot.shotNo();
-        if (!estimated) {
+        if (!estimated && !late) {
             s.lastShotNo = shot.shotNo();
         }
         for (Pending p : pending) {
@@ -219,9 +340,9 @@ public class SpcEngine {
                 continue;
             }
             s.lastAlertAt.put(key, s.count);
-            out.add(toAnomaly(s, shot, p, shotNo, estimated));
+            out.add(toAnomaly(s, shot, p, shotNo, estimated, late));
         }
-        return new Result(false, false, clean, invalid, out, outageStarted, outageEnded);
+        return out;
     }
 
     /** ts(ISO-8601) → epoch ms. 시간대가 없으면 UTC 로 보고, 읽을 수 없으면 null (순서 판단 안 함). */
@@ -248,7 +369,8 @@ public class SpcEngine {
     private record Pending(String rule, SensorCatalog.Sensor def, double observed, double lower, double upper) {
     }
 
-    private Anomaly toAnomaly(EquipmentState s, Shot shot, Pending p, long shotNo, boolean shotNoEstimated) {
+    private Anomaly toAnomaly(EquipmentState s, Shot shot, Pending p, long shotNo, boolean shotNoEstimated,
+            boolean late) {
         String sensorKey = p.def == null ? "inspection" : p.def.key();
         String sensorName = p.def == null ? "검사 불량률" : p.def.name();
         String unit = p.def == null ? "ratio" : p.def.unit();
@@ -262,7 +384,8 @@ public class SpcEngine {
                 ss == null ? 0 : round(ss.sigma), round(p.lower), round(p.upper),
                 ss == null ? List.of() : ss.recent.stream().map(SpcEngine::round).toList(),
                 zScores(s), round(recentNgRate(s)), defectCounts(s),
-                describe(shot.equipmentId(), p, sensorName, unit), shotNoEstimated);
+                (late ? "[늦게 도착한 shot 재판정] " : "") + describe(shot.equipmentId(), p, sensorName, unit),
+                shotNoEstimated, late);
     }
 
     /** 모든 센서의 최근 5 shot 평균이 기준 평균에서 몇 σ(평균의 표준오차 기준) 떨어져 있는지. */

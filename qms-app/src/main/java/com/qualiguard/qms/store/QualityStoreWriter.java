@@ -38,10 +38,10 @@ public class QualityStoreWriter {
             INSERT INTO dbo.process_shot
                 (message_id, line_id, equipment_id, shot_no, shot_ts,
                  mold_temp, barrel_temp, injection_pressure, holding_pressure, cushion, cycle_time, motor_current,
-                 inspection_result, defect_type, invalid_sensors, serial_no, arrival_late)
+                 inspection_result, defect_type, invalid_sensors, serial_no, arrival_late, late_status)
             SELECT ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)),
                    ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?
+                   ?, ?, ?, ?, ?, ?
             WHERE NOT EXISTS (SELECT 1 FROM dbo.process_shot WHERE message_id = ?)
             """;
 
@@ -87,7 +87,7 @@ public class QualityStoreWriter {
                 v.get("cushion"), v.get("cycleTime"), v.get("motorCurrent"),
                 s.inspectionResult(), s.defectType(),
                 s.invalidSensors() == null || s.invalidSensors().isEmpty() ? null : String.join(",", s.invalidSensors()),
-                serial(s.serialNo()), s.lateArrival(),
+                serial(s.serialNo()), s.lateArrival(), s.lateStatus(),
                 s.messageId());
     }
 
@@ -102,6 +102,9 @@ public class QualityStoreWriter {
         evidence.put("recentDefectTypes", a.recentDefectTypes());
         if (a.shotNoEstimated()) {
             evidence.put("shotNoEstimated", true);   // 그 메시지에 shotNo 가 없어 직전 shot 번호를 씀
+        }
+        if (a.lateRejudged()) {
+            evidence.put("lateRejudged", true);      // 늦게 도착한 shot 을 시간 순서에 끼워 다시 판정해서 난 경보 (ADR-019)
         }
 
         int rows = jdbc.update(INSERT_ANOMALY,
