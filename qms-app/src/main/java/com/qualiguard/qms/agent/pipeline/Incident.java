@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 
 import com.qualiguard.qms.agent.AnalysisResult;
 import com.qualiguard.qms.agent.IncidentAnalyzer;
+import com.qualiguard.qms.agent.ToolObservations;
 import com.qualiguard.qms.agent.VerifierAgent;
 
 /**
@@ -34,6 +35,8 @@ public final class Incident {
     volatile int attempts;
     volatile AnalysisResult result;
     volatile List<String> lastAttemptTrace = List.of();
+    /** 이 사건의 모든 시도에서 도구가 돌려준 수치 (검증 에이전트가 근거 수치를 대조할 때 쓴다) */
+    final ToolObservations observed = new ToolObservations();
     volatile String error;
     volatile VerifierAgent.Verification verification;
     volatile AnalysisResult written;

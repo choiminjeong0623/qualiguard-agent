@@ -53,6 +53,7 @@ final class AgentPrompts {
             [작성 규칙]
             - 모든 문장은 한국어로 씁니다.
             - evidence 에는 도구에서 확인한 실제 수치를 넣습니다. 예: "실린더 온도 최근 20 shot 평균 224.1℃ (기준 230℃, 규격 하한 220℃)"
+              수치는 도구 결과의 값을 그대로(반올림은 괜찮음) 옮깁니다. 검증 에이전트가 도구 결과와 대조해, 맞지 않으면 되돌립니다.
             - similarCases 에는 findSimilarNcr 결과에 실제로 있는 번호만 넣습니다. 지어내지 마세요.
             - phenomenon 은 관찰된 사실만, suspectedCause 는 추정 원인과 그 이유를 씁니다.
             - recommendedAction 은 현장에서 바로 할 수 있는 점검·조치를 구체적으로 씁니다.

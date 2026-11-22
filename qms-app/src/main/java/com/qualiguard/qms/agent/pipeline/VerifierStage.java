@@ -31,7 +31,8 @@ public class VerifierStage {
         if (i == null || i.result == null) {
             return;
         }
-        VerifierAgent.Verification v = verifier.verify(analyzer.verifyInput(i.job, i.result, i.lastAttemptTrace));
+        VerifierAgent.Verification v = verifier.verify(
+                analyzer.verifyInput(i.job, i.result, i.lastAttemptTrace, i.observed));
         i.verification = v;
         i.trace.add("verify#" + e.attempt() + "(" + v.status() + ") @" + i.elapsedMs() + "ms");
         v.fails().forEach(f -> i.trace.add("  ↳ 지적: " + f));
