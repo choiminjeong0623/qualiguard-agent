@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
+import shutil
 import signal
 import sys
 import time
@@ -80,6 +82,42 @@ def missing_fields(payload: dict) -> list[str]:
     return out
 
 
+
+def archive_ground_truth(gt_path: Path) -> Path | None:
+    """기존 정답 파일(과 메타)을 ground_truth_archive/ 로 옮긴다. 옮긴 경로를 돌려준다 (없으면 None)."""
+    if not gt_path.exists() or gt_path.stat().st_size == 0:
+        return None
+    stamp = datetime.fromtimestamp(gt_path.stat().st_mtime).strftime("%Y%m%d-%H%M%S")
+    archive_dir = gt_path.parent / "ground_truth_archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    target = archive_dir / f"{gt_path.stem}_{stamp}{gt_path.suffix}"
+    shutil.move(str(gt_path), target)
+    meta = meta_path(gt_path)
+    if meta.exists():
+        shutil.move(str(meta), archive_dir / f"{gt_path.stem}_{stamp}.meta.json")
+    print(f"이전 정답 파일 보관: {target}", flush=True)
+    return target
+
+
+def meta_path(gt_path: Path) -> Path:
+    return gt_path.with_name(gt_path.stem + ".meta.json")
+
+
+def write_ground_truth_meta(gt_path: Path, args, sim: dict, shots: int, faults) -> None:
+    """정답 파일을 만든 실행 조건(설정 파일 해시·seed·shot 수·고장 시나리오)을 옆에 남긴다."""
+    config_bytes = Path(args.config).read_bytes()
+    meta = {
+        "createdAt": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "config": str(Path(args.config).resolve().name),
+        "configSha256": hashlib.sha256(config_bytes).hexdigest(),
+        "seed": sim.get("seed"),
+        "shotsPerEquipment": shots,
+        "equipment": sim.get("equipment"),
+        "faults": [{"name": f.name, "equipment": f.equipment_id, "startShot": f.start_shot, "duration": f.duration}
+                   for f in faults],
+    }
+    meta_path(gt_path).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
 def main() -> None:
     '''
     QualiGuard 사출성형 센서 시뮬레이터를 터미널에서 실행 옵션을 읽을 수 있도록
@@ -129,6 +167,9 @@ def main() -> None:
         gt_file = open(os.devnull, "w", newline="", encoding="utf-8")
     else:
         gt_path.parent.mkdir(parents=True, exist_ok=True)
+        # 이전 정답 파일을 덮어쓰지 않고 보관한다 (평가 결과가 어떤 정답으로 채점됐는지 잃지 않게, 로드맵 E1)
+        archive_ground_truth(gt_path)
+        write_ground_truth_meta(gt_path, args, sim, shots, faults)
         gt_file = gt_path.open("w", newline="", encoding="utf-8")
     gt = csv.writer(gt_file)
     # shotNo·inspection 은 실제 값(보낸 메시지에서 빠졌어도 기록), missingFields 는 보낼 때 비운 항목
