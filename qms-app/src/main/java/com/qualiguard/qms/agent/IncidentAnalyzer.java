@@ -362,7 +362,14 @@ public class IncidentAnalyzer {
 
     /** 검증 에이전트 입력. */
     public VerifierAgent.Input verifyInput(Job job, AnalysisResult result, List<String> attemptTrace) {
-        return new VerifierAgent.Input(job.equipmentId(), job.asOf(), alarmRules(job), result, attemptTrace);
+        return verifyInput(job, result, attemptTrace, null);
+    }
+
+    /** 검증 에이전트 입력 (도구가 돌려준 수치 포함 — 근거 수치 대조용). */
+    public VerifierAgent.Input verifyInput(Job job, AnalysisResult result, List<String> attemptTrace,
+            ToolObservations observed) {
+        return new VerifierAgent.Input(job.equipmentId(), job.asOf(), alarmRules(job), result, attemptTrace,
+                observed);
     }
 
     /** 사건이 끝내 실패했을 때: 경보를 다시 분석할 수 있게 되돌리고 실패를 기록한다. */
@@ -466,12 +473,18 @@ public class IncidentAnalyzer {
 
     /** 분석 에이전트 1회: 도구로 조사 → JSON 결과. 형식이 깨지면 형식만 1회 고쳐 달라고 한다. */
     public AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace) {
+        return analyzeOnce(userPrompt, asOf, t0, trace, null);
+    }
+
+    /** observed: 도구가 돌려준 수치를 모을 바구니 (검증 에이전트의 수치 대조용, null 이면 모으지 않음). */
+    public AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace,
+            ToolObservations observed) {
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
         ChatResponse response = chatClient().prompt()
                 .system(AgentPrompts.SYSTEM)
                 .user(userPrompt)
-                .tools(new QualityTools(jdbc, trace, asOf, t0, embeddings::queryVector))
+                .tools(new QualityTools(jdbc, trace, asOf, t0, embeddings::queryVector, observed))
                 .call()
                 .chatResponse();
         trace.add(Tokens.of(response).traceLine());

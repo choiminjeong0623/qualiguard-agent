@@ -18,6 +18,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import com.qualiguard.qms.agent.AgentProperties;
 import com.qualiguard.qms.agent.AnalysisResult;
 import com.qualiguard.qms.agent.IncidentAnalyzer;
+import com.qualiguard.qms.agent.ToolObservations;
 import com.qualiguard.qms.agent.VerifierAgent;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -35,6 +36,8 @@ class AgentPipelineTest {
     static class FakeAnalyzer extends IncidentAnalyzer {
         final Deque<Object> answers = new ArrayDeque<>();   // AnalysisResult 또는 RuntimeException
         final List<String> prompts = new ArrayList<>();
+        /** 도구 결과로 본 값 (비어 있으면 수치 대조 없음) */
+        final List<Object> toolValues = new ArrayList<>();
         AnalysisResult completedWith;
         AnalysisResult writtenWith;
         int completedAttempts;
@@ -64,13 +67,17 @@ class AgentPipelineTest {
         }
 
         @Override
-        public VerifierAgent.Input verifyInput(Job job, AnalysisResult result, List<String> attemptTrace) {
-            return new VerifierAgent.Input(job.equipmentId(), job.asOf(), List.of("XBAR"), result, attemptTrace);
+        public VerifierAgent.Input verifyInput(Job job, AnalysisResult result, List<String> attemptTrace,
+                ToolObservations observed) {
+            return new VerifierAgent.Input(job.equipmentId(), job.asOf(), List.of("XBAR"), result, attemptTrace,
+                    observed);
         }
 
         @Override
-        public AnalysisResult analyzeOnce(String prompt, String asOf, long t0, List<String> trace) {
+        public AnalysisResult analyzeOnce(String prompt, String asOf, long t0, List<String> trace,
+                ToolObservations observed) {
             prompts.add(prompt);
+            toolValues.forEach(observed::addValue);   // 도구가 이 값들을 돌려줬다고 친다
             Object a = answers.pop();
             if (a instanceof RuntimeException ex) {
                 trace.add("getSpcSummary(IMM-01) @1ms");
@@ -181,6 +188,18 @@ class AgentPipelineTest {
                 && w.analyzer.prompts.get(1).contains("getDefectSummary"), "되돌릴 때 지적을 넘긴다");
         assertEquals(List.of("TRIAGED", "ANALYZING", "VERIFYING", "ANALYZING", "VERIFYING", "WRITING",
                 "AWAITING_APPROVAL"), o.timeline().stream().map(m -> m.get("state")).toList());
+    }
+
+    @Test
+    void 도구_결과에_없는_수치로_쓴_근거는_되돌리고_고친_수치는_통과시킨다() {
+        Wired w = wire("analysis-text", null);
+        w.analyzer.toolValues.addAll(List.of(224.13, "0.062", 230, 220));   // 도구가 실제로 돌려준 값
+        w.analyzer.answers.add(draft(80, List.of("온도 218.5℃", "불량률 9%")));   // 둘 다 도구 결과에 없음
+        w.analyzer.answers.add(draft(80, List.of("온도 224.1℃ (기준 230℃)", "불량률 6.2%")));
+        var o = w.pipeline.analyzeAndWait("a-1", true, "t1");
+        assertEquals(2, w.analyzer.completedAttempts);
+        assertTrue(w.analyzer.prompts.get(1).contains("218.5"), "어긋난 수치를 지적에 담아 되돌린다");
+        assertEquals("PASS", o.verification().status());
     }
 
     @Test

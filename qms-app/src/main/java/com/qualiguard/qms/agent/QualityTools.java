@@ -29,6 +29,8 @@ public class QualityTools {
     private final long startNanos;
     /** 현재 현상 설명 → 벡터 문자열 (의미 검색, ADR-014). null 이면 키워드 검색만. */
     private final Function<String, String> vectorizer;
+    /** 도구가 돌려준 수치를 검증 에이전트가 대조할 수 있게 모아 둔다. null 이면 모으지 않는다 (MCP 등). */
+    private final ToolObservations observations;
 
     public QualityTools(JdbcTemplate jdbc, List<String> trace, String asOf) {
         this(jdbc, trace, asOf, System.nanoTime());
@@ -41,11 +43,17 @@ public class QualityTools {
     /** startNanos: 분석 시작 시각. 도구마다 "분석 시작 후 몇 ms 에 불렸는지"를 trace 에 남겨 LLM 왕복 시간을 볼 수 있게 한다. */
     public QualityTools(JdbcTemplate jdbc, List<String> trace, String asOf, long startNanos,
             Function<String, String> vectorizer) {
+        this(jdbc, trace, asOf, startNanos, vectorizer, null);
+    }
+
+    public QualityTools(JdbcTemplate jdbc, List<String> trace, String asOf, long startNanos,
+            Function<String, String> vectorizer, ToolObservations observations) {
         this.jdbc = jdbc;
         this.trace = trace;
         this.asOf = asOf;
         this.startNanos = startNanos;
         this.vectorizer = vectorizer;
+        this.observations = observations;
     }
 
     @Tool(description = "설비 센서의 최근 추이를 구간별 평균·최소·최대·표준편차·불량 수와 검사 규격(lsl/target/usl)으로 조회한다. "
@@ -120,6 +128,10 @@ public class QualityTools {
                 Map<String, Object> clean = new LinkedHashMap<>();
                 row.forEach((k, v) -> clean.put(k, simplify(v)));
                 out.add(clean);
+            }
+            if (observations != null) {
+                observations.addArgs(args);   // 조회 범위(300 shot 등)
+                observations.addRows(out);    // 모델이 받은 값과 똑같은 값 (simplify 뒤)
             }
             return out;
         } catch (RuntimeException e) {

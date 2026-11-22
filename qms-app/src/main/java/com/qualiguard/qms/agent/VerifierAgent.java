@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
  *
  * 규칙은 모두 특정 고장과 무관한 일반 원칙이다 (특정 고장을 맞히기 위한 힌트 금지).
  *  - FAIL(되돌림): 조사를 건너뛰었거나, 결과가 데이터·자기 자신과 모순될 때
+ *                 (근거에 적은 수치가 도구 결과에 없는 경우 포함 — 규칙 6, {@link EvidenceNumbers})
  *  - WARN(기록만): 사람이 검토할 때 볼 만한 약점
  */
 @Component
@@ -31,6 +32,8 @@ public class VerifierAgent {
     static final Set<String> NOT_A_CAUSE = Set.of("UNKNOWN", "NOISE");
     static final int RECENT_SHOTS = 50;
     static final int BASELINE_SHOTS = 250;
+    /** 수치 대조 지적에 보여 줄 예시 수 */
+    static final int MAX_SAMPLES = 3;
 
     /**
      * 검증 결과.
@@ -45,9 +48,19 @@ public class VerifierAgent {
         }
     }
 
-    /** 검증 입력: 분석 결과와, 모델이 바꿀 수 없는 사실들. */
+    /**
+     * 검증 입력: 분석 결과와, 모델이 바꿀 수 없는 사실들.
+     *
+     * @param observed 분석 중 도구가 돌려준 수치. null 이거나 비어 있으면 수치 대조(규칙 6)를 건너뛴다.
+     */
     public record Input(String equipmentId, String asOf, List<String> alarmRules, AnalysisResult result,
-            List<String> toolTrace) {
+            List<String> toolTrace, ToolObservations observed) {
+
+        /** 수치 대조 없이 쓰던 예전 형태 (단위 시험 등). */
+        public Input(String equipmentId, String asOf, List<String> alarmRules, AnalysisResult result,
+                List<String> toolTrace) {
+            this(equipmentId, asOf, alarmRules, result, toolTrace, null);
+        }
     }
 
     /** 검증에 필요한 DB 조회. 단위 시험에서는 흉내 낸다. */
@@ -93,9 +106,14 @@ public class VerifierAgent {
         }
 
         // 2. 근거 수치: 결론에는 도구에서 확인한 수치가 담긴 근거가 2개 이상 있어야 한다
-        long numeric = r.evidence() == null ? 0 : r.evidence().stream().filter(VerifierAgent::hasDigit).count();
+        //    도구 결과를 받았으면 "숫자가 있는가"가 아니라 "도구 결과와 맞는 숫자가 있는가"로 센다 (규칙 6과 같은 대조)
+        EvidenceNumbers.Report numbers = in.observed() == null || in.observed().isEmpty() ? null
+                : EvidenceNumbers.check(r.evidence(), in.observed());
+        long numeric = numbers != null ? numbers.groundedSentences()
+                : r.evidence() == null ? 0 : r.evidence().stream().filter(VerifierAgent::hasDigit).count();
         if (concluded && numeric < 2) {
-            fails.add("수치가 담긴 근거가 " + numeric + "개뿐입니다. 도구에서 확인한 실제 값을 2개 이상 근거로 쓰세요.");
+            fails.add((numbers != null ? "도구 결과와 맞는 수치가 담긴 근거가 " : "수치가 담긴 근거가 ") + numeric
+                    + "개뿐입니다. 도구에서 확인한 실제 값을 2개 이상 근거로 쓰세요.");
         }
 
         // 3. 판단과 원인 코드의 정합성
@@ -131,6 +149,18 @@ public class VerifierAgent {
                             "최근 %d shot 불량률 %.1f%% 가 그 앞 %d shot (%.1f%%) 보다 크게 높습니다. 제품 영향이 없다는 판단과 맞지 않습니다.",
                             RECENT_SHOTS, rates[0] * 100, BASELINE_SHOTS, rates[1] * 100));
                 }
+            }
+        }
+
+        // 6. 수치 대조: 근거에 적은 수치가 도구가 실제로 돌려준 값에 있는가 (지어낸·잘못 옮긴 수치 차단)
+        //    절반 넘게 확인되지 않으면 되돌리고, 일부만 어긋나면 사람이 볼 수 있게 기록만 한다
+        if (numbers != null && numbers.unverifiedCount() > 0) {
+            String msg = "근거의 수치 " + numbers.unverifiedCount() + "개(전체 " + numbers.claimCount() + "개)가 "
+                    + "이번 조사에서 도구가 돌려준 값과 맞지 않습니다: " + numbers.unverifiedSamples(MAX_SAMPLES);
+            if (concluded && numbers.unverifiedCount() * 2 > numbers.claimCount()) {
+                fails.add(msg + ". 도구 결과의 값을 그대로 옮기거나, 확인하지 못한 수치는 빼세요.");
+            } else {
+                warns.add(msg);
             }
         }
 

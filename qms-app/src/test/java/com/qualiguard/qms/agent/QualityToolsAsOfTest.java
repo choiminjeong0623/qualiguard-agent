@@ -20,11 +20,13 @@ class QualityToolsAsOfTest {
         String sql;
         Object[] args;
 
+        List<Map<String, Object>> rows = List.of();
+
         @Override
         public List<Map<String, Object>> queryForList(String sql, Object... args) {
             this.sql = sql;
             this.args = args;
-            return List.of();
+            return rows;
         }
     }
 
@@ -49,5 +51,16 @@ class QualityToolsAsOfTest {
         assertEquals("[0.1,0.2]", jdbc.args[5]);
         assertTrue(trace.get(0).contains("situation=\"온도가 서서히 낮아짐\"") && trace.get(0).contains("+의미검색"));
         assertTrue(!trace.get(0).contains("[0.1,0.2]"), "벡터 값은 기록에 남기지 않음");
+    }
+
+    @Test
+    void 도구가_돌려준_수치와_조회_범위를_검증용으로_모은다() {
+        Capture jdbc = new Capture();
+        jdbc.rows = List.of(Map.of("avg_value", new java.math.BigDecimal("224.1300"), "ng_count", 3));
+        ToolObservations observed = new ToolObservations();
+        new QualityTools(jdbc, new ArrayList<>(), "2026-11-14T10:24:48.942Z", System.nanoTime(), null, observed)
+                .getSensorTrend("IMM-01", "barrelTemp", 300, 20);
+        List<String> values = observed.values().stream().map(java.math.BigDecimal::toPlainString).toList();
+        assertTrue(values.containsAll(List.of("224.13", "3", "300", "20")), values.toString());
     }
 }

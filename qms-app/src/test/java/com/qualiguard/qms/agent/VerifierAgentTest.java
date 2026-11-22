@@ -119,6 +119,59 @@ class VerifierAgentTest {
         assertTrue(!VerifierAgent.defectRose(0.30, 0.20), "5%p 이상이지만 2배 미만");
     }
 
+    // ── 규칙 6: 수치 대조 ─────────────────────────────────────────
+
+    static VerifierAgent.Input withObserved(AnalysisResult r, Number... toolValues) {
+        return new VerifierAgent.Input("IMM-01", "2026-11-14T10:00:00.000Z", List.of("XBAR"), r, FULL_TRACE,
+                ToolObservations.of(List.of(toolValues)));
+    }
+
+    @Test
+    void numbersFoundInToolResultsPass() {
+        var r = result("NCR_DRAFT", "HEATER_DEGRADATION", 82,
+                List.of("실린더 온도 최근 20 shot 평균 224.1℃ (규격 하한 220℃)", "불량률 6.2%", "모터 전류 +1.8σ"),
+                List.of(), List.of());
+        var v = verifier.verify(withObserved(r, 224.13, 220, 0.062, 12.4));
+        assertTrue(v.passed(), v.toString());
+        assertTrue(v.warns().stream().noneMatch(w -> w.contains("맞지 않습니다")),
+                "20 shot(조회 범위)·1.8σ(계산 값)는 대조하지 않는다: " + v.warns());
+    }
+
+    @Test
+    void inventedNumbersAreSentBack() {
+        var r = result("NCR_DRAFT", "HEATER_DEGRADATION", 82, List.of("실린더 온도 평균 218.5℃", "불량률 9%"),
+                List.of(), List.of());
+        var v = verifier.verify(withObserved(r, 224.13, 220, 0.062));
+        assertEquals("WEAK", v.status());
+        assertTrue(v.fails().stream().anyMatch(f -> f.contains("218.5") && f.contains("도구가 돌려준 값")),
+                v.toString());
+    }
+
+    @Test
+    void oneOffNumberAmongManyIsOnlyWarned() {
+        var r = result("NCR_DRAFT", "HEATER_DEGRADATION", 82,
+                List.of("온도 224.1℃", "불량률 6.2%", "사이클 타임 31.0초"), List.of(), List.of());
+        var v = verifier.verify(withObserved(r, 224.13, 0.062));
+        assertTrue(v.passed(), v.toString());
+        assertTrue(v.warns().stream().anyMatch(w -> w.contains("31.0")), v.toString());
+    }
+
+    @Test
+    void numericEvidenceCountsOnlyVerifiedNumbersWhenToolResultsExist() {
+        // 숫자는 3개 있지만 도구 결과와 맞는 근거 문장은 1개 → 규칙 2도 되돌림
+        var r = result("NCR_DRAFT", "HEATER_DEGRADATION", 70, List.of("온도 224.1℃", "압력 99.9MPa", "쿠션 7.7mm"),
+                List.of(), List.of());
+        var v = verifier.verify(withObserved(r, 224.13, 120.5, 5.2));
+        assertEquals("WEAK", v.status());
+        assertTrue(v.fails().stream().anyMatch(f -> f.contains("도구 결과와 맞는 수치가 담긴 근거가 1개")), v.toString());
+    }
+
+    @Test
+    void withoutToolResultsNumberCheckIsSkipped() {
+        var r = result("NCR_DRAFT", "HEATER_DEGRADATION", 82, List.of("온도 218.5℃", "불량률 9%"), List.of(), List.of());
+        assertTrue(verifier.verify(input(List.of("XBAR"), r, FULL_TRACE)).passed(), "예전 입력(관측값 없음)은 그대로");
+    }
+
     @Test
     void feedbackListsEveryFail() {
         var v = new VerifierAgent.Verification("WEAK", List.of("A", "B"), List.of());
