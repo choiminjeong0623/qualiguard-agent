@@ -23,3 +23,4 @@
 | [ADR-017](ADR-017-telemetry-nulls-serial.md) | 장비 데이터 결측 허용과 시리얼 번호 비고유 — 필수는 messageId·lineId·equipmentId·ts 뿐 | 채택 |
 | [ADR-018](ADR-018-mes-erp-eai-interface-server.md) | MES/ERP 연계는 Kafka 대신 인터페이스(EAI) 서버로 보낸다 — 아웃박스는 유지 | 제안 (계획) |
 | [ADR-019](ADR-019-late-shot-rejudge-serial-link.md) | 늦게 도착한 shot 은 실시간 흐름과 따로 시간 순서에 끼워 다시 판정, 출하 확정 때 확정 시리얼을 shot 하나에 연결 | 채택 |
+| [ADR-020](ADR-020-judgement-hold.md) | 판단 보류 — 재확인 상한까지 관찰이거나 검증 지적이 남은 채 경보를 닫으면 사람 검토로 넘긴다 | 채택 |

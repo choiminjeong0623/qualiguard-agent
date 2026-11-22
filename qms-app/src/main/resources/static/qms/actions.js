@@ -85,10 +85,45 @@
     });
   });
 
+  // ── 판단 보류 (로드맵 F2) ─────────────────────────────────────
+  var HOLD_REASON = { RECHECK_LIMIT: '재확인 상한 도달', VERIFY_WEAK: '검증 지적 남음' };
+  var DECISION_LABEL = { OBSERVE: '관찰', SENSOR_CHECK: '센서 점검', NCR_DRAFT: '부적합 초안' };
+
+  function loadHolds() {
+    $.getJSON('/api/qms/holds', { status: 'PENDING', top: 50 }).done(function (rows) {
+      $('#hold-count').text(rows.length);
+      if (!rows.length) { $('#hold-rows').html('<tr><td colspan="6" class="text-secondary">검토할 판단 보류가 없습니다.</td></tr>'); return; }
+      $('#hold-rows').html(rows.map(function (r) {
+        var watch = [];
+        try { watch = JSON.parse(r.watch_items || '[]') || []; } catch (e) { watch = []; }
+        var button = canWrite()
+          ? '<div class="input-group input-group-sm"><input class="form-control" placeholder="확인·처리 메모" data-note="' + r.analysis_id + '">'
+            + '<button class="btn btn-primary" data-hold="' + r.analysis_id + '">검토 완료</button></div>'
+          : '';
+        return '<tr><td>' + r.analysis_id + '<div class="small text-secondary">' + esc(r.trigger_type || '') + (r.as_of_shot != null ? ' · shot ' + r.as_of_shot : '') + '</div></td>'
+          + '<td>' + esc(r.equipment_id) + '</td>'
+          + '<td>' + esc(DECISION_LABEL[r.decision] || r.decision) + '<div class="small text-secondary">' + esc(r.cause_code) + ' · 확신도 ' + esc(r.confidence) + '</div></td>'
+          + '<td>' + badge(HOLD_REASON[r.hold_reason] || r.hold_reason, 'bg-red-lt') + '<div class="small">' + esc(r.hold_detail) + '</div></td>'
+          + '<td><div class="small">' + esc(r.summary) + '</div>'
+          + (watch.length ? '<div class="small text-secondary">확인할 항목: ' + watch.map(esc).join(', ') + '</div>' : '') + '</td>'
+          + '<td style="min-width:16rem">' + button + '</td></tr>';
+      }).join(''));
+    }).fail(function (xhr) { $('#hold-rows').html('<tr><td colspan="6" class="text-danger">불러오기 실패 (' + xhr.status + ')</td></tr>'); });
+  }
+
+  $('#hold-rows').on('click', 'button[data-hold]', function () {
+    var id = $(this).attr('data-hold');
+    var note = $('input[data-note="' + id + '"]').val();
+    $.ajax({ method: 'POST', url: '/api/qms/holds/' + id + '/resolve', contentType: 'application/json', data: JSON.stringify({ note: note }) })
+      .done(function () { $('#msg').text('분석 ' + id + ' 판단 보류를 검토 완료로 닫았습니다.').attr('class', 'msg ok'); loadHolds(); })
+      .fail(function (xhr) { $('#msg').text((xhr.responseJSON && xhr.responseJSON.error) || '실패 (' + xhr.status + ')').attr('class', 'msg err'); });
+  });
+
   $.getJSON('/api/qms/me').done(function (me) {
     state.me = me;
     $('#me').text(me.displayName + (me.role === 'REVIEWER' ? ' (품질 담당자)' : ' (조회 전용)'));
     load();
-    setInterval(load, 10000);   // 효과 검증은 서버가 주기적으로 하므로 화면도 10초마다 새로 읽는다
+    loadHolds();
+    setInterval(function () { load(); loadHolds(); }, 10000);   // 효과 검증은 서버가 주기적으로 하므로 화면도 10초마다 새로 읽는다
   });
 }(jQuery));
