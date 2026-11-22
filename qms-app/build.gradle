@@ -44,7 +44,12 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		// CI 에는 SQL Server·Kafka·Gemini 키가 없으므로 통합 시험(@Tag("integration"))을 뺀다
+		if (System.getenv('CI') == 'true') {
+			excludeTags 'integration'
+		}
+	}
 }
 
 // 8GB RAM 환경: 개발 중 bootRun의 힙을 384MB로 제한

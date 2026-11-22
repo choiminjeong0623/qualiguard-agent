@@ -1,5 +1,7 @@
 # QualiGuard Agent
 
+[![CI](https://github.com/choiminjeong0623/qualiguard-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/choiminjeong0623/qualiguard-agent/actions/workflows/ci.yml)
+
 > 설비 센서 데이터가 이상해지면, AI가 원인을 추정해 품질 담당자에게 **근거가 첨부된 부적합 보고서 초안**을 올려 주는 품질관리(QMS) 지원 에이전트
 
 사출성형 라인의 센서 데이터를 MQTT로 수집하고, Kafka에서 SPC(통계적 공정 관리)로 이상을 탐지한 뒤, LLM 에이전트가 원인을 추정해 부적합(NCR) 보고서 초안을 작성합니다. 최종 승인은 품질 담당자가 하고, 승인 결과는 MES/ERP로 연계됩니다.
