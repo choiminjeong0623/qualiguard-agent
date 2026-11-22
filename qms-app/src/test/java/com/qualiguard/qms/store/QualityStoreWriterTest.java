@@ -34,7 +34,7 @@ class QualityStoreWriterTest {
 
     private String cleanShot(String id) {
         return json.writeValueAsString(new CleanShot(id, "LINE1", "IMM-01", null, "2026-11-17T09:00:00.000+09:00",
-                Map.of("moldTemp", 60.0), List.of("barrelTemp"), null, null, null, true));
+                Map.of("moldTemp", 60.0), List.of("barrelTemp"), null, null, null, true, "OUT_OF_WINDOW"));
     }
 
     private double count(String result) {
@@ -50,11 +50,12 @@ class QualityStoreWriterTest {
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).update(anyString(), args.capture());
         Object[] a = args.getValue();
-        assertEquals(18, a.length);
+        assertEquals(19, a.length);
         assertNull(a[3]);                         // shot_no
         assertNull(a[12]);                        // inspection_result
         assertNull(a[15]);                        // serial_no
         assertTrue((Boolean) a[16]);              // arrival_late
+        assertEquals("OUT_OF_WINDOW", a[17]);     // late_status (ADR-019)
     }
 
     @Test

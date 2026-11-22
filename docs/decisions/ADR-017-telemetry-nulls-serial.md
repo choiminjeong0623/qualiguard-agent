@@ -73,4 +73,4 @@ DLQ 로 가서 **공정 데이터 전체를 잃었다.** 센서 1개가 빠졌�
   재전송 29건은 브리지에서 걸러 DB 중복 0건, DLQ 0건, 늦게 도착 10건(`arrival_late`), 센서 끊김 10구간, 센서가 빈 행 469건,
   shotNo 없음 5건, 검사 결과 없음 7건, 시리얼 미할당 59건·임시값 중복 24묶음, 이상 탐지(XBAR·INDIVIDUAL·S_CHART·P_CHART) 그대로 동작.
   SPC·DB 층 중복은 같은 메시지를 `sensor.raw`·`sensor.clean` 에 두 번씩 직접 넣어 각각 1행만 생기는 것을 확인했다.
-- 남은 일: 출하 확정 때 `shipment_serial_link` 채우기, 늦게 온 shot 을 나중에 순서대로 다시 판정할지(지금은 저장만).
+- 남은 일 두 가지(출하 확정 때 `shipment_serial_link` 채우기, 늦게 온 shot 재판정)는 [ADR-019](ADR-019-late-shot-rejudge-serial-link.md)에서 구현했다(2026-11-22).

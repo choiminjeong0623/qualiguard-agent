@@ -12,10 +12,12 @@ import java.util.Map;
  * @param sensorZScores 모든 센서의 '최근 5 shot 평균'이 기준 대비 몇 σ 떨어져 있는지 (원인 추정 단서)
  * @param shotNo        경보를 낸 shot 번호. 그 메시지에 shotNo 가 없었으면 그 설비에서 마지막으로 받은
  *                      shot 번호를 쓰고 shotNoEstimated 를 true 로 둔다 (ADR-017)
+ * @param lateRejudged  늦게 도착한 shot 을 시간 순서에 끼워 다시 판정해서 난 경보인지 (ADR-019)
  */
 public record Anomaly(String anomalyId, String lineId, String equipmentId, long shotNo, String ts,
         String rule, String ruleName, String sensor, String sensorName, String unit,
         double observed, double baselineMean, double baselineSigma, double lowerLimit, double upperLimit,
         List<Double> recentValues, Map<String, Double> sensorZScores, double recentNgRate,
-        Map<String, Integer> recentDefectTypes, String message, boolean shotNoEstimated) {
+        Map<String, Integer> recentDefectTypes, String message, boolean shotNoEstimated,
+        boolean lateRejudged) {
 }

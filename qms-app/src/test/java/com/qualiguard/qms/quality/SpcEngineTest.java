@@ -278,28 +278,108 @@ class SpcEngineTest {
     }
 
     @Test
-    void 늦게_온_shot_은_저장용_값만_내고_판정_상태를_건드리지_않는다() {
+    void 늦게_온_shot_은_실시간_판정_상태를_건드리지_않고_따로_판정한다() {
         EquipmentState s = new EquipmentState();
         for (int i = 1; i <= 120; i++) {
             engine.process(s, timed(normal(), i, i, "l-" + i));
         }
         long count = s.count;
         int subgroup = s.sensors.get("moldTemp").subgroup.size();
-        int recent = s.sensors.get("moldTemp").recent.size();
+        List<Double> recent = List.copyOf(s.sensors.get("moldTemp").recent);
         Map<String, Double> v = normal();
-        v.put("moldTemp", 90.0);                                 // 판정했다면 경보가 났을 값
+        v.put("moldTemp", 90.0);                                 // 개별값 한계(±4σ)를 크게 벗어난 값
         var late = engine.process(s, timed(v, 115, 115, "l-late"));   // 120 번째 뒤에 115 번째가 옴
         assertTrue(late.late());
-        assertTrue(late.anomalies().isEmpty());
+        assertEquals(SpcEngine.LATE_REJUDGED, late.lateStatus());
+        assertEquals(List.of("INDIVIDUAL|moldTemp"),
+                late.anomalies().stream().map(a -> a.rule() + "|" + a.sensor()).toList());
+        Anomaly a = late.anomalies().get(0);
+        assertTrue(a.lateRejudged());
+        assertEquals(115, a.shotNo());                           // 경보 위치는 늦게 온 shot 자신
+        assertTrue(a.message().startsWith("[늦게 도착한 shot 재판정]"));
         assertEquals(90.0, late.cleanValues().get("moldTemp"));  // 저장용 값은 그대로
+        // 실시간 상태는 그대로
         assertEquals(count, s.count);
         assertEquals(subgroup, s.sensors.get("moldTemp").subgroup.size());
-        assertEquals(recent, s.sensors.get("moldTemp").recent.size());
+        assertEquals(recent, s.sensors.get("moldTemp").recent);
+        assertEquals(120L, s.lastShotNo);
         assertEquals(1, s.lateCount);
         // 다음 정상 shot 은 그대로 판정
         assertFalse(engine.process(s, timed(normal(), 121, 121, "l-121")).late());
         // 늦게 온 shot 의 재전송도 중복으로 거른다
         assertTrue(engine.process(s, timed(v, 115, 115, "l-late")).duplicate());
+    }
+
+    @Test
+    void 늦게_온_shot_을_시간_순서에_끼우면_실시간에선_놓친_평균_이동을_잡는다() {
+        EquipmentState s = new EquipmentState();
+        for (int i = 1; i <= 120; i++) {                         // 기준 100 + 부분군 4개(101~120)
+            engine.process(s, timed(normal(), i, i, "x-" + i));
+        }
+        EquipmentState.SensorState ms = s.sensors.get("moldTemp");
+        double lim = SpcEngine.XBAR_K * ms.sigma / Math.sqrt(SpcEngine.SUBGROUP_SIZE);
+        double up = ms.mean + 1.5 * lim;                         // 부분군 평균 한계를 넘는 높이 (개별값 한계 4σ 안)
+        List<Anomaly> realtime = new ArrayList<>();
+        // 125 번째가 늦게 와서 실시간 부분군은 [121,122,123,124,126] [127,128,129,130,131] 로 묶인다
+        for (int i = 121; i <= 131; i++) {
+            if (i == 125) {
+                continue;
+            }
+            Map<String, Double> v = normal();
+            v.put("moldTemp", i == 131 ? ms.mean - 6 * lim : up);   // 131 이 둘째 부분군 평균을 끌어내려 '연속 2회'가 끊김
+            realtime.addAll(engine.process(s, timed(v, i, i, "x-" + i)).anomalies());
+        }
+        assertTrue(realtime.stream().noneMatch(a -> a.rule().equals("XBAR")), "실시간에서 이미 잡힘: " + realtime);
+
+        Map<String, Double> v = normal();
+        v.put("moldTemp", up);
+        var late = engine.process(s, timed(v, 125, 125, "x-125"));
+        assertEquals(SpcEngine.LATE_REJUDGED, late.lateStatus());
+        // 시간 순서로는 [121..125] 와 [126..130] 이 연속으로 한계를 넘는다
+        assertTrue(late.anomalies().stream().anyMatch(a -> a.rule().equals("XBAR") && a.sensor().equals("moldTemp")
+                && a.lateRejudged()), "재판정 경보 없음: " + late.anomalies());
+    }
+
+    @Test
+    void 보관한_30_shot_보다_더_늦으면_순서와_무관한_규칙만_본다() {
+        EquipmentState s = new EquipmentState();
+        for (int i = 1; i <= 160; i++) {
+            engine.process(s, timed(normal(), i, i, "w-" + i));
+        }
+        Map<String, Double> v = normal();
+        v.put("cushion", s.sensors.get("cushion").mean + 6 * s.sensors.get("cushion").sigma);
+        var late = engine.process(s, timed(v, 50, 50, "w-late"));  // 110 shot 늦게 옴
+        assertEquals(SpcEngine.LATE_OUT_OF_WINDOW, late.lateStatus());
+        assertEquals(List.of("INDIVIDUAL"), late.anomalies().stream().map(Anomaly::rule).toList());
+    }
+
+    @Test
+    void 실시간에서_이미_낸_경보는_재판정에서_다시_내지_않는다() {
+        EquipmentState s = new EquipmentState();
+        for (int i = 1; i <= 130; i++) {
+            engine.process(s, timed(normal(), i, i, "d-" + i));
+        }
+        double high = s.sensors.get("moldTemp").mean + 8 * s.sensors.get("moldTemp").sigma;
+        Map<String, Double> v = normal();
+        v.put("moldTemp", high);
+        assertEquals(1, engine.process(s, timed(v, 132, 132, "d-132")).anomalies().size());   // 실시간 경보
+        Map<String, Double> w = normal();
+        w.put("moldTemp", high);
+        var late = engine.process(s, timed(w, 131, 131, "d-131"));
+        assertTrue(late.late());
+        assertTrue(late.anomalies().isEmpty(), "같은 규칙·센서 경보가 반복됨: " + late.anomalies());
+    }
+
+    @Test
+    void 이전_버전_상태처럼_시각_목록이_없으면_범위_밖으로_본다() {
+        EquipmentState s = new EquipmentState();
+        for (int i = 1; i <= 120; i++) {
+            engine.process(s, timed(normal(), i, i, "o-" + i));
+        }
+        s.sensors.values().forEach(ss -> ss.recentTs.clear());   // 시각 목록이 없던 상태를 흉내
+        assertEquals(SpcEngine.LATE_OUT_OF_WINDOW, engine.process(s, timed(normal(), 110, 110, "o-late")).lateStatus());
+        engine.process(s, timed(normal(), 121, 121, "o-121"));   // 새 shot 부터 시각이 다시 쌓인다
+        assertEquals(s.sensors.get("moldTemp").recent.size(), s.sensors.get("moldTemp").recentTs.size());
     }
 
     @Test

@@ -20,5 +20,6 @@
 | [ADR-014](ADR-014-ncr-vector-search.md) | 유사 사례 의미 검색: SQL Server 2025 VECTOR + Gemini 임베딩, 키워드 점수에 더하는 방식 | 채택 |
 | [ADR-015](ADR-015-mqtt-device-auth.md) | MQTT 장비 인증과 토픽별 접근 권한 — 사용자명 = 설비 ID | 채택 |
 | [ADR-016](ADR-016-multi-agent-pipeline.md) | 역할 분리형 멀티 에이전트 — 분류·분석·검증·작성·오케스트레이터를 Kafka 이벤트로 잇는다 | 채택 |
-| [ADR-017](ADR-017-telemetry-nulls-serial.md) | 장비 데이터 결측 허용과 시리얼 번호 비고유 — 필수는 messageId·lineId·equipmentId·ts 뿐, 늦게 온 shot 은 저장만 | 채택 |
+| [ADR-017](ADR-017-telemetry-nulls-serial.md) | 장비 데이터 결측 허용과 시리얼 번호 비고유 — 필수는 messageId·lineId·equipmentId·ts 뿐 | 채택 |
 | [ADR-018](ADR-018-mes-erp-eai-interface-server.md) | MES/ERP 연계는 Kafka 대신 인터페이스(EAI) 서버로 보낸다 — 아웃박스는 유지 | 제안 (계획) |
+| [ADR-019](ADR-019-late-shot-rejudge-serial-link.md) | 늦게 도착한 shot 은 실시간 흐름과 따로 시간 순서에 끼워 다시 판정, 출하 확정 때 확정 시리얼을 shot 하나에 연결 | 채택 |

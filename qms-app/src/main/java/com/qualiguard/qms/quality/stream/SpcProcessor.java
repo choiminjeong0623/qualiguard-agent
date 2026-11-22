@@ -84,9 +84,10 @@ public class SpcProcessor implements Processor<String, String, String, String> {
         }
         store.put(equipmentId, objectMapper.writeValueAsString(state));
         if (result.late()) {
-            // 순서가 어긋난 shot: 저장은 하되 관리도 판정은 건너뜀 (ADR-017)
-            log.info("늦게 온 shot — 저장만 하고 판정 건너뜀: {} shotNo={} ts={}", equipmentId, t.shotNo(), t.ts());
-            Metrics.counter("qg.spc.late_shots", "equipment", equipmentId).increment();
+            // 순서가 어긋난 shot: 실시간 흐름에는 넣지 않고 시간 순서 자리에 끼워 따로 다시 판정 (ADR-019)
+            log.info("늦게 온 shot 재판정({}): {} shotNo={} ts={} → 경보 {}건", result.lateStatus(), equipmentId,
+                    t.shotNo(), t.ts(), result.anomalies().size());
+            Metrics.counter("qg.spc.late_shots", "equipment", equipmentId, "status", result.lateStatus()).increment();
         }
         for (String sensor : result.outageStarted()) {
             // 경보(이상 탐지)로 만들지 않고 운영 지표·로그로만 알린다
@@ -99,7 +100,7 @@ public class SpcProcessor implements Processor<String, String, String, String> {
 
         CleanShot clean = new CleanShot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(),
                 result.cleanValues(), result.invalidSensors(), inspected ? (ng ? "NG" : "OK") : null, defectType,
-                t.serialNo(), result.late());
+                t.serialNo(), result.late(), result.lateStatus());
         context.forward(new Record<>(equipmentId, CLEAN + objectMapper.writeValueAsString(clean), record.timestamp()));
 
         for (Anomaly anomaly : result.anomalies()) {
