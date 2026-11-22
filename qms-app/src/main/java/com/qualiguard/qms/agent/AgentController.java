@@ -1,8 +1,10 @@
 package com.qualiguard.qms.agent;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +28,7 @@ import com.qualiguard.qms.agent.pipeline.AgentPipeline;
  *                                                             tag 는 평가 실행 구분(이전 판단도 같은 tag 에서만 찾음)
  *   POST /api/agent/recheck/{analysisId}?asOfShot=...         관찰(OBSERVE) 판단 뒤 새 경보 없이 재확인
  *                                                             (asOfShot 생략 시 관찰 기준 shot + recheck-shots)
- *   GET  /api/agent/config                                    재확인 설정 (평가 스크립트용)
+ *   GET  /api/agent/config                                    재확인 설정과 평가 기록용 실행 설정(모델·작성 방식 등)
  *   GET  /api/agent/analyses?top=20                           분석 기록
  */
 @RestController
@@ -37,12 +39,15 @@ public class AgentController {
     private final AgentPipeline pipeline;
     private final JdbcTemplate jdbc;
     private final AgentProperties props;
+    private final Environment env;
 
-    public AgentController(IncidentAnalyzer analyzer, AgentPipeline pipeline, JdbcTemplate jdbc, AgentProperties props) {
+    public AgentController(IncidentAnalyzer analyzer, AgentPipeline pipeline, JdbcTemplate jdbc, AgentProperties props,
+            Environment env) {
         this.analyzer = analyzer;
         this.pipeline = pipeline;
         this.jdbc = jdbc;
         this.props = props;
+        this.env = env;
     }
 
     @GetMapping("/anomalies")
@@ -95,7 +100,18 @@ public class AgentController {
 
     @GetMapping("/config")
     public Map<String, Object> config() {
-        return Map.of("recheckShots", props.recheckShots(), "recheckMax", props.recheckMax());
+        // 평가 스크립트가 결과와 함께 저장한다: 어떤 설정으로 잰 수치인지 나중에 확인할 수 있게 (로드맵 E1)
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("recheckShots", props.recheckShots());
+        m.put("recheckMax", props.recheckMax());
+        m.put("verifyMaxRetries", props.verifyMaxRetries());
+        m.put("model", env.getProperty("spring.ai.google.genai.chat.model", "gemini-3.8-flash"));
+        m.put("temperature", env.getProperty("spring.ai.google.genai.chat.temperature"));
+        m.put("transport", env.getProperty("qg.agent.pipeline.transport", "kafka"));
+        m.put("writerMode", env.getProperty("qg.agent.writer.mode", "analysis-text"));
+        m.put("vectorEnabled", env.getProperty("qg.knowledge.vector-enabled", Boolean.class, false));
+        m.put("actionEnabled", env.getProperty("qg.agent.action.enabled", Boolean.class, false));
+        return m;
     }
 
     @GetMapping("/analyses")

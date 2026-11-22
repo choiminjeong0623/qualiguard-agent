@@ -23,10 +23,13 @@
         # "처음 보는 고장" 실험: 과거 사례와 정비 이력(교체 주기·단서)까지 숨김 (끝나면 복구)
 
 결과: 화면에 표 출력 + data/agent_eval_<모드>.json / .md 저장
+      + eval/results/<날짜>_<커밋>_<모드>/ 에 결과·요약·실행 조건(meta.json)·채점에 쓴 정답(gz) 보관 (커밋 대상)
 주의: 분석 1단계마다 LLM 을 1회 이상 호출한다 (사례당 최대 MAX_STEPS 단계).
 """
 import argparse
 import csv
+import gzip
+import hashlib
 import json
 import os
 import re
@@ -119,6 +122,18 @@ def load_ground_truth():
     with path.open(encoding="utf-8") as f:
         for row in csv.DictReader(f):
             gt[(row["equipmentId"], int(row["shotNo"]))] = row["inspection"] != "OK"
+    # 짧은 시험 실행으로 정답 파일이 덮어써졌으면 채점이 틀어진다 → 고장 구간을 다 덮는지 먼저 확인 (로드맵 E1)
+    last_shot = {}
+    for eq, shot in gt:
+        last_shot[eq] = max(last_shot.get(eq, 0), shot)
+    need = {}
+    for eq, _, _, end, _, _ in FAULTS:
+        need[eq] = max(need.get(eq, 0), end - 1)
+    short = [f"{eq} (shot {n}까지 필요, {last_shot.get(eq, 0)}까지 있음)"
+             for eq, n in need.items() if last_shot.get(eq, 0) < n]
+    if short:
+        sys.exit("data/ground_truth.csv 가 고장 구간을 다 담고 있지 않습니다: " + ", ".join(short)
+                 + "\n시뮬레이터 전체 시나리오를 다시 실행하거나 data/ground_truth_archive/ 에서 맞는 파일을 되돌리세요.")
     return gt
 
 
@@ -414,6 +429,48 @@ def main():
     (data_dir / f"agent_eval_{mode}.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     (data_dir / f"agent_eval_{mode}.md").write_text(summary + "\n", encoding="utf-8")
     print(f"\n저장: data/agent_eval_{mode}.json, data/agent_eval_{mode}.md")
+    out = save_versioned(mode, args, cfg, results, summary)
+    print(f"버전 기록: {out.relative_to(ROOT)} (커밋해서 README·평가 문서에서 링크하세요)")
+
+
+def git(*argv):
+    try:
+        return subprocess.run(["git", *argv], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def save_versioned(mode, args, cfg, results, summary):
+    """eval/results/<날짜>_<커밋>_<모드>/ 에 결과·요약·실행 조건·채점에 쓴 정답을 함께 남긴다 (로드맵 E1).
+
+    data/ 는 커밋하지 않는 작업 폴더라, 문서의 수치를 나중에 다시 확인할 수 있도록 이 폴더를 커밋한다.
+    """
+    commit = git("rev-parse", "--short", "HEAD") or "nogit"
+    dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    out = ROOT / "eval" / "results" / f"{datetime.now().strftime('%Y%m%d-%H%M')}_{commit}{'-dirty' if dirty else ''}_{mode}"
+    out.mkdir(parents=True, exist_ok=True)
+    gt_path = ROOT / "data" / "ground_truth.csv"
+    gt_bytes = gt_path.read_bytes()
+    with gzip.open(out / "ground_truth.csv.gz", "wb") as f:
+        f.write(gt_bytes)
+    sim_meta_path = gt_path.with_name("ground_truth.meta.json")
+    meta = {
+        "createdAt": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "mode": mode,
+        "args": vars(args),
+        "gitCommit": git("rev-parse", "HEAD"),
+        "gitDirty": dirty,
+        "agentConfig": cfg,
+        "groundTruth": {"sha256": hashlib.sha256(gt_bytes).hexdigest(), "rows": gt_bytes.count(b"\n") - 1,
+                        "simulatorMeta": json.loads(sim_meta_path.read_text(encoding="utf-8"))
+                        if sim_meta_path.exists() else None},
+        "cases": len({r["case"] for r in results}),
+        "runs": args.runs,
+    }
+    (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "summary.md").write_text(summary + "\n", encoding="utf-8")
+    return out
 
 
 if __name__ == "__main__":
