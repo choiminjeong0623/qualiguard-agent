@@ -30,6 +30,7 @@ import argparse
 import csv
 import gzip
 import hashlib
+import io
 import json
 import os
 import re
@@ -62,8 +63,14 @@ MATCHING_CAUSES = ["HEATER_DEGRADATION", "COOLING_ISSUE", "CHECK_RING_WEAR", "SE
 
 def http(method, path):
     req = urllib.request.Request(API + path, method=method)
-    with urllib.request.urlopen(req, timeout=600) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # 앱이 돌려준 오류 내용(본문)을 화면에 보여 준다. 504 숫자만으로는 원인을 알 수 없다.
+        body = e.read()
+        print(f"  ! {method} {path} → HTTP {e.code}: {body.decode('utf-8', 'replace')[:500]}", file=sys.stderr)
+        raise urllib.error.HTTPError(e.url, e.code, e.msg, e.hdrs, io.BytesIO(body)) from None
 
 
 def post(path):
