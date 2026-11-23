@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QMS 에이전트 조치</title>
+<title>조치·판단 보류 · QualiGuard QMS</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
 <link rel="stylesheet" href="qg-tokens.css?v=3">
-<link rel="stylesheet" href="qms.css?v=3">
+<link rel="stylesheet" href="qms.css?v=8">
 <script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
@@ -17,51 +17,69 @@
 <div class="qg-side-scrim" id="qg-side-scrim" aria-hidden="true"></div>
 <main class="qg-main">
 
-<div class="page-wrapper qg-page">
-  <div class="qg-page-head">
+<section class="qg-view" aria-labelledby="page-h1">
+  <div class="qg-titlebar">
     <div>
-      <div class="qg-eyebrow">품질 관리 · 에이전트 조치</div>
-      <h1 class="qg-h1">자동 처리, 승인 대기, 효과 검증</h1>
+      <h1 class="qg-h1" id="page-h1">조치·판단 보류</h1>
       <p class="qg-lead">저위험 조치는 에이전트가 바로 실행하고, 고위험 조치만 승인을 기다립니다. 실행한 조치는 40 shot 뒤 효과를 확인합니다.</p>
-    </div>
-    <div class="qg-tiles" id="tiles" role="tablist" aria-label="상태별 조치">
-      <button class="qg-tile tab active" data-filter=""><span class="qg-tile-label">전체</span><span class="qg-tile-num" data-count="">–</span></button>
-      <button class="qg-tile tab" data-filter="AUTO"><span class="qg-tile-label">자동 처리</span><span class="qg-tile-num" data-count="AUTO">–</span></button>
-      <button class="qg-tile tab" data-filter="WAITING_APPROVAL"><span class="qg-tile-label">승인 대기</span><span class="qg-tile-num" data-count="WAITING_APPROVAL">–</span></button>
-      <button class="qg-tile tab" data-filter="RESOLVED"><span class="qg-tile-label">효과 확인</span><span class="qg-tile-num" data-count="RESOLVED">–</span></button>
-      <button class="qg-tile tab" data-filter="ESCALATED"><span class="qg-tile-label">사람 확인 필요</span><span class="qg-tile-num" data-count="ESCALATED">–</span></button>
     </div>
   </div>
 
-  <div class="card">
-    <div class="table-responsive">
-      <table class="table table-vcenter card-table qg-table">
-        <thead><tr><th>#</th><th>설비</th><th>원인 → 조치</th><th>위험도</th><th>처리</th><th>상태</th><th>근거·효과</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="8" class="text-secondary">불러오는 중…</td></tr></tbody>
-      </table>
-    </div>
-    <div class="card-footer"><p id="msg" class="msg mb-0" role="status"></p></div>
+  <div class="qg-tabs qg-tabs-inline" role="tablist" aria-label="조치·판단 보류" id="page-tabs">
+    <button type="button" role="tab" id="tab-actions" aria-controls="p-actions" aria-selected="true">에이전트 조치 <span class="qg-tab-count" id="action-count"></span></button>
+    <button type="button" role="tab" id="tab-holds" aria-controls="p-holds" aria-selected="false">판단 보류 <span class="qg-tab-count" id="hold-count"></span></button>
   </div>
-  <div class="card mt-3" id="hold-card">
-    <div class="card-header">
-      <div>
-        <h3 class="card-title">판단 보류 · 사람 검토 필요 <span class="badge bg-red-lt ms-1" id="hold-count">–</span></h3>
-        <div class="text-secondary small">재확인을 상한까지 해도 원인을 정하지 못했거나, 검증 지적이 남은 채 경보가 닫힌 분석입니다. 확인한 내용을 메모로 남겨 주세요.</div>
+  <p id="msg" class="msg qg-page-msg" role="status"></p>
+
+  <!-- ① 에이전트 조치: 상태 거르개 + 표 -->
+  <div class="qg-tabpanel qg-tabpanel-flat" role="tabpanel" id="p-actions" aria-labelledby="tab-actions">
+    <div class="qg-panel">
+      <div class="qg-toolbar">
+        <div class="qg-seg" id="tiles" role="group" aria-label="상태로 거르기">
+          <button type="button" class="tab active" aria-pressed="true" data-filter="">전체 <span data-count="">–</span></button>
+          <button type="button" class="tab" aria-pressed="false" data-filter="WAITING_APPROVAL">승인 대기 <span data-count="WAITING_APPROVAL">–</span></button>
+          <button type="button" class="tab" aria-pressed="false" data-filter="ESCALATED">사람 확인 필요 <span data-count="ESCALATED">–</span></button>
+          <button type="button" class="tab" aria-pressed="false" data-filter="AUTO">자동 처리 <span data-count="AUTO">–</span></button>
+          <button type="button" class="tab" aria-pressed="false" data-filter="RESOLVED">해소 <span data-count="RESOLVED">–</span></button>
+        </div>
+        <span class="qg-toolbar-spacer"></span>
+        <span class="qg-count" id="refresh-note">10초마다 새로 읽음</span>
+      </div>
+      <div class="table-responsive qg-table-wrap">
+        <table class="table table-vcenter card-table qg-table qg-table-list">
+          <caption class="visually-hidden">에이전트 조치 목록</caption>
+          <thead><tr>
+            <th scope="col">상태</th><th scope="col">위험도</th><th scope="col">설비</th><th scope="col">원인 → 조치</th>
+            <th scope="col">처리</th><th scope="col">근거·효과</th><th scope="col" class="text-end">번호</th><th scope="col"><span class="visually-hidden">동작</span></th>
+          </tr></thead>
+          <tbody id="rows"><tr><td colspan="8" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
+        </table>
       </div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-vcenter card-table qg-table">
-        <thead><tr><th>분석</th><th>설비</th><th>판단</th><th>보류 사유</th><th>에이전트 요약 · 확인할 항목</th><th></th></tr></thead>
-        <tbody id="hold-rows"><tr><td colspan="6" class="text-secondary">불러오는 중…</td></tr></tbody>
-      </table>
+  </div>
+
+  <!-- ② 판단 보류: 사람이 확인하고 메모를 남긴다 -->
+  <div class="qg-tabpanel qg-tabpanel-flat" role="tabpanel" id="p-holds" aria-labelledby="tab-holds" hidden>
+    <div class="qg-panel">
+      <div class="qg-toolbar">
+        <span class="qg-help">재확인을 상한까지 해도 원인을 정하지 못했거나, 검증 지적이 남은 채 경보가 닫힌 분석입니다. 확인한 내용을 메모로 남겨 주세요.</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table card-table qg-table qg-table-holds">
+          <caption class="visually-hidden">판단 보류 목록</caption>
+          <thead><tr><th scope="col">보류 사유</th><th scope="col">설비</th><th scope="col">분석</th><th scope="col">에이전트 판단</th>
+            <th scope="col">요약 · 확인할 항목</th><th scope="col">검토</th></tr></thead>
+          <tbody id="hold-rows"><tr><td colspan="6" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
-</div>
+</section>
 
 </main>
 </div>
 
-<script src="qg-common.js?v=2"></script>
-<script src="actions.js?v=2"></script>
+<script src="qg-common.js?v=4"></script>
+<script src="actions.js?v=4"></script>
 </body>
 </html>

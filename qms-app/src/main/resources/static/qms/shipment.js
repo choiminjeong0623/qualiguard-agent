@@ -14,15 +14,19 @@
     return QG.stateTag('inspection', r === 'NG' ? 'NG' : 'OK');
   }
   function msg(text, ok) { $('#msg').text(text).attr('class', 'msg mt-3 mb-0 ' + (ok ? 'ok' : 'err')); }
+  function empty(sel, cols, text) { $(sel).html('<tr><td colspan="' + cols + '" class="qg-empty-cell">' + esc(text) + '</td></tr>'); }
+  var SENSOR = { mold_temp: ['금형 온도', '℃'], barrel_temp: ['실린더 온도', '℃'], injection_pressure: ['사출 압력', 'bar'],
+    holding_pressure: ['보압', 'bar'], cushion: ['쿠션', 'mm'], cycle_time: ['사이클 타임', 's'], motor_current: ['모터 전류', 'A'] };
 
   function drawCandidates(rows) {
     state.picked = null;
     $('#picked').text('없음 — 후보가 하나면 자동으로 정합니다');
-    if (!rows.length) { $('#cands').html('<tr><td colspan="5" class="text-secondary">해당 임시 시리얼의 shot 이 없습니다.</td></tr>'); return; }
+    if (!rows.length) { empty('#cands', 5, '해당 임시 시리얼의 shot 이 없습니다.'); return; }
     $('#cands').html(rows.map(function (c) {
       var usable = !c.linkedSerial && c.inspectionResult !== 'NG';
-      return '<tr><td>' + (usable ? '<input type="radio" name="pick" value="' + esc(c.messageId) + '" data-label="'
-          + esc(c.equipmentId + ' #' + (c.shotNo == null ? '?' : c.shotNo)) + '">' : '') + '</td>'
+      var label = c.equipmentId + ' #' + (c.shotNo == null ? '?' : c.shotNo);
+      return '<tr><td>' + (usable ? '<input type="radio" class="form-check-input qg-radio-lg" name="pick" value="' + esc(c.messageId) + '" data-label="'
+          + esc(label) + '" aria-label="' + esc(label + ' 고르기') + '">' : '') + '</td>'
         + '<td>' + esc(c.equipmentId) + ' #' + esc(c.shotNo == null ? '번호 없음' : c.shotNo) + '</td>'
         + '<td>' + time(c.shotTs) + '</td><td>' + result(c.inspectionResult) + '</td>'
         + '<td>' + (c.linkedSerial ? esc(c.linkedSerial) : '-') + '</td></tr>';
@@ -31,12 +35,12 @@
 
   function loadLinks() {
     $.getJSON(API + '/links', { top: 30 }).done(function (rows) {
-      if (!rows.length) { $('#links').html('<tr><td colspan="6" class="text-secondary">아직 연결이 없습니다.</td></tr>'); return; }
+      if (!rows.length) { empty('#links', 6, '아직 연결이 없습니다.'); return; }
       $('#links').html(rows.map(function (r) {
-        return '<tr><td><a href="#" data-trace="' + esc(r.confirmed_serial) + '">' + esc(r.confirmed_serial) + '</a></td>'
-          + '<td>' + esc(r.provisional_serial || '-') + '</td>'
+        return '<tr><td><a href="#" class="qg-mono" data-trace="' + esc(r.confirmed_serial) + '">' + esc(r.confirmed_serial) + '</a></td>'
+          + '<td>' + result(r.inspection_result) + '</td>'
           + '<td>' + esc(r.equipment_id) + ' #' + esc(r.shot_no == null ? '?' : r.shot_no) + '</td>'
-          + '<td>' + result(r.inspection_result) + '</td><td>' + esc(r.shipment_no || '-') + '</td>'
+          + '<td class="qg-mono">' + esc(r.provisional_serial || '-') + '</td><td class="qg-mono">' + esc(r.shipment_no || '-') + '</td>'
           + '<td>' + time(r.confirmed_at) + ' · ' + esc(r.confirmed_by) + '</td></tr>';
       }).join(''));
     });
@@ -46,21 +50,25 @@
     $('#traceSerial').val(serial);
     $.getJSON(API + '/trace/' + encodeURIComponent(serial)).done(function (t) {
       var s = t.shot;
-      var vals = ['mold_temp', 'barrel_temp', 'injection_pressure', 'holding_pressure', 'cushion', 'cycle_time', 'motor_current']
-        .map(function (k) { return k + ' ' + (s[k] == null ? '-' : s[k]); }).join(' · ');
+      var vals = Object.keys(SENSOR).map(function (k) {
+        return '<div><dt>' + esc(SENSOR[k][0]) + '</dt><dd>' + esc(s[k] == null ? '-' : s[k] + ' ' + SENSOR[k][1]) + '</dd></div>';
+      }).join('');
       var an = t.anomalies.length
-        ? '<ul class="mb-0">' + t.anomalies.map(function (a) {
-            return '<li>' + time(a.detected_at) + ' · ' + esc(a.rule_code) + ' · ' + esc(a.message)
-              + (a.ncr_nos ? ' <span class="badge bg-blue-lt">' + esc(a.ncr_nos) + '</span>' : '') + '</li>';
+        ? '<ul class="qg-list-plain">' + t.anomalies.map(function (a) {
+            return '<li><span class="muted">' + time(a.detected_at) + '</span> · ' + esc(QG.labelWithCode('rule', a.rule_code)) + ' · ' + esc(a.message)
+              + (a.ncr_nos ? ' ' + a.ncr_nos.split(',').map(function (n) {
+                  n = $.trim(n); return '<a class="qg-mono" href="index.html#' + encodeURIComponent(n) + '">' + esc(n) + '</a>';
+                }).join(', ') : '') + '</li>';
           }).join('') + '</ul>'
-        : '<p class="text-secondary mb-0">그 무렵 경보 없음</p>';
-      $('#trace').html('<p class="mb-1"><b>' + esc(s.confirmed_serial) + '</b> ← ' + esc(s.equipment_id) + ' #'
-          + esc(s.shot_no == null ? '?' : s.shot_no) + ' (' + time(s.shot_ts) + ') ' + result(s.inspection_result)
-          + (s.arrival_late ? ' <span class="badge bg-yellow-lt">늦게 도착 · ' + esc(s.late_status || '') + '</span>' : '')
-          + '</p><p class="text-secondary mb-2">' + esc(vals) + '</p>'
-          + '<p class="mb-1">경보 (' + esc(t.window) + ')</p>' + an);
+        : '<p class="muted mb-0">그 무렵 경보 없음</p>';
+      $('#trace').html('<div class="qg-objtitle"><span class="qg-h2 qg-mono">' + esc(s.confirmed_serial) + '</span>' + result(s.inspection_result)
+          + (s.arrival_late ? QG.tone('warning', '늦게 도착 · ' + (s.late_status || '')) : '') + '</div>'
+          + '<dl class="qg-facts"><div><dt>설비 · shot</dt><dd>' + esc(s.equipment_id) + ' #' + esc(s.shot_no == null ? '?' : s.shot_no) + '</dd></div>'
+          + '<div><dt>생산 시각</dt><dd>' + time(s.shot_ts) + '</dd></div></dl>'
+          + '<h3 class="qg-h3">공정 값</h3><dl class="qg-facts">' + vals + '</dl>'
+          + '<h3 class="qg-h3">그 무렵 경보 <span class="muted">(' + esc(t.window) + ')</span></h3>' + an);
     }).fail(function (xhr) {
-      $('#trace').html('<p class="msg err mb-0">' + esc((xhr.responseJSON && xhr.responseJSON.error) || '없음') + '</p>');
+      $('#trace').html('<p class="msg err mb-0">' + esc((xhr.responseJSON && xhr.responseJSON.error) || '해당 시리얼의 연결이 없습니다.') + '</p>');
     });
   }
 
@@ -93,7 +101,8 @@
   });
 
   $('#traceForm').on('submit', function (e) { e.preventDefault(); trace($('#traceSerial').val()); });
-  $('#links').on('click', 'a[data-trace]', function (e) { e.preventDefault(); trace($(this).attr('data-trace')); });
+  var pageTabs = QG.tabs('#page-tabs');
+  $('#links').on('click', 'a[data-trace]', function (e) { e.preventDefault(); pageTabs.select('tab-trace'); trace($(this).attr('data-trace')); });
 
   QG.me().done(function (me) {
     state.me = me;
