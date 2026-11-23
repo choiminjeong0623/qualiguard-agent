@@ -108,6 +108,7 @@ public class AgentController {
         m.put("model", env.getProperty("spring.ai.google.genai.chat.model", "gemini-3.8-flash"));
         m.put("temperature", env.getProperty("spring.ai.google.genai.chat.temperature"));
         m.put("transport", env.getProperty("qg.agent.pipeline.transport", "kafka"));
+        m.put("promptVersion", AgentPrompts.VERSION);   // 로드맵 O1: 어떤 프롬프트로 잰 수치인지
         m.put("writerMode", env.getProperty("qg.agent.writer.mode", "analysis-text"));
         m.put("vectorEnabled", env.getProperty("qg.knowledge.vector-enabled", Boolean.class, false));
         m.put("actionEnabled", env.getProperty("qg.agent.action.enabled", Boolean.class, false));
@@ -120,7 +121,7 @@ public class AgentController {
                 SELECT TOP (?) g.analysis_id, g.equipment_id, g.trigger_type, g.as_of_shot, g.parent_analysis_id,
                        g.decision, g.cause_code, g.confidence,
                        g.latency_ms, n.ncr_no, g.tool_trace, g.error_message, g.attempts, g.verify_status,
-                       g.incident_id, g.pipeline_json, g.hold_status, g.hold_reason,
+                       g.incident_id, g.pipeline_json, g.hold_status, g.hold_reason, g.prompt_version,
                        CONVERT(VARCHAR(33), g.created_at, 127) AS created_at
                 FROM dbo.agent_analysis AS g
                 LEFT JOIN dbo.ncr AS n ON n.ncr_id = g.ncr_id

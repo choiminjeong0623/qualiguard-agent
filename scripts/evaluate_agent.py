@@ -420,6 +420,7 @@ def main():
     gt = load_ground_truth()
     cfg = http("GET", "/config")
     print(f"재확인 설정: 관찰 뒤 {cfg['recheckShots']} shot, 최대 {cfg['recheckMax']}회")
+    print(f"프롬프트 버전: {cfg.get('promptVersion', '-')} (meta.json 의 agentConfig 에도 남습니다)")
     cases = build_cases()
     stamp = datetime.now().strftime("%m%d%H%M%S")
     results = []
