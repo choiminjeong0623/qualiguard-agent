@@ -83,7 +83,8 @@ def http(method, path):
     if TOKEN:
         req.add_header("Authorization", "Bearer " + TOKEN)
     try:
-        with urllib.request.urlopen(req, timeout=600) as r:
+        # 로컬 모델(폐쇄망 분석 모드)은 느리므로 QG_EVAL_HTTP_TIMEOUT 으로 늘릴 수 있다
+        with urllib.request.urlopen(req, timeout=int(os.environ.get("QG_EVAL_HTTP_TIMEOUT", "600"))) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         # 앱이 돌려준 오류 내용(본문)을 화면에 보여 준다. 504 숫자만으로는 원인을 알 수 없다.

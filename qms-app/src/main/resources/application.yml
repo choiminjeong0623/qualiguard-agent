@@ -12,6 +12,13 @@ spring:
     hikari:
       maximum-pool-size: 5                     # 8GB 환경: 연결 수 최소화
   ai:
+    model:
+      # 분석 LLM: google-genai(기본, Gemini) / ollama(폐쇄망 분석 모드, 프로파일 closed: application-closed.yml)
+      chat: ${QG_CHAT_MODEL:google-genai}
+      embedding: none                     # Ollama 임베딩은 쓰지 않음 (Gemini 임베딩은 아래 embedding.text 로 따로 켜고 끔)
+      decision: none
+    ollama:
+      base-url: ${OLLAMA_URL:http://localhost:11434}
     mcp:
       server:
         name: qualiguard-qms

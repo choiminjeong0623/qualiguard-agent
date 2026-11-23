@@ -43,12 +43,16 @@ def metrics(folder):
         return sum(xs) / len(xs) if xs else None
 
     shots = [r["shotsToDiagnosis"] for r in results if r["diagnosed"] and r["shotsToDiagnosis"] is not None]
-    cost_total = sum(((t.get("prompt") or 0) * IN_USD + ((t.get("output") or 0) + (t.get("thought") or 0)) * OUT_USD)
-                     / 1_000_000 for t in toks)
     cfg = meta.get("agentConfig", {})
+    # 로컬 모델(폐쇄망 분석 모드)은 API 요금이 없다 (전기·장비 비용은 따로)
+    local = cfg.get("chatProvider") == "ollama"
+    cost_total = 0.0 if local else sum(
+        ((t.get("prompt") or 0) * IN_USD + ((t.get("output") or 0) + (t.get("thought") or 0)) * OUT_USD)
+        / 1_000_000 for t in toks)
     return {
         "folder": folder.name,
-        "setting": f"analysisMode={cfg.get('analysisMode', 'tools')}, vectorEnabled={cfg.get('vectorEnabled')}",
+        "setting": f"model={cfg.get('model')}, analysisMode={cfg.get('analysisMode', 'tools')}, "
+                   f"vectorEnabled={cfg.get('vectorEnabled')}",
         "cases": len(results),
         "correct": sum(1 for r in results if r["diagnosed"]),
         "shotsMedian": statistics.median(shots) if shots else None,

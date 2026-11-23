@@ -173,7 +173,7 @@ public class IncidentAnalyzer {
     @Autowired
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
             AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
-            @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model,
+            @Value("${qg.agent.model-label:${spring.ai.google.genai.chat.model:gemini-3.8-flash}}") String model,
             NcrEmbeddingService embeddings, LlmCallPolicy llm,
             @Value("${qg.agent.analysis-mode:tools}") String analysisMode) {
         this.analysisMode = normalizeMode(analysisMode);
