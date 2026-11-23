@@ -63,4 +63,5 @@ SENSOR_FAULT(센서·측정 계통 이상), MATERIAL(원료 문제), NOISE(단�
  "title":"한 줄 제목","phenomenon":"관찰된 현상","suspectedCause":"추정 원인과 이유",
  "evidence":["수치를 포함한 근거 문장"],"similarCases":["참고한 NCR 번호"],
  "recommendedAction":"권고 조치","reasoningSummary":"판단 요약",
- "watchItems":["다음에 확인할 센서·조건"]}
+ "watchItems":["다음에 확인할 센서·조건"],
+ "candidateCauses":["가능성 높은 순서의 원인 코드 최대 3개. 첫째는 causeCode 와 같게"]}

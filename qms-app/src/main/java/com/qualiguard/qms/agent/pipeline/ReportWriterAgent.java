@@ -139,7 +139,8 @@ public class ReportWriterAgent {
             throw new IllegalStateException("로컬 모델 응답에 필수 문장이 없습니다: " + shorten(text, 200));
         }
         return new AnalysisResult(r.decision(), r.causeCode(), r.confidence(), title, phenomenon, cause, r.evidence(),
-                r.similarCases(), action == null ? r.recommendedAction() : action, r.reasoningSummary(), r.watchItems());
+                r.similarCases(), action == null ? r.recommendedAction() : action, r.reasoningSummary(), r.watchItems(),
+                r.candidateCauses());
     }
 
     /** 근거 표 초안: 분석의 구조화된 값만으로 만들고, 사람이 문장을 쓰도록 표시한다. */
@@ -153,7 +154,8 @@ public class ReportWriterAgent {
         return new AnalysisResult(r.decision(), r.causeCode(), r.confidence(), title,
                 "(사람 작성 필요) 근거 표:\n" + table,
                 "(사람 작성 필요) AI 추정 원인 코드: " + r.causeCode() + ", 확신도 " + r.confidence(),
-                r.evidence(), r.similarCases(), "(사람 작성 필요)", r.reasoningSummary(), r.watchItems());
+                r.evidence(), r.similarCases(), "(사람 작성 필요)", r.reasoningSummary(), r.watchItems(),
+                r.candidateCauses());
     }
 
     @SuppressWarnings("unchecked")

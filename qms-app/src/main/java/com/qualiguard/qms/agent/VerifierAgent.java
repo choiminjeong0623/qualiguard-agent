@@ -41,8 +41,16 @@ public class VerifierAgent {
      * @param status PASS(통과) / WEAK(되돌릴 만큼 약함)
      * @param fails  되돌림 사유 (분석 에이전트에게 그대로 전달)
      * @param warns  기록만 하는 약점
+     * @param numberClaims   근거에 적힌 수치 개수 (도구 결과와 대조했을 때만, 아니면 null. 로드맵 E5 평가용)
+     * @param numberVerified 그중 도구 결과와 맞은 수치 개수
      */
-    public record Verification(String status, List<String> fails, List<String> warns) {
+    public record Verification(String status, List<String> fails, List<String> warns, Integer numberClaims,
+            Integer numberVerified) {
+
+        public Verification(String status, List<String> fails, List<String> warns) {
+            this(status, fails, warns, null, null);
+        }
+
         public boolean passed() {
             return "PASS".equals(status);
         }
@@ -172,7 +180,9 @@ public class VerifierAgent {
         if ("NCR_DRAFT".equals(decision) && (r.recommendedAction() == null || r.recommendedAction().isBlank())) {
             warns.add("권고 조치가 비어 있습니다.");
         }
-        return new Verification(fails.isEmpty() ? "PASS" : "WEAK", List.copyOf(fails), List.copyOf(warns));
+        return new Verification(fails.isEmpty() ? "PASS" : "WEAK", List.copyOf(fails), List.copyOf(warns),
+                numbers == null ? null : numbers.claimCount(),
+                numbers == null ? null : numbers.claimCount() - numbers.unverifiedCount());
     }
 
     /** 분석 에이전트에게 돌려보낼 지적 문장. */

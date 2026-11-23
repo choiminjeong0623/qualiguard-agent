@@ -11,7 +11,11 @@ import argparse
 import json
 import os
 import statistics
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cause_metrics  # noqa: E402  원인 평가 지표 (E5)
 
 IN_USD = float(os.environ.get("INPUT_USD_PER_M", "0.30"))    # 예시 단가 (ops_report.sh 와 같은 값)
 OUT_USD = float(os.environ.get("OUTPUT_USD_PER_M", "2.50"))
@@ -58,6 +62,7 @@ def metrics(folder):
         "tokIn": tok("prompt"), "tokOut": tok("output"), "tokThought": tok("thought"),
         "costPerCase": cost_total / len(results) if results else None,
         "perCase": {(r["case"], r["run"]): r for r in results},
+        "e5": cause_metrics.compute(results),
     }
 
 
@@ -86,6 +91,9 @@ def render(a, b, title):
         ("1단계 생각 토큰 평균", f(a["tokThought"], 0), f(b["tokThought"], 0)),
         (f"사례당 예상 비용 (USD, 예시 단가 {IN_USD}/{OUT_USD})", f(a["costPerCase"], 4), f(b["costPerCase"], 4)),
     ]
+    for key, label in (("top3Final", "Top-3 적중 (마지막 판단, E5)"), ("numberMatchRate", "근거 수치 일치율 (E5)"),
+                       ("citedRealRate", "인용 사례 실재율 (E5)")):
+        rows.append((label, cause_metrics.pct(a["e5"][key]), cause_metrics.pct(b["e5"][key])))
     out = [f"# {title}", "", f"- 기준(A): `{a['folder']}`", f"- 비교(B): `{b['folder']}`", "",
            "| 항목 | A | B |", "|---|---|---|"]
     out += [f"| {k} | {x} | {y} |" for k, x, y in rows]
