@@ -334,6 +334,20 @@ MQTT → 브리지 → Kafka → Kafka Streams 전체 경로에서 같은 시나
 - 집계 `GET /api/qms/ncrs/completeness`: AI 가 만든 보고서(`created_by='AGENT'`) 전체의 항목별 충족률(`items.*.passRate`), 모든 항목을 채운 비율(`completeRate`), 평균 충족률(`avgRate`).
 - 승인을 막지는 않습니다. 사람이 빠진 항목을 보고 고치거나, 알고도 승인할 수 있게 표시만 합니다.
 
+### A/B 실험 한 줄 실행 (로드맵 A1·F4)
+
+맥에서 `./scripts/ab_eval.sh prefetch` (A1) 또는 `./scripts/ab_eval.sh vector` (F4). 설정만 바꿔 앱을 두 번 띄워 같은 평가를 돌리고, `eval/ab_<실험>.md` 비교표를 만듭니다. 결과는 **아직 측정 전**입니다.
+
+| 실험 | A (기준) | B (비교) | 알고 싶은 것 |
+|---|---|---|---|
+| A1 `prefetch` | `qg.agent.analysis-mode=tools`: 모델이 도구를 골라 여러 번 부름 | `prefetch`: 조사 절차 1~5의 도구를 정해진 인자로 미리 실행해 프롬프트에 넣고 LLM 1회 | 에이전트(도구 선택)가 정답률·지연·비용에서 값을 하는가 |
+| F4 `vector` | `qg.knowledge.vector-enabled=true`: 유사 사례를 뜻으로도 찾음 | `false`: 키워드(센서·불량 유형)로만 찾음 | 의미 검색이 원인 추정에 도움이 되는가 |
+
+- prefetch 는 경보 센서(최대 3개)마다 넓은 추이(300/20)와 최근 변화(60/5)를 보고, 유사 사례 검색의 현상 설명은 경보 메시지로 대신합니다. 시스템 프롬프트는 같고, "도구를 부를 수 없다, 아래 결과만 쓰라"는 안내만 붙입니다.
+- prefetch 의 "도구 호출 수"는 미리 실행한 DB 조회 수입니다(모델이 고른 것이 아님).
+- 비교표 항목: 정답(진단 성공), 진단까지 shot, 잘못된 초안, LLM·도구 호출 수, 1단계 지연 평균·P95, 1단계 토큰, 사례당 예상 비용(예시 단가).
+- 사례가 5개뿐이라 1~2건 차이는 우연일 수 있습니다. 시간이 되면 `./scripts/ab_eval.sh prefetch 3` 으로 3회씩.
+
 ### 운영 리포트 읽는 법 (로드맵 O3)
 
 `./scripts/ops_report.sh 7 ALL` (최근 7일, 전체) / `./scripts/ops_report.sh 3650 <run_tag>` (평가 실행 하나) / `LIVE` (태그 없는 실제 운영만).

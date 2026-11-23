@@ -89,6 +89,7 @@ qg:
     merge-minutes: 60                 # 같은 설비·같은 원인 초안이 60분 안에 있으면 그 초안에 연결
     recheck-shots: 40                 # 관찰(OBSERVE) 판단 뒤 새 경보가 없어도 40 shot 이 지나면 다시 분석
     recheck-max: 3                    # 새 경보 없이 이어지는 재확인 최대 횟수 (LLM 비용 상한)
+    analysis-mode: tools              # 분석 방식 (로드맵 A1): tools(모델이 도구를 골라 부름) / prefetch(도구 1~5를 정해진 인자로 미리 조회 + LLM 1회, 비교용)
     verify-max-retries: 1             # 검증 에이전트가 근거 부족으로 되돌리면 다시 분석하는 최대 횟수 (ADR-016)
     llm:                              # LLM 호출 보호 (로드맵 O4, LlmCallPolicy)
       timeout: 90s                    # 호출 1회(도구 조사 포함) 시간 제한

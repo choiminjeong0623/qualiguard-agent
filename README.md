@@ -201,6 +201,8 @@ curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.ag
 python3 scripts/evaluate_agent.py                  # 기본 평가
 python3 scripts/evaluate_agent.py --runs 3         # 반복 안정성
 python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr   # 지식저장소 제거 실험
+./scripts/ab_eval.sh prefetch                      # A1: 도구 호출 에이전트 vs 도구 미리 조회 + LLM 1회 → eval/ab_prefetch.md
+./scripts/ab_eval.sh vector                        # F4: 유사 사례 의미 검색 켬 vs 끔 → eval/ab_vector.md
 ```
 
 | 서비스 | 주소 |

@@ -54,6 +54,10 @@ public class IncidentAnalyzer {
 
     private static final Logger log = LoggerFactory.getLogger(IncidentAnalyzer.class);
     private static final Set<String> DECISIONS = Set.of("NCR_DRAFT", "SENSOR_CHECK", "OBSERVE");
+    public static final String MODE_TOOLS = "tools";
+    public static final String MODE_PREFETCH = "prefetch";
+    /** prefetch 모드에서 추이를 볼 센서 최대 개수 (경보 센서 순서대로). */
+    static final int PREFETCH_MAX_SENSORS = 3;
 
     /**
      * 분석 결과.
@@ -145,6 +149,8 @@ public class IncidentAnalyzer {
     private final String model;
     private final NcrEmbeddingService embeddings;
     private final LlmCallPolicy llm;
+    /** 분석 방식 (로드맵 A1): tools(모델이 도구를 골라 부름) / prefetch(정해진 도구 결과를 미리 넣고 LLM 1회). */
+    private final String analysisMode;
     private volatile ChatClient chatClient;
 
     /** 시험용: LLM 호출 보호는 기본값(90초, 재시도 1회). */
@@ -155,11 +161,19 @@ public class IncidentAnalyzer {
                 new LlmCallPolicy(LlmCallPolicy.Settings.defaults()));
     }
 
+    public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
+            AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder, String model,
+            NcrEmbeddingService embeddings, LlmCallPolicy llm) {
+        this(jdbc, objectMapper, tx, props, chatClientBuilder, model, embeddings, llm, MODE_TOOLS);
+    }
+
     @Autowired
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
             AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
             @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model,
-            NcrEmbeddingService embeddings, LlmCallPolicy llm) {
+            NcrEmbeddingService embeddings, LlmCallPolicy llm,
+            @Value("${qg.agent.analysis-mode:tools}") String analysisMode) {
+        this.analysisMode = normalizeMode(analysisMode);
         this.llm = llm;
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
@@ -496,18 +510,92 @@ public class IncidentAnalyzer {
         return analyzeOnce(userPrompt, asOf, t0, trace, null);
     }
 
+    /** 알 수 없는 값은 경고를 남기고 tools 로 둔다. 실제 적용된 값은 /api/agent/config 의 analysisMode 로 확인. */
+    static String normalizeMode(String mode) {
+        String m = mode == null ? MODE_TOOLS : mode.strip().toLowerCase(Locale.ROOT);
+        if (MODE_TOOLS.equals(m) || MODE_PREFETCH.equals(m)) {
+            return m;
+        }
+        log.warn("qg.agent.analysis-mode 는 tools 또는 prefetch 입니다 ('{}'). tools 로 동작합니다.", mode);
+        return MODE_TOOLS;
+    }
+
+    public String analysisMode() {
+        return analysisMode;
+    }
+
+    /**
+     * 파이프라인 분석 단계의 입구. 설정한 분석 방식(로드맵 A1)에 따라
+     * 도구 호출 에이전트(tools) 또는 "정해진 도구 미리 조회 + LLM 1회"(prefetch)로 분석한다.
+     */
+    public AnalysisResult analyzeOnce(Job job, String userPrompt, long t0, List<String> trace,
+            ToolObservations observed) {
+        if (!MODE_PREFETCH.equals(analysisMode)) {
+            return analyzeOnce(userPrompt, job.asOf(), t0, trace, observed);
+        }
+        QualityTools tools = new QualityTools(jdbc, trace, job.asOf(), t0,
+                embeddings == null ? null : embeddings::queryVector, observed);
+        Map<String, Object> fetched = prefetch(tools, job.equipmentId(), alarmSensors(job), defectType(job),
+                situation(job));
+        String prompt = userPrompt + "\n\n" + PREFETCH_NOTE + "\n" + objectMapper.writeValueAsString(fetched);
+        return analyzeWith(prompt, trace, null);
+    }
+
+    /** prefetch 모드 안내: 시스템 프롬프트(조사 절차)는 그대로 두고, 도구 결과가 이미 들어 있음을 알린다. */
+    static final String PREFETCH_NOTE = "[미리 조회한 도구 결과] 이번 분석에서는 도구를 직접 부를 수 없습니다. "
+            + "조사 절차의 도구 1~5를 아래와 같이 미리 실행해 두었습니다 (키 = 도구 이름과 인자). "
+            + "이 결과만으로 판단하고, evidence 의 수치도 이 결과에서 옮기세요.";
+
+    /**
+     * 시스템 프롬프트의 조사 절차 1~5를 정해진 인자로 그대로 실행한다 (로드맵 A1 비교 기준선).
+     * 경보 센서마다 넓은 추이(300/20)와 최근 변화(60/5)를 보고, 유사 사례는 경보 메시지를 현상 설명으로 쓴다.
+     */
+    static Map<String, Object> prefetch(QualityTools tools, String equipmentId, List<String> sensors,
+            String defectType, String situation) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("getSpcSummary(lastShots=50)", tools.getSpcSummary(equipmentId, 50));
+        for (String sensor : sensors) {
+            out.put("getSensorTrend(" + sensor + ", lastShots=300, bucketSize=20)",
+                    tools.getSensorTrend(equipmentId, sensor, 300, 20));
+            out.put("getSensorTrend(" + sensor + ", lastShots=60, bucketSize=5)",
+                    tools.getSensorTrend(equipmentId, sensor, 60, 5));
+        }
+        out.put("getDefectSummary(lastShots=300, windowSize=50)", tools.getDefectSummary(equipmentId, 300, 50));
+        out.put("findSimilarNcr(sensorKeys=" + String.join(",", sensors) + ")",
+                tools.findSimilarNcr(equipmentId, String.join(",", sensors), defectType == null ? "" : defectType,
+                        situation));
+        out.put("getMaintenanceHistory", tools.getMaintenanceHistory(equipmentId));
+        return out;
+    }
+
+    /** 경보에 나온 센서 키 (순서 유지, 중복 제거, 최대 PREFETCH_MAX_SENSORS 개). */
+    static List<String> alarmSensors(Job job) {
+        return job.alarms().stream().map(a -> (String) a.get("sensor_key")).filter(k -> k != null && !k.isBlank())
+                .distinct().limit(PREFETCH_MAX_SENSORS).toList();
+    }
+
+    private static String situation(Job job) {
+        String text = job.alarms().stream().map(a -> (String) a.get("message")).filter(m -> m != null)
+                .distinct().limit(5).collect(Collectors.joining(" / "));
+        return text.isBlank() ? null : text;
+    }
+
     /** observed: 도구가 돌려준 수치를 모을 바구니 (검증 에이전트의 수치 대조용, null 이면 모으지 않음). */
     public AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace,
             ToolObservations observed) {
+        return analyzeWith(userPrompt, trace, new QualityTools(jdbc, trace, asOf, t0,
+                embeddings == null ? null : embeddings::queryVector, observed));
+    }
+
+    /** tools 가 null 이면 도구 없이 1회 호출한다 (prefetch). */
+    private AnalysisResult analyzeWith(String userPrompt, List<String> trace, QualityTools tools) {
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
         // 시간 제한·일시 장애 재시도 (로드맵 O4). 재시도하면 조사(도구 호출)를 처음부터 다시 한다
-        ChatResponse response = llm.call("analysis", () -> chatClient().prompt()
-                .system(AgentPrompts.SYSTEM)
-                .user(userPrompt)
-                .tools(new QualityTools(jdbc, trace, asOf, t0, embeddings::queryVector, observed))
-                .call()
-                .chatResponse(), trace);
+        ChatResponse response = llm.call("analysis", () -> {
+            var spec = chatClient().prompt().system(AgentPrompts.SYSTEM).user(userPrompt);
+            return (tools == null ? spec : spec.tools(tools)).call().chatResponse();
+        }, trace);
         trace.add(Tokens.of(response).traceLine());
         String text = allText(response);
         AnalysisResult parsed = parseResult(text);
