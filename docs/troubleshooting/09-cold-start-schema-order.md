@@ -45,4 +45,5 @@ docker logs qg-mssql-init 2>&1 | grep "실행:" | tail -1
 ## 재발 방지
 - 새 SQL 파일은 **앞 번호 파일에 있는 표·칸만** 참조한다. 칸을 추가하면 그 칸을 읽는 프로시저보다 앞 번호 파일에 둔다.
 - 개발 DB 만으로는 순서 문제가 보이지 않는다. 스키마를 바꾼 PR 은 빈 DB 로 한 번 띄워 본다.
-  (후속 후보: CI 에서 SQL Server 컨테이너에 init 전체를 빈 DB 로 실행하는 단계)
+  → **자동화됨 (로드맵 Q3)**: CI 의 `container` 작업이 SQL Server 2025 컨테이너에 init 전체를 빈 DB 로 두 번 실행한다
+  (`MssqlInitScriptsContainerTest`, `./gradlew containerTest`). `cause_code` 줄을 02 에서 지우면 이 시험이 04 의 Msg 207 로 실패하는 것을 확인했다.

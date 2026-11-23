@@ -173,6 +173,8 @@ docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0)
 # 2) 애플리케이션 (브리지 + 이상 탐지)
 cd qms-app
 ./gradlew test --tests '*SpcEngineTest'  # 이상 탐지 단위 테스트 (인프라 불필요)
+./gradlew containerTest                   # SQL Server 컨테이너에 DB 초기화 전체 + 승인 프로시저 (Docker 필요)
+./gradlew detectionEval                   # 이상 탐지 seed 5개 채점 → eval/detection_report.md
 ./gradlew bootRun
 
 # QMS 검토 화면: http://localhost:8080/qms/index.html  (.env 의 QG_REVIEWER_USERNAME / PASSWORD 로 로그인)
