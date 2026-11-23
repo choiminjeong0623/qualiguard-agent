@@ -95,8 +95,8 @@ class NcrSecurityTest {
     }
 
     @Test
-    void 에이전트_API_는_로컬_평가_스크립트용으로_열려_있다() throws Exception {
-        // 에이전트 컨트롤러는 이 테스트 슬라이스에 없으므로 404 — 401·403 이 아니면 보안 필터를 통과한 것
-        mvc.perform(post("/api/agent/analyze-next")).andExpect(status().isNotFound());
+    void 에이전트_API_도_로그인이나_토큰이_없으면_401() throws Exception {
+        // 로드맵 Q2 전에는 열려 있었다(404 = 보안 필터 통과). 이제는 검토자 로그인 또는 API 토큰이 필요하다 (AgentApiSecurityTest)
+        mvc.perform(post("/api/agent/analyze-next")).andExpect(status().isUnauthorized());
     }
 }

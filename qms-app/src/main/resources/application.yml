@@ -66,6 +66,8 @@ server:
   port: 8080
 
 qg:
+  security:
+    api-token: ${QG_AGENT_API_TOKEN:}   # /api/agent·/mcp·/actuator 용 토큰 (루트 .env). 비어 있으면 토큰 인증 꺼짐 (Q2)
   mqtt:
     url: tcp://localhost:1883
     client-id: qg-bridge              # 고정 ID + 지속 세션 → 브리지가 꺼진 동안의 메시지를 브로커가 보관

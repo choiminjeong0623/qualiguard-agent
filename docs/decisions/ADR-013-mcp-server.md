@@ -25,8 +25,10 @@
 ## 결정 3. 읽기 전용, 인증은 에이전트 API 와 같이 로컬용
 MCP 도구는 모두 조회만 합니다. 승인·반려 같은 쓰기는 사람이 로그인한 QMS 화면에서만 합니다(ADR-011). `/mcp`는 에이전트 API 처럼 로컬 도구용으로 열어 두고 CSRF 검사에서 뺐습니다. **운영에서는 내부망 제한이나 토큰 인증이 필요합니다.**
 
+> 2026-11-23 갱신 (로드맵 Q2): `/mcp` 는 API 토큰이 있어야 쓸 수 있습니다. 헤더 `Authorization: Bearer <QG_AGENT_API_TOKEN>` (ApiTokenFilter). 토큰이 없거나 틀리면 401.
+
 ## 결과
-- 연결: MCP 클라이언트에 `http://localhost:8080/mcp` (streamable HTTP) 를 등록
+- 연결: MCP 클라이언트에 `http://localhost:8080/mcp` (streamable HTTP) 를 등록하고, 헤더 `Authorization: Bearer <QG_AGENT_API_TOKEN>` 을 함께 설정
 - 에이전트(`IncidentAnalyzer`)는 분석마다 `QualityTools`를 직접 넘기므로 MCP 빈의 영향을 받지 않습니다.
 
 ## 한계
