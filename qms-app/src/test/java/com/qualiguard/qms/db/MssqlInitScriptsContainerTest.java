@@ -47,6 +47,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 3) 승인 프로시저: 확정 원인 없이 승인 거부, 반려는 사유 필수, 승인하면 이력 + 아웃박스 이벤트가 같은 트랜잭션에 생김
  * 4) 하루 토큰 예산(O5) 집계 SQL: 서울 0시 경계, UTC 로 기록된 시각, NULL 토큰
  * 5) AI 초안 검토 지표(P3): 그대로 승인 / 고쳐서 승인을 이력으로 구분
+ * 6) 운영 리포트 SQL(O3, scripts/ops_report.sql): 실패율·지연 P50·P95·되돌림율·단계별 시간
  *
  * 실행: cd qms-app && ./gradlew containerTest  (Docker 필요, CI 의 별도 작업에서 돈다)
  */
@@ -63,6 +64,7 @@ class MssqlInitScriptsContainerTest {
             .withEnv("MSSQL_SA_PASSWORD", PASSWORD)
             .withExposedPorts(1433)
             .withCopyFileToContainer(MountableFile.forHostPath(INIT), "/init")
+            .withCopyFileToContainer(MountableFile.forHostPath("../scripts/ops_report.sql"), "/scripts/ops_report.sql")
             .waitingFor(Wait.forLogMessage(".*SQL Server is now ready for client connections.*", 1)
                     .withStartupTimeout(Duration.ofMinutes(3)));
 
@@ -216,6 +218,56 @@ class MssqlInitScriptsContainerTest {
             assertThat((int) after.get("approved") - (int) before.get("approved")).isEqualTo(2);
             assertThat((int) after.get("approvedAsIs") - (int) before.get("approvedAsIs")).isEqualTo(1);
             assertThat(after.get("editRate")).isNotNull();
+        }
+    }
+
+    @Test
+    void 운영_리포트_SQL_이_돌고_지연_P95_와_되돌림율을_낸다() throws Exception {
+        String tag = "it-ops";
+        try (Connection c = connect()) {
+            // 분석 4건: 지연 10·20·30·40초, 1건 되돌린 뒤 통과, 1건 실패
+            insertRun(c, tag, "NCR_DRAFT", 10_000, 1, "PASS", 1000, 100);
+            insertRun(c, tag, "NCR_DRAFT", 20_000, 2, "PASS", 2000, 200);
+            insertRun(c, tag, "OBSERVE", 30_000, 1, "PASS", 1000, 100);
+            insertRun(c, tag, "FAILED", null, 1, null, 0, 0);
+            try (Statement st = c.createStatement()) {
+                st.executeUpdate("INSERT INTO dbo.agent_incident (incident_id, equipment_id, trigger_type, run_tag, state) "
+                        + "VALUES ('it-ops-1', 'IMM-01', 'ALARM', '" + tag + "', 'AWAITING_APPROVAL')");
+                st.executeUpdate("INSERT INTO dbo.agent_incident_event (incident_id, topic, state, created_at) VALUES "
+                        + "('it-ops-1', 't', 'TRIAGED', '2026-11-23T10:00:00+09:00'),"
+                        + "('it-ops-1', 't', 'ANALYZING', '2026-11-23T10:00:01+09:00'),"
+                        + "('it-ops-1', 't', 'VERIFYING', '2026-11-23T10:00:41+09:00'),"
+                        + "('it-ops-1', 't', 'AWAITING_APPROVAL', '2026-11-23T10:00:42+09:00')");
+            }
+        }
+        ExecResult r = sqlcmd("-W", "-s", "|", "-v", "Days=3650", "RunTag=" + tag, "InUsd=1", "OutUsd=10",
+                "-i", "/scripts/ops_report.sql");
+        String out = r.getStdout();
+        assertThat(r.getExitCode()).as(out + r.getStderr()).isZero();
+        assertThat(out).contains("== 1)", "== 2)", "== 3)", "== 4)");
+        // 1) 4건 중 실패 1 (25.0%), 성공 3건 지연 10·20·30초 → P50 20000, P95 29000 (선형 보간)
+        assertThat(out).containsPattern("\\|4\\|1\\|25\\.0\\|20000\\|29000\\|");
+        // 2) 성공 3건 중 되돌림 1 (33.3%), 되돌린 뒤 통과 100%
+        assertThat(out).containsPattern("3\\|1\\|33\\.3\\|1\\|100\\.0\\|3\\|0");
+        // 3) 분석 단계 40초
+        assertThat(out).containsPattern("ANALYZING\\|1\\|40000\\|40000");
+    }
+
+    private static void insertRun(Connection c, String tag, String decision, Integer latencyMs, int attempts,
+            String verify, int inTok, int outTok) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, latency_ms,
+                    attempts, verify_status, prompt_tokens, output_tokens, model, prompt_version, run_tag)
+                VALUES ('IMM-01', 'it', 'it', ?, ?, ?, ?, ?, ?, 'test-model', 'analysis-v1@test', ?)
+                """)) {
+            ps.setString(1, decision);
+            ps.setObject(2, latencyMs);
+            ps.setInt(3, attempts);
+            ps.setString(4, verify);
+            ps.setInt(5, inTok);
+            ps.setInt(6, outTok);
+            ps.setString(7, tag);
+            ps.executeUpdate();
         }
     }
 
