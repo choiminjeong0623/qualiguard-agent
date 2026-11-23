@@ -273,8 +273,21 @@ class AgentPipelineTest {
         w.analyzer.answers.add(draft(80, List.of("온도 224.1℃", "불량률 6%", "전류 +1.8σ")));
         var o = w.pipeline.analyzeAndWait("a-1", true, "t1");
         assertEquals("LOCAL", o.report().get("mode"));
+        assertEquals(0, o.report().get("numberUnsupported"), "224℃ 는 근거 224.1℃ 를 반올림한 값");
         assertEquals("실린더 온도 저하로 미성형 증가", w.analyzer.writtenWith.title());
         assertEquals(80, w.analyzer.writtenWith.confidence());
+    }
+
+    @Test
+    void 로컬_모델이_자료에_없는_수치를_쓰면_근거_표_초안으로_대신한다() {
+        Wired w = wire("local", (p, t) -> "{\"title\":\"실린더 온도 저하\",\"phenomenon\":\"온도 212.7℃ 로 하락\","
+                + "\"suspectedCause\":\"히터 열화\",\"recommendedAction\":\"히터 밴드 점검\"}");
+        w.analyzer.answers.add(draft(80, List.of("온도 224.1℃", "불량률 6%", "전류 +1.8σ")));
+        var o = w.pipeline.analyzeAndWait("a-1", true, "t1");
+        assertEquals("TEMPLATE_NUMBER_GUARD", o.report().get("mode"));
+        assertEquals(1, o.report().get("numberUnsupported"));
+        assertTrue(String.valueOf(o.report().get("fallbackReason")).contains("212.7"));
+        assertTrue(w.analyzer.writtenWith.title().contains("사람 작성 필요"));
     }
 
     @Test

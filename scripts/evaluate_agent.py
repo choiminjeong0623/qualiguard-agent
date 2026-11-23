@@ -281,6 +281,9 @@ def run_case(c, run, stamp, gt, cfg):
             "numberClaims": (out.get("verification") or {}).get("numberClaims"),
             "numberVerified": (out.get("verification") or {}).get("numberVerified"),
             "holdStatus": hold_status(out.get("analysisId")),
+            "writerMode": (out.get("report") or {}).get("mode"),
+            "writerNumberClaims": (out.get("report") or {}).get("numberClaims"),
+            "writerNumberUnsupported": (out.get("report") or {}).get("numberUnsupported"),
             "toolCalls": len([t for t in trace if not t.startswith(" ") and not t.startswith("repairJsonFormat")
                               and not t.startswith("verify#")]),
             "attempts": out.get("attempts") or 1,

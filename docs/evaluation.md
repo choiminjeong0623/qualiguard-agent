@@ -348,6 +348,13 @@ MQTT → 브리지 → Kafka → Kafka Streams 전체 경로에서 같은 시나
 - 출력 형식에 `candidateCauses`(가능성 높은 순 원인 코드 최대 3개)를 추가했습니다. 프롬프트 본문이 바뀌어 `promptVersion` 해시가 달라졌습니다(파일 이름은 analysis-v1 유지, E3 재평가가 이 버전의 기준선).
 - 보류 적절성은 보류가 "필요했는데 안 한" 경우(틀린 초안)를 세지 않습니다. 그건 기존 "잘못된 초안" 수로 봅니다.
 
+### 작성 단계 정리 (로드맵 A3)
+
+작성 방식 기본값은 `analysis-text`(분석 문장 그대로)이고, 로컬 소형 LLM 작성(`local`)은 **실험 기능**으로 둡니다(README "실험 기능" 절). 로컬 모델은 문장을 다듬다 수치를 바꿀 위험이 있어, 쓴 문장의 수치를 넘겨준 자료(근거·원시값·정비 기록)와 대조합니다(검증 에이전트 규칙 6과 같은 `EvidenceNumbers`).
+
+- 자료에 없는 수치가 하나라도 있으면 초안에 쓰지 않고 근거 표 초안으로 대신합니다(`report.mode = TEMPLATE_NUMBER_GUARD`, `fallbackReason` 에 그 수치).
+- **수치 변조율** = `numberUnsupported` 합 / `numberClaims` 합. 평가 단계 기록(`writerNumberClaims`·`writerNumberUnsupported`)에 남으므로, 맥에서 Ollama 를 켜고 `QG_AGENT_WRITER_MODE=local` 로 평가를 돌리면 잴 수 있습니다. 아직 측정 전입니다.
+
 ### A/B 실험 한 줄 실행 (로드맵 A1·F4)
 
 맥에서 `./scripts/ab_eval.sh prefetch` (A1) 또는 `./scripts/ab_eval.sh vector` (F4). 설정만 바꿔 앱을 두 번 띄워 같은 평가를 돌리고, `eval/ab_<실험>.md` 비교표를 만듭니다. 결과는 **아직 측정 전**입니다.
