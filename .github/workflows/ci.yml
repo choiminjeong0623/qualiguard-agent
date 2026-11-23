@@ -74,3 +74,22 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: pytest
         run: uv run --with pytest pytest -q tests
+
+  qms-ui:
+    # QMS 화면 스모크 테스트: 정적 화면 + 가짜 API (e2e/README.md)
+    name: qms-ui (화면 스모크 테스트)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: 스모크 테스트
+        run: npx playwright test --project=smoke

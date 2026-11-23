@@ -1,0 +1,14 @@
+{
+  "name": "qualiguard-qms-e2e",
+  "private": true,
+  "description": "QMS 화면 스모크 테스트 — 정적 화면 + 가짜 API (백엔드·DB 없이 실행)",
+  "scripts": {
+    "test": "playwright test",
+    "capture": "playwright test --project=capture"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@tabler/core": "1.4.0",
+    "jquery": "3.7.1"
+  }
+}
