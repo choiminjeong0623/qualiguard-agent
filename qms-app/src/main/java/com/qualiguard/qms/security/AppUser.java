@@ -24,4 +24,15 @@ public class AppUser extends User {
     public String getRole() {
         return role;
     }
+
+    /** 같은 사용자인지는 상위 클래스(User)처럼 아이디로만 본다. 이름·역할은 표시용이라 비교에 넣지 않는다. */
+    @Override
+    public boolean equals(Object o) {
+        return super.equals(o);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

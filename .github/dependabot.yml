@@ -1,0 +1,29 @@
+# 의존성 자동 갱신 (로드맵 Q4). 매주 월요일에 보안 패치·새 버전이 있으면 PR 을 연다.
+# PR 이 열리면 CI(단위 테스트·SpotBugs·컨테이너 시험)가 돌아 깨지는지 바로 보인다.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /qms-app
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 5
+    groups:
+      spring:
+        patterns: ["org.springframework*"]
+
+  - package-ecosystem: uv
+    directory: /simulator
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Seoul
