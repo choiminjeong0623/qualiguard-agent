@@ -48,6 +48,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 4) 하루 토큰 예산(O5) 집계 SQL: 서울 0시 경계, UTC 로 기록된 시각, NULL 토큰
  * 5) AI 초안 검토 지표(P3): 그대로 승인 / 고쳐서 승인을 이력으로 구분
  * 6) 운영 리포트 SQL(O3, scripts/ops_report.sql): 실패율·지연 P50·P95·되돌림율·단계별 시간
+ * 7) 앱 전용 계정(Q5, app_login.sqlcmd): 읽기·쓰기·프로시저 실행은 되고 표 생성·삭제(DDL)는 거부
  *
  * 실행: cd qms-app && ./gradlew containerTest  (Docker 필요, CI 의 별도 작업에서 돈다)
  */
@@ -57,6 +58,8 @@ class MssqlInitScriptsContainerTest {
 
     private static final String PASSWORD = "Qg-Test-Passw0rd!";
     private static final Path INIT = Path.of("../infra/mssql/init");
+    private static final String APP_USER = "qg_app";
+    private static final String APP_PASSWORD = "Qg-App-Passw0rd!";
 
     @Container
     static final GenericContainer<?> MSSQL = new GenericContainer<>("mcr.microsoft.com/mssql/server:2025-latest")
@@ -87,6 +90,30 @@ class MssqlInitScriptsContainerTest {
                 ResultSet rs = st.executeQuery("SELECT COL_LENGTH('dbo.agent_analysis', 'prompt_version')")) {
             rs.next();
             assertThat(rs.getObject(1)).as("마지막 번호대 스크립트까지 적용됨").isNotNull();
+        }
+    }
+
+    @Test
+    void 앱_전용_계정은_읽기_쓰기_프로시저만_되고_DDL_은_거부된다() throws Exception {
+        for (int i = 0; i < 2; i++) {   // 두 번째 실행은 비밀번호만 다시 맞춘다
+            ExecResult r = sqlcmd("-v", "QG_DB_APP_USER=" + APP_USER, "QG_DB_APP_PASSWORD=" + APP_PASSWORD,
+                    "-i", "/init/app_login.sqlcmd");
+            assertThat(r.getExitCode()).as("app_login.sqlcmd:\n" + r.getStdout() + r.getStderr()).isZero();
+        }
+        try (Connection c = DriverManager.getConnection(jdbcUrl(), APP_USER, APP_PASSWORD);
+                Statement st = c.createStatement()) {
+            try (ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM dbo.equipment")) {
+                assertThat(rs.next()).isTrue();
+            }
+            insertDraft(c, "IT-Q5-01", "체크 링 마모", "CHECK_RING_WEAR");   // 쓰기
+            review(c, "IT-Q5-01", "APPROVE", "앱 계정으로 승인");             // 프로시저 실행
+            assertThat(status(c, "IT-Q5-01")).isEqualTo("APPROVED");
+            assertThatThrownBy(() -> st.execute("CREATE TABLE dbo.q5_probe (id INT)"))
+                    .isInstanceOf(SQLException.class).hasMessageContaining("permission");
+            assertThatThrownBy(() -> st.execute("DROP TABLE dbo.ncr_history"))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> st.execute("ALTER PROCEDURE dbo.usp_KnowledgeStats AS SELECT 1"))
+                    .isInstanceOf(SQLException.class);
         }
     }
 
@@ -179,8 +206,12 @@ class MssqlInitScriptsContainerTest {
     }
 
     private static Connection connect() throws SQLException {
-        return DriverManager.getConnection("jdbc:sqlserver://" + MSSQL.getHost() + ":" + MSSQL.getMappedPort(1433)
-                + ";databaseName=QUALIGUARD;encrypt=true;trustServerCertificate=true", "sa", PASSWORD);
+        return DriverManager.getConnection(jdbcUrl(), "sa", PASSWORD);
+    }
+
+    private static String jdbcUrl() {
+        return "jdbc:sqlserver://" + MSSQL.getHost() + ":" + MSSQL.getMappedPort(1433)
+                + ";databaseName=QUALIGUARD;encrypt=true;trustServerCertificate=true";
     }
 
     @Test

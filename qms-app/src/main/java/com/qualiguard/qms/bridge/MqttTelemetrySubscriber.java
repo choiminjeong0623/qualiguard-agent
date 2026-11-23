@@ -79,6 +79,13 @@ public class MqttTelemetrySubscriber implements SmartLifecycle, MqttCallback {
         options.setSessionExpiryInterval(props.sessionExpirySeconds());
         options.setAutomaticReconnect(true);                       // 연결이 끊기면 자동 재접속
         options.setReceiveMaximum(100);                            // ack 안 된 메시지를 최대 100건까지만 받음(과부하 방지)
+        if (props.isTls() && props.caFile() != null && !props.caFile().isBlank()) {
+            // TLS (로드맵 Q5): 개발용 자체 CA 만 믿는다. 호스트 이름 검증은 켜 둔다 (인증서 SAN = localhost 등)
+            options.setSocketFactory(MqttTls.socketFactory(props.caFile()));
+            options.setHttpsHostnameVerificationEnabled(true);
+        } else if (!props.isTls()) {
+            log.info("MQTT 평문 접속 ({}). TLS 는 scripts/mqtt_tls.sh 와 QG_MQTT_URL=ssl://localhost:8883", props.url());
+        }
         if (props.hasCredentials()) {                              // 장비 인증 (N-07): 브리지 계정으로 접속
             options.setUserName(props.username());
             options.setPassword(props.password().getBytes(StandardCharsets.UTF_8));
