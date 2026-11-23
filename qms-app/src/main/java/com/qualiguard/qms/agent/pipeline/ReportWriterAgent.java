@@ -7,6 +7,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -16,6 +17,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.qualiguard.qms.agent.AnalysisResult;
+import com.qualiguard.qms.agent.EvidenceNumbers;
+import com.qualiguard.qms.agent.ToolObservations;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -25,7 +28,8 @@ import tools.jackson.databind.ObjectMapper;
  * 모드 (qg.agent.writer.mode)
  *  - analysis-text : 원인 분석 에이전트가 쓴 문장을 그대로 쓴다 (기본, 기존 동작)
  *  - local         : 로컬 소형 LLM(Ollama)이 기밀 자료(원시값·정비 기록)를 보고 문장을 쓴다. 클라우드 호출 0건.
- *                    실패하거나 시간을 넘기면 클라우드로 넘기지 않고 근거 표 초안(template)으로 대신한다 (F-13)
+ *                    실패하거나 시간을 넘기면 클라우드로 넘기지 않고 근거 표 초안(template)으로 대신한다 (F-13).
+ *                    넘겨준 자료에 없는 수치를 쓰면(수치 변조, 로드맵 A3) 역시 근거 표 초안으로 대신한다. 실험 기능.
  *  - template      : LLM 없이 근거 표 + "사람 작성 필요" 표시만 있는 초안
  * 판단(decision·원인 코드·확신도)은 바꾸지 않는다. 문장만 쓴다.
  */
@@ -81,9 +85,20 @@ public class ReportWriterAgent {
         switch (mode) {
             case "local" -> {
                 try {
-                    written = writeLocal(i);
-                    used = "LOCAL";
+                    LocalDraft d = writeLocal(i);
                     report.put("model", settings.model());
+                    // 수치 변조 검사 (로드맵 A3): 로컬 모델 문장의 수치가 넘겨준 자료(근거·원시값·정비)에 있는지
+                    report.put("numberClaims", d.numberClaims());
+                    report.put("numberUnsupported", d.unsupported().size());
+                    if (d.unsupported().isEmpty()) {
+                        written = d.result();
+                        used = "LOCAL";
+                    } else {
+                        written = template(i.result);
+                        used = "TEMPLATE_NUMBER_GUARD";
+                        report.put("fallbackReason", "자료에 없는 수치: " + String.join(", ", d.unsupported()));
+                        log.warn("[작성] 로컬 모델 문장에 자료에 없는 수치 {} → 근거 표 초안으로 대신", d.unsupported());
+                    }
                 } catch (RuntimeException ex) {
                     // 클라우드로 넘기지 않는다 (F-13): 근거 표 초안 + 사람 작성 필요
                     written = template(i.result);
@@ -108,7 +123,11 @@ public class ReportWriterAgent {
         bus.publish(AgentTopics.REPORT_COMPLETED, new AgentEvent(i.id, e.attempt(), report));
     }
 
-    private AnalysisResult writeLocal(Incident i) {
+    /** 로컬 모델이 쓴 초안과 수치 대조 결과 (unsupported: 넘겨준 자료에 없는 수치 예시). */
+    record LocalDraft(AnalysisResult result, int numberClaims, List<String> unsupported) {
+    }
+
+    private LocalDraft writeLocal(Incident i) {
         if (localModel == null) {
             throw new IllegalStateException("로컬 모델이 설정되지 않았습니다");
         }
@@ -138,9 +157,32 @@ public class ReportWriterAgent {
         if (title == null || phenomenon == null || cause == null) {
             throw new IllegalStateException("로컬 모델 응답에 필수 문장이 없습니다: " + shorten(text, 200));
         }
-        return new AnalysisResult(r.decision(), r.causeCode(), r.confidence(), title, phenomenon, cause, r.evidence(),
-                r.similarCases(), action == null ? r.recommendedAction() : action, r.reasoningSummary(), r.watchItems(),
-                r.candidateCauses());
+        AnalysisResult out = new AnalysisResult(r.decision(), r.causeCode(), r.confidence(), title, phenomenon, cause,
+                r.evidence(), r.similarCases(), action == null ? r.recommendedAction() : action, r.reasoningSummary(),
+                r.watchItems(), r.candidateCauses());
+        EvidenceNumbers.Report numbers = EvidenceNumbers.check(Arrays.asList(title, phenomenon, cause, action),
+                sourceNumbers(input));
+        return new LocalDraft(out, numbers.claimCount(), numbers.unverifiedSamples(5));
+    }
+
+    /** 로컬 모델에 넘긴 자료의 모든 수치 (근거 문장, 요약, 원시값·정비 기록 행). */
+    @SuppressWarnings("unchecked")
+    static ToolObservations sourceNumbers(Map<String, Object> input) {
+        ToolObservations obs = new ToolObservations();
+        for (Object v : input.values()) {
+            if (v instanceof List<?> list) {
+                for (Object x : list) {
+                    if (x instanceof Map<?, ?> row) {
+                        obs.addRows(List.of((Map<String, Object>) row));
+                    } else {
+                        obs.addValue(x);
+                    }
+                }
+            } else {
+                obs.addValue(v);
+            }
+        }
+        return obs;
     }
 
     /** 근거 표 초안: 분석의 구조화된 값만으로 만들고, 사람이 문장을 쓰도록 표시한다. */
