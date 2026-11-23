@@ -124,6 +124,7 @@ CREATE TABLE dbo.ncr (
     root_cause       NVARCHAR(1000)    NULL,      -- 확정 원인
     evidence         NVARCHAR(MAX)     NULL,      -- 근거
     action_taken     NVARCHAR(1000)    NULL,      -- 조치 내용
+    cause_code       VARCHAR(30)       NULL,      -- 원인 코드(HEATER_DEGRADATION 등). 04의 usp_FindSimilarNcr가 읽으므로 여기서 만든다.(F1) [2026.11.23 추가]
     status           VARCHAR(20)       NOT NULL CONSTRAINT df_ncr_status DEFAULT ('DRAFT')
                      CONSTRAINT ck_ncr_status CHECK (status IN ('DRAFT', 'APPROVED', 'REJECTED', 'CLOSED')),
     created_by       NVARCHAR(50)      NOT NULL,  -- 'AGENT' 또는 작성자
