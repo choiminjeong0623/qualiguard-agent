@@ -23,6 +23,51 @@ a { color: var(--qg-color-primary); }
 .qg-shell-btn { height: 48px; padding: 0 16px; border: 0; background: transparent; color: var(--qg-color-shell-text); }
 .qg-shell-btn:hover { background: var(--qg-color-shell-hover); }
 @media (max-width: 720px) { .qg-shell-title, #kb, .qg-shell-item { display: none; } .qg-shell-btn { white-space: nowrap; } }
+.qg-shell-icon { display: inline-grid; place-items: center; width: var(--qg-h-shell); height: var(--qg-h-shell); margin-left: -16px;
+  margin-right: 4px; border: 0; background: transparent; color: var(--qg-color-shell-text); }
+.qg-shell-icon:hover { background: var(--qg-color-shell-hover); }
+.qg-burger, .qg-burger::before, .qg-burger::after { display: block; width: 18px; height: 2px; background: currentColor; content: ""; }
+.qg-burger { position: relative; }
+.qg-burger::before { position: absolute; top: -6px; } .qg-burger::after { position: absolute; top: 6px; }
+.qg-shell .qg-brand { border-right: 0; }
+
+/* ── 앱 틀: 사이드 메뉴 + 본문 (계획서 6.2) ─────────────────── */
+.qg-app { display: flex; min-height: calc(100vh - var(--qg-h-shell)); }
+.qg-main { flex: 1; min-width: 0; }
+.qg-side { position: sticky; top: var(--qg-h-shell); flex: none; width: var(--qg-w-sidebar); height: calc(100vh - var(--qg-h-shell));
+  overflow-y: auto; padding: var(--qg-space-2) 0; background: var(--qg-color-shell); border-top: 1px solid var(--qg-color-shell-line); }
+.qg-side ul { list-style: none; margin: 0; padding: 0; }
+.qg-side-group + .qg-side-group { margin-top: var(--qg-space-2); }
+.qg-side-title { padding: var(--qg-space-3) var(--qg-space-4) var(--qg-space-1); color: var(--qg-color-shell-muted);
+  font-size: var(--qg-fs-xs); line-height: var(--qg-lh-xs); white-space: nowrap; }
+.qg-side a { display: flex; align-items: center; gap: var(--qg-space-3); height: 40px; padding: 0 var(--qg-space-4) 0 13px;
+  border-left: 3px solid transparent; color: var(--qg-color-shell-muted); text-decoration: none; white-space: nowrap; }
+.qg-side a:hover { background: var(--qg-color-shell-hover); color: var(--qg-color-shell-text); }
+.qg-side a.active { border-left-color: var(--qg-color-shell-accent); background: var(--qg-color-shell-hover); color: var(--qg-color-shell-text); font-weight: 600; }
+.qg-side-mark { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1px solid var(--qg-color-shell-line);
+  border-radius: var(--qg-radius-sm); font-size: var(--qg-fs-xs); font-weight: 600; }
+.qg-side-collapsed .qg-side { width: var(--qg-w-sidebar-collapsed); }
+.qg-side-collapsed .qg-side-label, .qg-side-collapsed .qg-side-title { display: none; }
+.qg-side-collapsed .qg-side-group + .qg-side-group { border-top: 1px solid var(--qg-color-shell-line); padding-top: var(--qg-space-2); }
+.qg-side-scrim { display: none; }
+@media (max-width: 1023px) {
+  .qg-side { position: fixed; left: 0; top: var(--qg-h-shell); bottom: 0; height: auto; z-index: var(--qg-z-drawer);
+    box-shadow: var(--qg-shadow-overlay); }
+  .qg-side-collapsed .qg-side { display: none; }
+  body:not(.qg-side-collapsed) .qg-side-scrim { display: block; position: fixed; inset: var(--qg-h-shell) 0 0 0;
+    z-index: calc(var(--qg-z-drawer) - 1); background: rgb(20 39 62 / .4); }
+}
+
+/* ── 확인 대화상자 (위험 동작 전) ─────────────────────────── */
+.qg-dialog { width: min(480px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--qg-color-border);
+  border-radius: var(--qg-radius-md); background: var(--qg-color-surface); color: var(--qg-color-text); box-shadow: var(--qg-shadow-overlay); }
+.qg-dialog::backdrop { background: rgb(20 39 62 / .4); }
+.qg-dialog-form { padding: var(--qg-space-6); }
+.qg-dialog-title { margin: 0 0 var(--qg-space-3); font-size: var(--qg-fs-lg); line-height: var(--qg-lh-lg); font-weight: 600; }
+.qg-dialog-body p { margin: 0 0 var(--qg-space-3); color: var(--qg-color-text-2); }
+.qg-dialog-actions { display: flex; justify-content: flex-end; gap: var(--qg-space-2); margin-top: var(--qg-space-4); }
+.qg-field-error { min-height: var(--qg-lh-xs); margin: var(--qg-space-1) 0 0; color: var(--qg-color-danger); font-size: var(--qg-fs-xs); }
+[aria-invalid="true"] { border-color: var(--qg-color-danger) !important; }
 
 /* ── 페이지 머리 + 상태 타일 ─────────────────────────────── */
 .qg-page { padding: 24px 24px 32px; }

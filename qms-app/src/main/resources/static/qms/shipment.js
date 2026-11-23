@@ -5,18 +5,13 @@
   var API = '/api/qms/shipment';
   var state = { me: null, picked: null };
 
-  function csrf() {
-    var c = document.cookie.split('; ').find(function (x) { return x.indexOf('XSRF-TOKEN=') === 0; });
-    return c ? decodeURIComponent(c.split('=')[1]) : '';
-  }
-  $.ajaxSetup({ beforeSend: function (xhr, s) { if (s.type !== 'GET') { xhr.setRequestHeader('X-XSRF-TOKEN', csrf()); } } });
-  $(document).ajaxError(function (e, xhr) { if (xhr.status === 401) { location.href = 'login.html'; } });
-  function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+  // CSRF 헤더·401·로그인 사용자 표시는 qg-common.js 가 맡는다
+  var esc = QG.esc;
   function canWrite() { return state.me && state.me.role === 'REVIEWER'; }
-  function time(ts) { return ts ? esc(String(ts).replace('T', ' ').substring(0, 19)) : '-'; }
+  function time(ts) { return ts ? esc(QG.time(ts, true)) : '-'; }
   function result(r) {
-    if (r == null) { return '<span class="badge bg-secondary-lt">검사 없음</span>'; }
-    return r === 'NG' ? '<span class="badge bg-red-lt">NG</span>' : '<span class="badge bg-green-lt">OK</span>';
+    if (r == null) { return QG.tone('neutral', '검사 없음'); }
+    return QG.stateTag('inspection', r === 'NG' ? 'NG' : 'OK');
   }
   function msg(text, ok) { $('#msg').text(text).attr('class', 'msg mt-3 mb-0 ' + (ok ? 'ok' : 'err')); }
 
@@ -100,9 +95,8 @@
   $('#traceForm').on('submit', function (e) { e.preventDefault(); trace($('#traceSerial').val()); });
   $('#links').on('click', 'a[data-trace]', function (e) { e.preventDefault(); trace($(this).attr('data-trace')); });
 
-  $.getJSON('/api/qms/me').done(function (me) {
+  QG.me().done(function (me) {
     state.me = me;
-    $('#me').text(me.displayName + (me.role === 'REVIEWER' ? ' (품질 담당자)' : ' (조회 전용)'));
     if (!canWrite()) { $('#confirmBtn').prop('disabled', true); }
     loadLinks();
   });
