@@ -118,6 +118,16 @@ tasks.register('detectionEval', JavaExec) {
 	jvmArgs = ['-Xmx384m']
 }
 
+// ML 원인 분류 기준선 (LLM 에이전트와 비교): seed 폴더마다 SpcEngine 경보를 alarms.csv 로. scripts/ml_baseline.sh 가 부른다
+tasks.register('alarmExport', JavaExec) {
+	group = 'verification'
+	description = '시뮬레이터 파일 출력을 SpcEngine 에 재생해 seed 폴더마다 alarms.csv 를 쓴다'
+	dependsOn 'testClasses'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.qualiguard.qms.quality.AlarmExport'
+	jvmArgs = ['-Xmx384m']
+}
+
 tasks.register('ewmaEval', JavaExec) {
 	group = 'verification'
 	description = '지금 SPC 규칙과 EWMA 관리도를 같은 seed 로 비교해 eval/ewma_report.md 에 남긴다 (로드맵 A4)'
