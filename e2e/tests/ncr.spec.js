@@ -39,7 +39,7 @@ test('반려는 사유가 있어야 한다', async ({ page }) => {
   await submitReject(page);
   await expect(page.getByText('반려 사유를 입력하세요.')).toBeVisible();
   expect(calls(s, 'POST', '/reject')).toHaveLength(0);
-  await page.getByPlaceholder('반려 사유').fill('단발성 노이즈');
+  await page.locator('dialog[open]').getByPlaceholder('반려 사유').fill('단발성 노이즈');
   await submitReject(page);
   await expect(page.getByText('반려했습니다.')).toBeVisible();
   expect(calls(s, 'POST', '/AI-2026-0111/reject')[0].body.reason).toBe('단발성 노이즈');
@@ -103,14 +103,32 @@ async function showTab(page, name) {
   const acc = page.locator('.accordion-button.collapsed').filter({ hasText: name });
   if (await acc.count()) { await acc.first().click(); }
 }
-// 반려: 현행은 입력칸 + 버튼, 리디자인 뒤에는 대화상자 안 입력칸
+// 반려: 리디자인 2단계부터 [반려…] 버튼 → 대화상자에서 사유 입력
 async function startReject(page) {
-  if (!(await page.getByPlaceholder('반려 사유').isVisible())) {
-    await page.getByRole('button', { name: /반려/ }).first().click();
-  }
+  await page.getByRole('button', { name: '반려…' }).click();
+  await expect(page.locator('dialog[open]')).toBeVisible();
 }
 async function submitReject(page) {
-  const dlg = page.locator('dialog[open]');
-  if (await dlg.count()) { await dlg.getByRole('button', { name: '반려' }).click(); return; }
-  await page.getByRole('button', { name: '반려', exact: true }).click();
+  await page.locator('dialog[open]').getByRole('button', { name: '반려', exact: true }).click();
 }
+
+test('승인 확인 대화상자에서 취소하면 승인하지 않는다', async ({ page }) => {
+  const s = await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await page.getByLabel(/확정 원인/).fill('히터 단선');
+  await page.getByRole('button', { name: '승인', exact: true }).click();
+  const dlg = page.locator('dialog[open]');
+  await expect(dlg).toContainText('MES');
+  await dlg.getByRole('button', { name: '취소' }).click();
+  await expect(dlg).toHaveCount(0);
+  expect(calls(s, 'POST', '/approve')).toHaveLength(0);
+});
+
+test('사이드 메뉴로 화면을 옮기고 현재 화면을 표시한다', async ({ page }) => {
+  await open(page, '/qms/index.html');
+  const nav = page.getByRole('navigation', { name: '주 메뉴' });
+  await expect(nav.getByRole('link', { name: '부적합 검토' })).toHaveAttribute('aria-current', 'page');
+  await nav.getByRole('link', { name: /조치/ }).click();
+  await expect(page).toHaveURL(/actions\.html/);
+  await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible();
+});

@@ -6,22 +6,17 @@
 <title>QMS 부적합 검토</title>
 <!-- 스타일: Tabler CSS(앱에 포함) + 디자인 토큰(qg-tokens.css). UI 리디자인 계획서·ADR-009 -->
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
-<link rel="stylesheet" href="qg-tokens.css?v=2">
-<link rel="stylesheet" href="qms.css?v=2">
+<link rel="stylesheet" href="qg-tokens.css?v=3">
+<link rel="stylesheet" href="qms.css?v=3">
 <script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
-<!-- UI Shell 헤더: 제품 이름 | 화면 이름 … 지식저장소 · 사용자 -->
-<header class="qg-shell">
-  <a class="qg-brand" href="index.html"><span class="qg-logo" aria-hidden="true">QG</span>QualiGuard <span class="qg-brand-sub">QMS</span></a>
-  <span class="qg-shell-title">부적합 검토</span>
-  <a class="qg-shell-title" href="actions.html">에이전트 조치</a>
-  <a class="qg-shell-title" href="shipment.html">출하 시리얼</a>
-  <span class="qg-shell-spacer"></span>
-  <span id="kb" class="qg-shell-item" title="승인·조치 완료된 부적합은 다음 분석에서 유사 사례로 검색됩니다"></span>
-  <span class="qg-shell-item"><span id="me"></span></span>
-  <button type="button" id="btn-logout" class="qg-shell-btn">로그아웃</button>
-</header>
+<!-- 공통 셸: 상단 바와 사이드 메뉴는 qg-common.js 가 그린다 -->
+<header class="qg-shell" data-active="ncr"></header>
+<div class="qg-app">
+<nav class="qg-side" id="qg-side"></nav>
+<div class="qg-side-scrim" id="qg-side-scrim" aria-hidden="true"></div>
+<main class="qg-main">
 
 <div class="page-wrapper qg-page">
   <!-- 페이지 머리: 제목 + 상태별 건수 타일 (타일을 누르면 그 상태로 거른다) -->
@@ -40,7 +35,7 @@
     </div>
   </div>
 
-  <main class="qg-layout">
+  <div class="qg-layout">
     <!-- 왼쪽: Carbon Data table 처럼 툴바 + 표 -->
     <section class="card qg-list" aria-label="부적합 목록">
       <div class="qg-toolbar">
@@ -105,10 +100,7 @@
           </div>
           <!-- 동작 영역: Carbon 처럼 아래쪽에 모은다. 주 동작(승인)은 오른쪽 끝 -->
           <div class="card-footer qg-actions">
-            <div class="input-group qg-reject">
-              <input id="reject-reason" class="form-control" maxlength="1000" placeholder="반려 사유">
-              <button type="button" id="btn-reject" class="btn btn-outline-danger">반려</button>
-            </div>
+            <button type="button" id="btn-reject" class="btn btn-outline-danger">반려…</button>
             <span class="qg-toolbar-spacer"></span>
             <button type="submit" id="btn-save" class="btn">수정 저장</button>
             <button type="button" id="btn-approve" class="btn btn-primary">승인</button>
@@ -167,9 +159,13 @@
         </div>
       </div>
     </section>
-  </main>
+  </div>
 </div>
 
-<script src="qms.js"></script>
+</main>
+</div>
+
+<script src="qg-common.js?v=2"></script>
+<script src="qms.js?v=2"></script>
 </body>
 </html>

@@ -21,6 +21,7 @@
   --qg-color-shell-line: #2C4361;
   --qg-color-shell-text: #FFFFFF;       /* 15.1:1 */
   --qg-color-shell-muted: #B4C0CC;      /* 8.17:1 */
+  --qg-color-shell-accent: #8CB8E6;     /* 메뉴 현재 위치 표시줄 */
   --qg-color-secondary: #4F5B67;
 
   /* ── 중립 (cool gray) ── */

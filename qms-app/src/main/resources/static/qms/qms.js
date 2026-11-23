@@ -17,27 +17,14 @@
 
   var state = { status: 'DRAFT', selected: null, current: null, me: null, rows: [] };
 
-  // 쓰기 요청에는 CSRF 토큰(XSRF-TOKEN 쿠키 값)을 헤더로 보낸다. 로그인이 끊기면(401) 로그인 화면으로.
-  function csrf() {
-    var c = document.cookie.split('; ').find(function (x) { return x.indexOf('XSRF-TOKEN=') === 0; });
-    return c ? decodeURIComponent(c.split('=')[1]) : '';
-  }
-  $.ajaxSetup({
-    beforeSend: function (xhr, settings) {
-      if (settings.type && settings.type !== 'GET') { xhr.setRequestHeader('X-XSRF-TOKEN', csrf()); }
-    }
-  });
-  $(document).ajaxError(function (e, xhr) { if (xhr.status === 401) { location.href = 'login.html'; } });
+  // CSRF 헤더·401 처리·로그아웃·로그인 사용자 표시는 qg-common.js (공통 셸)가 맡는다
   function canWrite() { return state.me && state.me.role === 'REVIEWER'; }
 
-  function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
-  function time(s) { return s ? s.replace('T', ' ').replace(/\.\d+.*$/, '').replace(/Z$/, '') : ''; }
+  var esc = QG.esc;
+  function time(s) { return QG.time(s, true); }
   function msg(text, kind) { $('#msg').text(text || '').attr('class', 'msg ' + (kind || 'info')); }
-  function statusTag(s) { return '<span class="badge qg-status ' + esc(s) + '">' + esc(STATUS_LABEL[s] || s) + '</span>'; }
-  function errorText(xhr) {
-    var body = xhr.responseJSON;
-    return (body && body.error) ? body.error : ('요청 실패 (' + xhr.status + ')');
-  }
+  function statusTag(s) { return QG.stateTag('ncr', s); }
+  var errorText = QG.errorText;
   function send(method, url, body) {
     return $.ajax({ method: method, url: url, contentType: 'application/json',
       data: body ? JSON.stringify(body) : undefined, dataType: 'json' });
@@ -115,8 +102,8 @@
     var $f = $('#edit-form');
     FIELDS.forEach(function (k) { $f.find('[name="' + k + '"]').val(d[COLUMN[k] || k] || ''); });
     var editable = d.status === 'DRAFT' && canWrite();
-    $f.find('input, textarea, select').not('#reject-reason').prop('disabled', !editable);
-    $('#btn-save, #btn-approve, #btn-reject, #reject-reason').prop('disabled', !editable);
+    $f.find('input, textarea, select').prop('disabled', !editable);
+    $('#btn-save, #btn-approve, #btn-reject').prop('disabled', !editable);
     $('#edit-form > .qg-actions').first().prop('hidden', !editable);
     $('#edit-state').text(editable ? '수정 가능' : '읽기 전용');
     var $a = $('#assign-form');
@@ -296,28 +283,43 @@
   $('#btn-approve').on('click', function () {
     var a = requireActor();
     if (!a) { return; }
-    // 고친 내용(확정 원인 등)을 먼저 저장한 뒤 승인한다
-    save().done(function () {
+    var no = state.selected;
+    if (!$.trim($('#edit-form [name="rootCause"]').val())) {
+      msg('확정 원인을 입력해야 승인할 수 있습니다.', 'err');
+      $('#edit-form [name="rootCause"]').attr('aria-invalid', 'true').trigger('focus');
+      return;
+    }
+    // 승인은 MES/ERP 로 전송되고 지식저장소에 들어가므로 한 번 더 확인한다. 고친 내용을 먼저 저장한 뒤 승인한다
+    QG.confirm({ title: no + ' 승인', ok: '승인',
+      body: '승인하면 MES 작업 지시·ERP 품질 통지로 전송되고, 다음 분석의 유사 사례로 쓰입니다. 승인 뒤에는 내용을 고칠 수 없습니다.' })
+    .done(function () { save().done(function () {
       send('POST', API + '/' + encodeURIComponent(state.selected) + '/approve', {})
         .done(function (d) { render(d); msg('승인했습니다. 이 부적합은 다음 분석의 유사 사례로 쓰입니다.', 'ok'); loadList(); loadKb(); })
+        .fail(function (xhr) { msg(errorText(xhr), 'err'); });
+    }); });
+  });
+
+  // 반려: 사유를 대화상자에서 받는다 (사유 없이는 보낼 수 없음)
+  $('#btn-reject').on('click', function () {
+    var a = requireActor();
+    if (!a) { return; }
+    var no = state.selected;
+    QG.confirm({ title: no + ' 반려', ok: '반려', danger: true,
+      body: '반려한 초안은 지식저장소에 들어가지 않고 다시 고칠 수 없습니다.',
+      input: { label: '반려 사유', placeholder: '반려 사유', required: true, maxlength: 1000, error: '반려 사유를 입력하세요.' } })
+    .done(function (reason) {
+      send('POST', API + '/' + encodeURIComponent(no) + '/reject', { reason: reason })
+        .done(function (d) { render(d); msg('반려했습니다.', 'ok'); loadList(); })
         .fail(function (xhr) { msg(errorText(xhr), 'err'); });
     });
   });
 
-  $('#btn-reject').on('click', function () {
-    var a = requireActor();
-    if (!a) { return; }
-    var reason = $.trim($('#reject-reason').val());
-    if (!reason) { msg('반려 사유를 입력하세요.', 'err'); $('#reject-reason').focus(); return; }
-    send('POST', API + '/' + encodeURIComponent(state.selected) + '/reject', { reason: reason })
-      .done(function (d) { $('#reject-reason').val(''); render(d); msg('반려했습니다.', 'ok'); loadList(); })
-      .fail(function (xhr) { msg(errorText(xhr), 'err'); });
-  });
-
   $('#btn-retry').on('click', function () {
-    send('POST', API + '/' + encodeURIComponent(state.selected) + '/integration/retry')
+    QG.confirm({ title: 'MES/ERP 연계 다시 보내기', ok: '다시 보내기',
+      body: '실패한 시스템에 승인 이벤트를 다시 보냅니다. 이미 처리한 시스템은 같은 이벤트를 중복으로 처리하지 않습니다.' })
+    .done(function () { send('POST', API + '/' + encodeURIComponent(state.selected) + '/integration/retry')
       .done(function (d) { render(d); msg('MES/ERP 로 다시 보냈습니다. 응답을 기다리는 중입니다.', 'ok'); })
-      .fail(function (xhr) { msg(errorText(xhr), 'err'); });
+      .fail(function (xhr) { msg(errorText(xhr), 'err'); }); });
   });
 
   $('#btn-close').on('click', function () {
@@ -325,16 +327,18 @@
     if (!a) { return; }
     var done = $.trim($('#action-taken').val());
     if (!done) { msg('조치 내용을 입력하세요.', 'err'); $('#action-taken').focus(); return; }
-    send('POST', API + '/' + encodeURIComponent(state.selected) + '/close', { actionTaken: done })
+    var no = state.selected;
+    QG.confirm({ title: no + ' 조치 완료', ok: '조치 완료', body: '조치 완료로 닫으면 더 이상 고칠 수 없습니다. 실제로 한 조치: ' + done })
+    .done(function () { send('POST', API + '/' + encodeURIComponent(state.selected) + '/close', { actionTaken: done })
       .done(function (d) { render(d); msg('조치 완료로 닫았습니다.', 'ok'); loadList(); loadKb(); })
-      .fail(function (xhr) { msg(errorText(xhr), 'err'); });
+      .fail(function (xhr) { msg(errorText(xhr), 'err'); }); });
   });
 
   function loadKb() {
     $.getJSON(API + '/knowledge').done(function (rows) {
       var total = 0, ai = 0;
       rows.forEach(function (r) { total += r.total; ai += r.ai_approved; });
-      $('#kb').text('지식저장소 ' + total + '건 (AI 초안 승인 ' + ai + '건)');
+      $('#kb').prop('hidden', false).text('지식저장소 ' + total + '건 (AI 초안 승인 ' + ai + '건)');
       // AI 초안 검토 지표 (로드맵 P3): 결정된 초안 가운데 반려·그대로 승인한 비율
       $.getJSON(API + '/review-stats').done(function (s) {
         if (!s.decided) { return; }
@@ -368,14 +372,8 @@
     $(this).toggleClass('collapsed', !open).attr('aria-expanded', String(open));
   });
 
-  $('#btn-logout').on('click', function () {
-    send('POST', '/logout').always(function () { location.href = 'login.html?logout'; });
-  });
-
-  $.getJSON('/api/qms/me').done(function (me) {
+  QG.me().done(function (me) {
     state.me = me;
-    var role = me.role === 'REVIEWER' ? '품질 담당자' : '조회 전용';
-    $('#me').text(me.displayName === role ? role : me.displayName + ' (' + role + ')');
     loadList();
     loadKb();
   });
