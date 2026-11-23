@@ -14,6 +14,7 @@ import com.qualiguard.qms.bridge.TelemetryMessage;
 import com.qualiguard.qms.quality.Anomaly;
 import com.qualiguard.qms.quality.CleanShot;
 import com.qualiguard.qms.quality.EquipmentState;
+import com.qualiguard.qms.quality.MewmaMonitor;
 import com.qualiguard.qms.quality.Shot;
 import com.qualiguard.qms.quality.SpcEngine;
 
@@ -38,12 +39,19 @@ public class SpcProcessor implements Processor<String, String, String, String> {
 
     private final ObjectMapper objectMapper;
     private final SpcEngine engine = new SpcEngine();
+    /** 다변량 감시 (shadow). null 이면 끔 */
+    private final MewmaMonitor mewma;
 
     private ProcessorContext<String, String> context;
     private KeyValueStore<String, String> store;
 
     public SpcProcessor(ObjectMapper objectMapper) {
+        this(objectMapper, null);
+    }
+
+    public SpcProcessor(ObjectMapper objectMapper, MewmaMonitor mewma) {
         this.objectMapper = objectMapper;
+        this.mewma = mewma;
     }
 
     @Override
@@ -107,6 +115,10 @@ public class SpcProcessor implements Processor<String, String, String, String> {
             log.info("[센서 회복] {} {} 값이 다시 들어옴", equipmentId, sensor);
         }
 
+        if (mewma != null && !result.late()) {
+            shadowMewma(equipmentId, t.shotNo(), state, result);
+        }
+
         CleanShot clean = new CleanShot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(),
                 result.cleanValues(), result.invalidSensors(), inspected ? (ng ? "NG" : "OK") : null, defectType,
                 t.serialNo(), result.late(), result.lateStatus(), t.lotNo());
@@ -116,6 +128,18 @@ public class SpcProcessor implements Processor<String, String, String, String> {
             log.info("[이상 탐지] {} ({})", anomaly.message(), anomaly.ruleName());
             context.forward(new Record<>(equipmentId, ANOMALY + objectMapper.writeValueAsString(anomaly),
                     record.timestamp()));
+        }
+    }
+
+    /** 다변량 감시 결과는 로그·지표로만 남긴다 (경보 토픽·에이전트로 보내지 않음). 상태는 메모리라 재시작하면 기준부터 다시 배운다. */
+    private void shadowMewma(String equipmentId, Long shotNo, EquipmentState state, SpcEngine.Result result) {
+        long n = shotNo != null ? shotNo : state.count;
+        MewmaMonitor.Alarm a = mewma.add(equipmentId, n, result.cleanValues());
+        if (a != null) {
+            log.info("[다변량 shadow] {} shot {} T²={} > {} 기여 센서 {}", equipmentId, n,
+                    String.format(java.util.Locale.ROOT, "%.1f", a.t2()), a.limit(), a.contributions());
+            Metrics.counter("qg.spc.mewma_shadow_alarms", "equipment", equipmentId, "sensor", a.topSensor())
+                    .increment();
         }
     }
 
