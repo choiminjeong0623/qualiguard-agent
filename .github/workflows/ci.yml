@@ -33,7 +33,7 @@ jobs:
         run: ./gradlew spotbugsMain --no-daemon
       - name: 테스트·정적 분석 결과 보관
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qms-app-test-results
           path: |
@@ -58,7 +58,7 @@ jobs:
         run: ./gradlew containerTest --no-daemon
       - name: 테스트 결과 보관
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qms-app-container-test-results
           path: qms-app/build/reports/tests/containerTest
