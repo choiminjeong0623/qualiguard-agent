@@ -7,7 +7,7 @@
 <!-- 스타일: Tabler CSS(앱에 포함) + 디자인 토큰(qg-tokens.css). UI 리디자인 계획서 7.2, ADR-009 -->
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
 <link rel="stylesheet" href="qg-tokens.css?v=3">
-<link rel="stylesheet" href="qms.css?v=5">
+<link rel="stylesheet" href="qms.css?v=8">
 <script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
@@ -135,6 +135,7 @@
     <section class="qg-section">
       <div class="qg-section-head"><h2 class="qg-h2">연결된 경보</h2><span class="qg-section-meta" id="a-count"></span></div>
       <div class="table-responsive"><table class="table table-sm card-table qg-table">
+        <caption class="visually-hidden">연결된 경보</caption>
         <thead><tr><th scope="col" class="text-end">shot</th><th scope="col">규칙</th><th scope="col">센서</th><th scope="col">내용</th></tr></thead>
         <tbody id="anomalies"></tbody></table></div>
     </section>
@@ -183,7 +184,7 @@
 </main>
 </div>
 
-<script src="qg-common.js?v=3"></script>
-<script src="qms.js?v=4"></script>
+<script src="qg-common.js?v=5"></script>
+<script src="qms.js?v=5"></script>
 </body>
 </html>

@@ -33,6 +33,15 @@
 
 경보 → 분류 → 원인 분석 ⇄ 검증 → 초안 → 품질 담당자 승인 → MES/ERP
 
+**QMS 화면 (2026-11-23 리디자인)**: 목록 → 전체 폭 상세(탭 + 하단 고정 동작 바), 상태는 모양·문구·색으로 표시. [전후 비교](docs/ui-redesign/README.md) · [ADR-009 결정 6](docs/decisions/ADR-009-qms-review-screen.md)
+
+| 검토 대기 목록 | 부적합 상세 · 근거 탭 |
+|:---:|:---:|
+| [![검토 대기 목록](docs/ui-redesign/after/desktop-ncr-list.png)](docs/ui-redesign/after/desktop-ncr-list.png) | [![근거 탭](docs/ui-redesign/after/desktop-ncr-evidence.png)](docs/ui-redesign/after/desktop-ncr-evidence.png) |
+| 상태 탭·검토 지표, 거르개·정렬 | 처리 단계, 연결된 경보, 에이전트 분석 기록(검증·단계별 시간) |
+
+아래 영상과 사진은 리디자인 전 화면이며 실제 데이터로 찍었습니다.
+
 | 1. 로그인 | 2. 검토 대기 목록 |
 |:---:|:---:|
 | [![로그인](docs/demo/01-login.png)](docs/demo/01-login.png) | [![검토 대기 목록](docs/demo/02-list.png)](docs/demo/02-list.png) |

@@ -118,6 +118,33 @@
     return d.promise();
   }
 
+  // ── 탭 (WAI-ARIA Tabs): 누르거나 화살표·Home·End 로 옮기면 그 탭의 패널만 보인다 ──
+  // 마크업: [role=tablist] 안의 [role=tab][aria-controls] + [role=tabpanel]. onChange(탭 id) 는 선택이 바뀔 때.
+  function tabs(list, onChange) {
+    var $list = $(list);
+    function pick($t, focus) {
+      var $all = $list.find('[role=tab]');
+      $all.attr({ 'aria-selected': 'false', tabindex: '-1' }).each(function () {
+        $('#' + $(this).attr('aria-controls')).prop('hidden', true);
+      });
+      $t.attr({ 'aria-selected': 'true', tabindex: '0' });
+      $('#' + $t.attr('aria-controls')).prop('hidden', false);
+      if (focus) { $t.trigger('focus'); }
+      if (onChange) { onChange($t.attr('id')); }
+    }
+    $list.on('click', '[role=tab]', function () { pick($(this), false); });
+    $list.on('keydown', '[role=tab]', function (e) {
+      var $all = $list.find('[role=tab]'), i = $all.index(this), n = $all.length, j = null;
+      if (e.key === 'ArrowRight') { j = (i + 1) % n; } else if (e.key === 'ArrowLeft') { j = (i - 1 + n) % n; }
+      else if (e.key === 'Home') { j = 0; } else if (e.key === 'End') { j = n - 1; }
+      if (j === null) { return; }
+      e.preventDefault();
+      pick($all.eq(j), true);
+    });
+    $list.find('[role=tab][aria-selected!="true"]').attr('tabindex', '-1');
+    return { select: function (id) { pick($list.find('#' + id), false); } };
+  }
+
   // ── 공통 셸: 상단 바 + 사이드 메뉴 ─────────────────────────────
   // 메뉴는 저장소에 화면이 있는 것만 둔다 (계획서 6.2, 결정 D6)
   var MENU = [
@@ -189,7 +216,14 @@
   }
 
   window.QG = { csrf: csrf, esc: esc, errorText: errorText, time: time, label: label, labelWithCode: labelWithCode,
-    stateTag: stateTag, tone: tone, confirm: confirmDialog, me: me, LABELS: LABELS };
+    stateTag: stateTag, tone: tone, confirm: confirmDialog, tabs: tabs, me: me, LABELS: LABELS };
 
   renderShell();
+
+  // 가로로 넘칠 수 있는 표 상자는 키보드로도 스크롤할 수 있게 (WCAG 2.1.1, axe scrollable-region-focusable)
+  $('.table-responsive').each(function () {
+    var $cap = $(this).find('caption').first();
+    $(this).attr({ tabindex: '0', role: 'region' });
+    if ($cap.attr('id')) { $(this).attr('aria-labelledby', $cap.attr('id')); } else { $(this).attr('aria-label', $cap.text() || '표'); }
+  });
 }(jQuery));
