@@ -314,6 +314,26 @@ MQTT → 브리지 → Kafka → Kafka Streams 전체 경로에서 같은 시나
 
 한계: 승인 전에 고친 것만 셉니다. 승인 뒤 조치 완료(CLOSED)에서 적는 조치 내용은 AI 초안 항목이 아니라 넣지 않았습니다.
 
+### 부적합 보고서 필수 항목 (로드맵 P2)
+
+> **항목 정의는 초안입니다.** 실제 품질 담당자가 승인 전에 확인하는 기준으로 바꿔야 합니다. 바꿀 곳은 `NcrCompleteness.ITEMS` 와 그 아래 `check()` 한 곳입니다.
+
+| 키 | 항목 | 통과 조건 (초안) |
+|---|---|---|
+| `title` | 제목 | 비어 있지 않음 |
+| `phenomenon` | 현상 | 10자 이상 |
+| `cause` | 원인 | 추정 원인 또는 확정 원인이 10자 이상 |
+| `causeCode` | 원인 코드 | `UNKNOWN` 이 아닌 코드 |
+| `evidence` | 근거 | 숫자(측정값)를 하나 이상 포함 |
+| `recommendedAction` | 권장 조치 | 10자 이상 |
+| `relatedSensors` | 관련 센서 | 하나 이상 |
+| `defectType` | 불량 유형 | 비어 있지 않음 |
+| `scope` | 영향 범위 | 연결된 경보 1건 이상 (공정 데이터에 로트 번호가 없어서 대신 씀) |
+
+- 부적합 상세(`GET /api/qms/ncrs/{ncrNo}`)에 `completeness`(충족 수/전체, 빠진 항목, 항목별 이유)가 붙고, 화면 상단 정보에 "필수 항목 7/9 · 빠짐: 근거, 영향 범위"처럼 보입니다.
+- 집계 `GET /api/qms/ncrs/completeness`: AI 가 만든 보고서(`created_by='AGENT'`) 전체의 항목별 충족률(`items.*.passRate`), 모든 항목을 채운 비율(`completeRate`), 평균 충족률(`avgRate`).
+- 승인을 막지는 않습니다. 사람이 빠진 항목을 보고 고치거나, 알고도 승인할 수 있게 표시만 합니다.
+
 ### 운영 리포트 읽는 법 (로드맵 O3)
 
 `./scripts/ops_report.sh 7 ALL` (최근 7일, 전체) / `./scripts/ops_report.sh 3650 <run_tag>` (평가 실행 하나) / `LIVE` (태그 없는 실제 운영만).
