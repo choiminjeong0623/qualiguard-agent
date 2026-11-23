@@ -219,4 +219,11 @@
     stateTag: stateTag, tone: tone, confirm: confirmDialog, tabs: tabs, me: me, LABELS: LABELS };
 
   renderShell();
+
+  // 가로로 넘칠 수 있는 표 상자는 키보드로도 스크롤할 수 있게 (WCAG 2.1.1, axe scrollable-region-focusable)
+  $('.table-responsive').each(function () {
+    var $cap = $(this).find('caption').first();
+    $(this).attr({ tabindex: '0', role: 'region' });
+    if ($cap.attr('id')) { $(this).attr('aria-labelledby', $cap.attr('id')); } else { $(this).attr('aria-label', $cap.text() || '표'); }
+  });
 }(jQuery));
