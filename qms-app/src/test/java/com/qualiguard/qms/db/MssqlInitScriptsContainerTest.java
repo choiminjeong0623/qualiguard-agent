@@ -12,19 +12,27 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.testcontainers.containers.Container.ExecResult;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
+
+import com.qualiguard.qms.agent.TokenBudget;
 
 /**
  * DB 초기화 스크립트 통합 시험 (로드맵 Q3). 실제 SQL Server 2025 컨테이너에서 확인한다.
@@ -33,6 +41,7 @@ import org.testcontainers.utility.MountableFile;
  *    (F1 콜드 스타트 버그처럼 앞 번호 스크립트가 뒤 번호 객체를 먼저 쓰면 여기서 실패한다)
  * 2) 한 번 더 실행해도 성공 (모든 스크립트가 "없을 때만 생성")
  * 3) 승인 프로시저: 확정 원인 없이 승인 거부, 반려는 사유 필수, 승인하면 이력 + 아웃박스 이벤트가 같은 트랜잭션에 생김
+ * 4) 하루 토큰 예산(O5) 집계 SQL: 서울 0시 경계, UTC 로 기록된 시각, NULL 토큰
  *
  * 실행: cd qms-app && ./gradlew containerTest  (Docker 필요, CI 의 별도 작업에서 돈다)
  */
@@ -165,6 +174,39 @@ class MssqlInitScriptsContainerTest {
     private static Connection connect() throws SQLException {
         return DriverManager.getConnection("jdbc:sqlserver://" + MSSQL.getHost() + ":" + MSSQL.getMappedPort(1433)
                 + ";databaseName=QUALIGUARD;encrypt=true;trustServerCertificate=true", "sa", PASSWORD);
+    }
+
+    @Test
+    void 하루_토큰_예산은_서울_0시부터_센다() throws Exception {
+        try (Connection c = connect()) {
+            insertTokens(c, "2026-11-22T23:59:00+09:00", 500_000, 0, 0);   // 어제 (서울) → 빼야 함
+            insertTokens(c, "2026-11-22T15:01:00+00:00", 300_000, 50_000, 20_000); // = 오늘 00:01 서울, UTC 로 기록
+            insertTokens(c, "2026-11-23T10:00:00+09:00", 40_000, 5_000, null);
+            var jdbc = new JdbcTemplate(new SingleConnectionDataSource(c, true));
+            var clock = Clock.fixed(Instant.parse("2026-11-23T05:00:00Z"), ZoneOffset.UTC);   // 서울 14:00
+            var budget = new TokenBudget(jdbc, new TokenBudget.Settings(400_000L, ZoneId.of("Asia/Seoul")), clock);
+
+            TokenBudget.Status s = budget.status();
+            assertThat(s.day()).hasToString("2026-11-23");
+            assertThat(s.used()).isEqualTo(415_000);
+            assertThat(s.exceeded()).isTrue();
+            assertThat(budget.allowsAuto()).isFalse();
+        }
+    }
+
+    private static void insertTokens(Connection c, String at, Integer prompt, Integer output, Integer thought)
+            throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("""
+                INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision,
+                                                prompt_tokens, output_tokens, thought_tokens, created_at)
+                VALUES ('IMM-01', 'it-seed', 'it-seed', 'OBSERVE', ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)))
+                """)) {
+            ps.setObject(1, prompt);
+            ps.setObject(2, output);
+            ps.setObject(3, thought);
+            ps.setString(4, at);
+            ps.executeUpdate();
+        }
     }
 
     private static void insertDraft(Connection c, String ncrNo, String rootCause, String causeCode)

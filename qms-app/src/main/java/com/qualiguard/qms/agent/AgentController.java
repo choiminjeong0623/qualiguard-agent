@@ -30,6 +30,7 @@ import com.qualiguard.qms.agent.pipeline.AgentPipeline;
  *                                                             (asOfShot 생략 시 관찰 기준 shot + recheck-shots)
  *   GET  /api/agent/config                                    재확인 설정과 평가 기록용 실행 설정(모델·작성 방식 등)
  *   GET  /api/agent/analyses?top=20                           분석 기록
+ *   GET  /api/agent/budget                                    오늘 토큰 사용량·하루 예산 (로드맵 O5)
  */
 @RestController
 @RequestMapping("/api/agent")
@@ -40,14 +41,16 @@ public class AgentController {
     private final JdbcTemplate jdbc;
     private final AgentProperties props;
     private final Environment env;
+    private final TokenBudget budget;
 
     public AgentController(IncidentAnalyzer analyzer, AgentPipeline pipeline, JdbcTemplate jdbc, AgentProperties props,
-            Environment env) {
+            Environment env, TokenBudget budget) {
         this.analyzer = analyzer;
         this.pipeline = pipeline;
         this.jdbc = jdbc;
         this.props = props;
         this.env = env;
+        this.budget = budget;
     }
 
     @GetMapping("/anomalies")
@@ -112,6 +115,20 @@ public class AgentController {
         m.put("writerMode", env.getProperty("qg.agent.writer.mode", "analysis-text"));
         m.put("vectorEnabled", env.getProperty("qg.knowledge.vector-enabled", Boolean.class, false));
         m.put("actionEnabled", env.getProperty("qg.agent.action.enabled", Boolean.class, false));
+        m.put("dailyTokenBudget", budget.settings().dailyTokens());   // 로드맵 O5 (0 이면 끔)
+        return m;
+    }
+
+    /** 오늘 토큰 사용량. 예산을 넘으면 자동 분석만 멈추고 수동 분석(이 컨트롤러의 POST)은 그대로 된다. */
+    @GetMapping("/budget")
+    public Map<String, Object> budget() {
+        TokenBudget.Status s = budget.status();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("day", s.day().toString());
+        m.put("limit", s.limit());
+        m.put("used", s.used());
+        m.put("remaining", s.remaining());
+        m.put("autoPaused", s.exceeded());
         return m;
     }
 
