@@ -175,6 +175,7 @@ cd qms-app
 ./gradlew test --tests '*SpcEngineTest'  # 이상 탐지 단위 테스트 (인프라 불필요)
 ./gradlew containerTest                   # SQL Server 컨테이너에 DB 초기화 전체 + 승인 프로시저 (Docker 필요)
 ./gradlew detectionEval                   # 이상 탐지 seed 5개 채점 → eval/detection_report.md
+./gradlew ewmaEval                        # 지금 규칙 vs EWMA 관리도 비교 → eval/ewma_report.md (A4)
 ./gradlew spotbugsMain                    # 정적 분석 (제외 이유는 config/spotbugs-exclude.xml, CI 에서도 실행)
 ./gradlew bootRun
 

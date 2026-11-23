@@ -109,6 +109,16 @@ tasks.register('detectionEval', JavaExec) {
 	jvmArgs = ['-Xmx384m']
 }
 
+tasks.register('ewmaEval', JavaExec) {
+	group = 'verification'
+	description = '지금 SPC 규칙과 EWMA 관리도를 같은 seed 로 비교해 eval/ewma_report.md 에 남긴다 (로드맵 A4)'
+	dependsOn 'detectionData', 'testClasses'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.qualiguard.qms.quality.EwmaEval'
+	args = ['../eval/detection/runs', '../eval/ewma_report.md']
+	jvmArgs = ['-Xmx384m']
+}
+
 // 정적 분석 (로드맵 Q4): 운영 코드만 검사, 중간 이상 심각도에서 실패. 제외 규칙과 이유는 config/spotbugs-exclude.xml
 spotbugs {
 	ignoreFailures = false
