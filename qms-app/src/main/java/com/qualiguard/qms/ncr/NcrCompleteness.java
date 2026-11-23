@@ -9,8 +9,9 @@ import java.util.regex.Pattern;
 /**
  * 부적합 보고서 필수 항목 충족 검사 (로드맵 P2).
  *
- * <p>항목 정의는 초안이다. 품질 담당자가 실제로 승인 전에 확인하는 기준에 맞춰 {@link #ITEMS} 를 고치면 된다.
- * 공정 데이터에 로트 번호가 없어서, "영향 범위"는 연결된 경보가 한 건 이상인지로 대신 본다.
+ * <p>11개 항목 (2026-11-23 품질 담당 확정): AI 가 채우는 9개 + 사람이 정하는 조치 담당자·조치 기한.
+ * 영향 범위는 첫 경보부터 분석 시점까지 생산된 로트 목록(ncr.affected_lots)이 있는지로 본다.
+ * 검사 결과는 화면에 보여 주기만 하고 승인을 막지 않는다.
  */
 public final class NcrCompleteness {
 
@@ -48,7 +49,9 @@ public final class NcrCompleteness {
             new Item("recommendedAction", "권장 조치", "10자 이상"),
             new Item("relatedSensors", "관련 센서", "하나 이상"),
             new Item("defectType", "불량 유형", "비어 있지 않음"),
-            new Item("scope", "영향 범위", "연결된 경보 1건 이상 (로트 정보 대신)"));
+            new Item("scope", "영향 범위", "영향 로트 1개 이상"),
+            new Item("actionOwner", "담당자", "조치 담당자 지정 (사람이 입력)"),
+            new Item("actionDueDate", "조치 기한", "조치 기한 지정 (사람이 입력)"));
 
     private static final Pattern NUMBER = Pattern.compile("\\d");
     static final int MIN_TEXT = 10;
@@ -84,7 +87,11 @@ public final class NcrCompleteness {
                 case "relatedSensors" -> blank(s(ncr, "related_sensors")) || "[]".equals(s(ncr, "related_sensors").strip())
                         ? "관련 센서가 없습니다" : null;
                 case "defectType" -> blank(s(ncr, "defect_type")) ? "불량 유형이 없습니다" : null;
-                case "scope" -> anomalyCount > 0 ? null : "연결된 경보가 없습니다";
+                case "scope" -> !blank(s(ncr, "affected_lots")) ? null
+                        : anomalyCount > 0 ? "영향 로트가 없습니다 (연결된 경보 " + anomalyCount + "건)"
+                        : "영향 로트와 연결된 경보가 없습니다";
+                case "actionOwner" -> blank(s(ncr, "action_owner")) ? "조치 담당자가 없습니다" : null;
+                case "actionDueDate" -> blank(s(ncr, "action_due_date")) ? "조치 기한이 없습니다" : null;
                 default -> throw new IllegalStateException(item.key());
             };
             checks.add(new Check(item.key(), item.label(), reason == null, reason));

@@ -459,25 +459,32 @@ public class IncidentAnalyzer {
                                               WHERE g.ncr_id = n.ncr_id AND g.run_tag = ?)
                                 ORDER BY n.created_at DESC
                                 """, equipmentId, causeCode, tag);
+                String lots = affectedLots(jdbc, job);
                 if (!open.isEmpty()) {
                     ncrId = ((Number) open.get(0).get("ncr_id")).intValue();
                     ncrNo = (String) open.get(0).get("ncr_no");
                     merged = true;
+                    if (lots != null) {
+                        String before = jdbc.queryForObject("SELECT affected_lots FROM dbo.ncr WHERE ncr_id = ?",
+                                String.class, ncrId);
+                        jdbc.update("UPDATE dbo.ncr SET affected_lots = ? WHERE ncr_id = ?",
+                                mergeLots(before, lots), ncrId);
+                    }
                 } else {
                     int seq = jdbc.queryForObject("SELECT NEXT VALUE FOR dbo.seq_ncr_draft", Integer.class);
                     ncrNo = String.format("AI-%d-%04d", Year.now().getValue(), seq);
                     ncrId = jdbc.queryForObject("""
                             INSERT INTO dbo.ncr (ncr_no, equipment_id, anomaly_id, defect_type, related_sensors, title,
                                                  phenomenon, suspected_cause, evidence, recommended_action, status,
-                                                 created_by, occurred_at, cause_code, confidence)
+                                                 created_by, occurred_at, cause_code, confidence, affected_lots)
                             OUTPUT INSERTED.ncr_id
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', 'AGENT', CAST(? AS DATETIMEOFFSET(3)), ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', 'AGENT', CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?)
                             """, Integer.class,
                             ncrNo, equipmentId, job.seedAnomalyId(), defectType(job),
                             relatedSensors(job.alarms()), truncate(text.title(), 200),
                             truncate(text.phenomenon(), 1000), truncate(text.suspectedCause(), 1000),
                             evidenceText(result) + verifyNote(verified), truncate(text.recommendedAction(), 1000),
-                            job.seedTs(), causeCode, confidence);
+                            job.seedTs(), causeCode, confidence, lots);
                 }
                 for (String id : anomalyIds) {
                     jdbc.update("""
@@ -506,6 +513,60 @@ public class IncidentAnalyzer {
     }
 
     /** 분석 에이전트 1회: 도구로 조사 → JSON 결과. 형식이 깨지면 형식만 1회 고쳐 달라고 한다. */
+    /**
+     * 영향 범위(로드맵 P2): 이 사건의 첫 경보 shot 부터 분석 기준 shot 까지 같은 설비에서 생산된 로트 목록.
+     * 로트 번호가 없는 설비(시뮬레이터 예전 버전·SECOM 재생)면 null. 시간 조건은 같은 shot 번호가
+     * 다른 실행에서 다시 나오는 경우(시뮬레이터 재시작)를 거르기 위한 것이다.
+     */
+    public static String affectedLots(JdbcTemplate jdbc, Job job) {
+        Long from = job.alarms().stream().map(a -> a.get("shot_no")).filter(Number.class::isInstance)
+                .map(n -> ((Number) n).longValue()).min(Long::compare).orElse(job.asOfShot());
+        Long to = job.asOfShot();
+        if (from == null || to == null || job.seedTs() == null) {
+            return null;
+        }
+        List<String> lots = jdbc.queryForList("""
+                SELECT lot_no FROM dbo.process_shot
+                WHERE equipment_id = ? AND lot_no IS NOT NULL
+                  AND shot_no BETWEEN ? AND ?
+                  AND shot_ts BETWEEN DATEADD(HOUR, -1, CAST(? AS DATETIMEOFFSET(3)))
+                                  AND DATEADD(HOUR, 1, CAST(? AS DATETIMEOFFSET(3)))
+                GROUP BY lot_no
+                ORDER BY MIN(shot_no)
+                """, String.class, job.equipmentId(), Math.min(from, to), Math.max(from, to), job.seedTs(),
+                job.asOf() == null ? job.seedTs() : job.asOf());
+        return lots.isEmpty() ? null : joinLots(lots);
+    }
+
+    /** 이미 있는 로트 목록에 새 로트를 순서대로 더한다 (중복 제외). */
+    static String mergeLots(String before, String added) {
+        java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>();
+        for (String v : new String[] {before, added}) {
+            if (v != null) {
+                for (String lot : v.split(",")) {
+                    if (!lot.isBlank()) {
+                        all.add(lot.trim());
+                    }
+                }
+            }
+        }
+        return all.isEmpty() ? null : joinLots(List.copyOf(all));
+    }
+
+    /** affected_lots 칸(400자)에 맞게 쉼표로 잇는다. 넘치면 뒤를 "외 N개"로 줄인다. */
+    static String joinLots(List<String> lots) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lots.size(); i++) {
+            String next = (i == 0 ? "" : ",") + lots.get(i);
+            String rest = ",외 " + (lots.size() - i) + "개";
+            if (sb.length() + next.length() + (i == lots.size() - 1 ? 0 : rest.length()) > 400) {
+                return sb.append(rest).toString();
+            }
+            sb.append(next);
+        }
+        return sb.toString();
+    }
+
     public AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace) {
         return analyzeOnce(userPrompt, asOf, t0, trace, null);
     }

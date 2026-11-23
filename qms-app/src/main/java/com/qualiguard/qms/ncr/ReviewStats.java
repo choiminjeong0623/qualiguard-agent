@@ -33,6 +33,9 @@ public final class ReviewStats {
             }
             JsonNode changes = om.readTree(json);
             for (Map.Entry<String, JsonNode> e : changes.properties()) {
+                if (!NcrReviewService.EDITABLE.containsKey(e.getKey())) {
+                    continue; // 담당자·기한처럼 사람이 정하는 항목은 AI 초안 수정으로 세지 않는다
+                }
                 original.putIfAbsent(e.getKey(), e.getValue().path("before").asString(""));
             }
         }

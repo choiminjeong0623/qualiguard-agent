@@ -38,10 +38,10 @@ public class QualityStoreWriter {
             INSERT INTO dbo.process_shot
                 (message_id, line_id, equipment_id, shot_no, shot_ts,
                  mold_temp, barrel_temp, injection_pressure, holding_pressure, cushion, cycle_time, motor_current,
-                 inspection_result, defect_type, invalid_sensors, serial_no, arrival_late, late_status)
+                 inspection_result, defect_type, invalid_sensors, serial_no, arrival_late, late_status, lot_no)
             SELECT ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)),
                    ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?, ?
+                   ?, ?, ?, ?, ?, ?, ?
             WHERE NOT EXISTS (SELECT 1 FROM dbo.process_shot WHERE message_id = ?)
             """;
 
@@ -87,7 +87,7 @@ public class QualityStoreWriter {
                 v.get("cushion"), v.get("cycleTime"), v.get("motorCurrent"),
                 s.inspectionResult(), s.defectType(),
                 s.invalidSensors() == null || s.invalidSensors().isEmpty() ? null : String.join(",", s.invalidSensors()),
-                serial(s.serialNo()), s.lateArrival(), s.lateStatus(),
+                serial(s.serialNo()), s.lateArrival(), s.lateStatus(), lot(s.lotNo()),
                 s.messageId());
     }
 
@@ -117,6 +117,14 @@ public class QualityStoreWriter {
         if (rows > 0) {
             log.info("[DB 적재] 이상 이력 저장: {} {} {}", a.equipmentId(), a.rule(), a.sensorName());
         }
+    }
+
+    /** lot_no 칸(40자)보다 긴 로트 번호는 잘라 저장한다. 빈 문자열은 NULL 로 본다. */
+    static String lot(String lotNo) {
+        if (lotNo == null || lotNo.isBlank()) {
+            return null;
+        }
+        return lotNo.length() <= 40 ? lotNo : lotNo.substring(0, 40);
     }
 
     /** serial_no 칸(40자)보다 긴 시리얼은 잘라 저장한다 (적재가 막혀 같은 메시지를 계속 다시 읽지 않도록). */

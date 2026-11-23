@@ -50,12 +50,27 @@ class QualityStoreWriterTest {
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).update(anyString(), args.capture());
         Object[] a = args.getValue();
-        assertEquals(19, a.length);
+        assertEquals(20, a.length);
         assertNull(a[3]);                         // shot_no
         assertNull(a[12]);                        // inspection_result
         assertNull(a[15]);                        // serial_no
         assertTrue((Boolean) a[16]);              // arrival_late
         assertEquals("OUT_OF_WINDOW", a[17]);     // late_status (ADR-019)
+        assertNull(a[18]);                        // lot_no (로트 없는 예전 메시지)
+    }
+
+    @Test
+    void 로트_번호를_적재하고_빈_값은_NULL() {
+        when(jdbc.update(anyString(), any(Object[].class))).thenReturn(1);
+        String withLot = json.writeValueAsString(new CleanShot("m-lot", "LINE1", "IMM-01", 5L,
+                "2026-11-17T09:00:00.000+09:00", Map.of("moldTemp", 60.0), List.of(), "OK", null, null, false, null,
+                "L261117-IMM-01-01"));
+        writer.onCleanShot(withLot);
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).update(anyString(), args.capture());
+        assertEquals("L261117-IMM-01-01", args.getValue()[18]);
+        assertNull(QualityStoreWriter.lot("  "));
+        assertEquals(40, QualityStoreWriter.lot("L".repeat(50)).length());
     }
 
     @Test

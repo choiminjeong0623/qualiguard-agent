@@ -13,6 +13,7 @@ simulation:
   shots: 2000                             # 설비당 shot 수
   interval_sec: 0.5                       # shot 간격 (실제 30초 사이클을 빠르게 재생)
   seed: 42                                # 같은 seed면 같은 데이터 → 데모·평가 재현 가능
+  lot_size: 250                           # 로트 크기 (shot 수). 로트 번호 = L{시작일}-{설비}-{순번}, NCR 영향 범위에 쓴다
   ground_truth_csv: ../data/ground_truth.csv
 
 # 결측·미할당 (실제 설비 데이터 흉내, ADR-017). 모두 0 이면 예전처럼 빠짐없는 메시지를 보낸다.

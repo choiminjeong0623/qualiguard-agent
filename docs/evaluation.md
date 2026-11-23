@@ -316,21 +316,26 @@ MQTT → 브리지 → Kafka → Kafka Streams 전체 경로에서 같은 시나
 
 ### 부적합 보고서 필수 항목 (로드맵 P2)
 
-> **항목 정의는 초안입니다.** 실제 품질 담당자가 승인 전에 확인하는 기준으로 바꿔야 합니다. 바꿀 곳은 `NcrCompleteness.ITEMS` 와 그 아래 `check()` 한 곳입니다.
+> **항목 확정 (2026-11-23, 품질 담당 판단):** 초안 9개에 조치 담당자·조치 기한을 더하고, 영향 범위는 실제 로트 번호로 봅니다. 검사는 표시만 하고 승인을 막지 않습니다. 바꿀 곳은 `NcrCompleteness.ITEMS` 와 그 아래 `check()` 한 곳입니다.
 
-| 키 | 항목 | 통과 조건 (초안) |
-|---|---|---|
-| `title` | 제목 | 비어 있지 않음 |
-| `phenomenon` | 현상 | 10자 이상 |
-| `cause` | 원인 | 추정 원인 또는 확정 원인이 10자 이상 |
-| `causeCode` | 원인 코드 | `UNKNOWN` 이 아닌 코드 |
-| `evidence` | 근거 | 숫자(측정값)를 하나 이상 포함 |
-| `recommendedAction` | 권장 조치 | 10자 이상 |
-| `relatedSensors` | 관련 센서 | 하나 이상 |
-| `defectType` | 불량 유형 | 비어 있지 않음 |
-| `scope` | 영향 범위 | 연결된 경보 1건 이상 (공정 데이터에 로트 번호가 없어서 대신 씀) |
+| 키 | 항목 | 통과 조건 | 누가 채우나 |
+|---|---|---|---|
+| `title` | 제목 | 비어 있지 않음 | AI |
+| `phenomenon` | 현상 | 10자 이상 | AI |
+| `cause` | 원인 | 추정 원인 또는 확정 원인이 10자 이상 | AI·사람 |
+| `causeCode` | 원인 코드 | `UNKNOWN` 이 아닌 코드 | AI |
+| `evidence` | 근거 | 숫자(측정값)를 하나 이상 포함 | AI |
+| `recommendedAction` | 권장 조치 | 10자 이상 | AI |
+| `relatedSensors` | 관련 센서 | 하나 이상 | AI |
+| `defectType` | 불량 유형 | 비어 있지 않음 | AI |
+| `scope` | 영향 범위 | 영향 로트(`ncr.affected_lots`) 1개 이상 | 자동 (사람이 고칠 수 있음) |
+| `actionOwner` | 담당자 | 조치 담당자 지정 | 사람 |
+| `actionDueDate` | 조치 기한 | 조치 기한 지정 | 사람 |
 
-- 부적합 상세(`GET /api/qms/ncrs/{ncrNo}`)에 `completeness`(충족 수/전체, 빠진 항목, 항목별 이유)가 붙고, 화면 상단 정보에 "필수 항목 7/9 · 빠짐: 근거, 영향 범위"처럼 보입니다.
+**로트 번호 흐름:** 시뮬레이터가 shot 마다 `lotNo` 를 보냅니다(`L{실행 시작일}-{설비}-{순번}`, `simulation.lot_size` 기본 250 shot 마다 바뀜, 난수를 쓰지 않아 정답 재현에 영향 없음) → 브리지·SPC 를 거쳐 `process_shot.lot_no` 에 저장(`22_ncr_owner_due_lot.sql`) → 에이전트가 초안을 만들 때 **같은 설비에서 첫 경보 shot 부터 분석 기준 shot 까지 생산된 로트**를 `affected_lots` 에 채웁니다. 같은 원인의 초안에 합쳐지면 로트 목록도 합칩니다. 로트 번호가 없는 데이터(예전 시뮬레이터·SECOM 재생)는 비어 있어 "영향 범위 빠짐"으로 보입니다.
+
+- 부적합 상세(`GET /api/qms/ncrs/{ncrNo}`)에 `completeness`(충족 수/전체, 빠진 항목, 항목별 이유)가 붙고, 화면 상단 정보에 "필수 항목 9/11 · 빠짐: 담당자, 조치 기한"처럼 보입니다.
+- 담당자·기한·영향 로트는 검토 화면의 **조치 지정** 칸에서 정합니다(`PUT /api/qms/ncrs/{ncrNo}/assignment`, 초안·승인 상태에서 가능, 빈 값은 지움, 이력에 남음). 이 항목은 사람이 정하는 값이라 AI 초안 수정률(P3)에는 세지 않습니다.
 - 집계 `GET /api/qms/ncrs/completeness`: AI 가 만든 보고서(`created_by='AGENT'`) 전체의 항목별 충족률(`items.*.passRate`), 모든 항목을 채운 비율(`completeRate`), 평균 충족률(`avgRate`).
 - 승인을 막지는 않습니다. 사람이 빠진 항목을 보고 고치거나, 알고도 승인할 수 있게 표시만 합니다.
 

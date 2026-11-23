@@ -19,6 +19,9 @@ class NcrCompletenessTest {
         m.put("recommended_action", "냉각수 필터 점검과 유량계 교정");
         m.put("related_sensors", "[\"mold_temp\",\"coolant_flow\"]");
         m.put("defect_type", "SHORT_SHOT");
+        m.put("affected_lots", "L261123-IMM-01-03,L261123-IMM-01-04");
+        m.put("action_owner", "성형1팀 김반장");
+        m.put("action_due_date", "2026-11-30");
         return m;
     }
 
@@ -37,11 +40,32 @@ class NcrCompletenessTest {
         m.put("evidence", "온도가 올랐음");
         m.put("related_sensors", "[]");
         m.put("phenomenon", "짧음");
+        m.put("affected_lots", null);
         NcrCompleteness.Result r = NcrCompleteness.check(m, 0);
         assertThat(r.missing()).containsExactly("현상", "원인 코드", "근거", "관련 센서", "영향 범위");
         assertThat(r.checks()).filteredOn(c -> c.key().equals("evidence"))
                 .singleElement().satisfies(c -> assertThat(c.reason()).contains("숫자"));
-        assertThat(r.passed()).isEqualTo(4);
+        assertThat(r.passed()).isEqualTo(6);
+    }
+
+    @Test
+    void 담당자와_기한은_사람이_채우기_전까지_빠짐() {
+        Map<String, Object> m = full();
+        m.remove("action_owner");
+        m.put("action_due_date", " ");
+        NcrCompleteness.Result r = NcrCompleteness.check(m, 1);
+        assertThat(r.total()).isEqualTo(11);
+        assertThat(r.missing()).containsExactly("담당자", "조치 기한");
+    }
+
+    @Test
+    void 경보는_있어도_로트가_없으면_영향_범위_빠짐() {
+        Map<String, Object> m = full();
+        m.put("affected_lots", "");
+        NcrCompleteness.Result r = NcrCompleteness.check(m, 3);
+        assertThat(r.missing()).containsExactly("영향 범위");
+        assertThat(r.checks()).filteredOn(c -> c.key().equals("scope"))
+                .singleElement().satisfies(c -> assertThat(c.reason()).contains("경보 3건"));
     }
 
     @Test
