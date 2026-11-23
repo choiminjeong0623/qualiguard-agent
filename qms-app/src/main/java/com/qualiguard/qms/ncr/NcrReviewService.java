@@ -1,6 +1,7 @@
 package com.qualiguard.qms.ncr;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -221,6 +222,37 @@ public class NcrReviewService {
     /** 지식저장소 현황: 유사 사례 검색 대상(APPROVED·CLOSED)을 원인 코드별로, 사람 작성과 AI 초안 승인으로 나눠 센다. */
     public List<Map<String, Object>> knowledgeStats() {
         return jdbc.queryForList("EXEC dbo.usp_KnowledgeStats");
+    }
+
+    /**
+     * AI 초안 검토 지표 (로드맵 P3): 반려율, 그대로 승인한 비율, 항목별 수정률. 계산 방법은 ReviewStats.
+     */
+    public Map<String, Object> reviewStats() {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT ncr_id, ncr_no, status, title, phenomenon, suspected_cause, root_cause, evidence,
+                       recommended_action, cause_code, defect_type, related_sensors
+                FROM dbo.ncr
+                WHERE created_by = 'AGENT' AND status IN ('APPROVED', 'CLOSED', 'REJECTED')
+                ORDER BY ncr_id
+                """);
+        Map<Object, List<String>> edits = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT h.ncr_id, h.changes_json
+                FROM dbo.ncr_history AS h JOIN dbo.ncr AS n ON n.ncr_id = h.ncr_id
+                WHERE n.created_by = 'AGENT' AND n.status IN ('APPROVED', 'CLOSED', 'REJECTED') AND h.action = 'EDIT'
+                ORDER BY h.ncr_id, h.history_id
+                """, rs -> {
+            edits.computeIfAbsent(rs.getInt(1), k -> new ArrayList<>()).add(rs.getString(2));
+        });
+        List<ReviewStats.Ncr> ncrs = rows.stream().map(r -> {
+            Map<String, String> current = new LinkedHashMap<>();
+            EDITABLE.forEach((field, col) -> current.put(field, r.get(col) == null ? null : String.valueOf(r.get(col))));
+            return new ReviewStats.Ncr(String.valueOf(r.get("ncr_no")), String.valueOf(r.get("status")), current,
+                    edits.getOrDefault(r.get("ncr_id"), List.of()));
+        }).toList();
+        Integer pending = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM dbo.ncr WHERE created_by = 'AGENT' AND status = 'DRAFT'", Integer.class);
+        return ReviewStats.compute(ncrs, pending == null ? 0 : pending, objectMapper);
     }
 
     // ── 보조 ─────────────────────────────────────────────────────────

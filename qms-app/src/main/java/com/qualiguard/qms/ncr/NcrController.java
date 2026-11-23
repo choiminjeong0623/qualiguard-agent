@@ -68,6 +68,12 @@ public class NcrController {
         return service.knowledgeStats();
     }
 
+    /** AI 초안 검토 지표: 반려율·그대로 승인한 비율·항목별 수정률 (로드맵 P3) */
+    @GetMapping("/ncrs/review-stats")
+    public Map<String, Object> reviewStats() {
+        return service.reviewStats();
+    }
+
     @GetMapping("/ncrs/{ncrNo}")
     public Map<String, Object> detail(@PathVariable String ncrNo) {
         return service.detail(ncrNo);
