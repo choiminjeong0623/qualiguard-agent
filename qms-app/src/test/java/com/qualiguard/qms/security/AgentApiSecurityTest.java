@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.qualiguard.qms.agent.AgentController;
 import com.qualiguard.qms.agent.AgentProperties;
 import com.qualiguard.qms.agent.IncidentAnalyzer;
+import com.qualiguard.qms.agent.TokenBudget;
 import com.qualiguard.qms.agent.pipeline.AgentPipeline;
 
 /** 에이전트 API·MCP 인증 (로드맵 Q2): 토큰도 로그인도 없으면 401, 맞는 토큰이나 검토자 로그인이면 통과. */
@@ -39,6 +40,8 @@ class AgentApiSecurityTest {
     JdbcTemplate jdbc;
     @MockitoBean
     AgentProperties props;
+    @MockitoBean
+    TokenBudget budget;
     @MockitoBean
     AppUserDetailsService users;
 
