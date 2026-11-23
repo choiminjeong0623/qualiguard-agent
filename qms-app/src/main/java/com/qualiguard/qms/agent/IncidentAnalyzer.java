@@ -117,7 +117,11 @@ public class IncidentAnalyzer {
         }
 
         private static Integer add(Integer sum, String v) {
-            return "-".equals(v) ? sum : (sum == null ? 0 : sum) + Integer.parseInt(v);
+            // 삼항 연산자로 쓰면 한쪽이 int 라 sum 이 null 일 때 자동 언박싱 NPE 가 난다 → if 로 나눈다
+            if ("-".equals(v)) {
+                return sum;
+            }
+            return (sum == null ? 0 : sum) + Integer.parseInt(v);
         }
 
         private static String str(Integer v) {
