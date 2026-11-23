@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QMS 출하 시리얼</title>
+<title>출하 시리얼 · QualiGuard QMS</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
 <link rel="stylesheet" href="qg-tokens.css?v=3">
-<link rel="stylesheet" href="qms.css?v=3">
+<link rel="stylesheet" href="qms.css?v=7">
 <script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
@@ -17,77 +17,81 @@
 <div class="qg-side-scrim" id="qg-side-scrim" aria-hidden="true"></div>
 <main class="qg-main">
 
-<div class="page-wrapper qg-page">
-  <div class="qg-page-head">
+<section class="qg-view" aria-labelledby="page-h1">
+  <div class="qg-titlebar">
     <div>
-      <div class="qg-eyebrow">품질 관리 · 출하 확정</div>
-      <h1 class="qg-h1">확정 시리얼을 shot 에 연결</h1>
+      <h1 class="qg-h1" id="page-h1">출하 시리얼</h1>
       <p class="qg-lead">공정 중 임시 시리얼은 겹칠 수 있습니다. 출하 때 확정 시리얼을 제품을 만든 shot 하나에 연결하고, 나중에 그 시리얼로 공정 값과 그 무렵 경보를 찾습니다.</p>
     </div>
   </div>
 
-  <div class="row row-cards">
-    <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header"><h3 class="card-title">1. 임시 시리얼로 shot 찾기</h3></div>
-        <div class="card-body">
-          <form id="find" class="d-flex gap-2 mb-3">
-            <input class="form-control" id="provisional" placeholder="임시 시리얼 (예: TMP-000123)" required>
-            <button class="btn btn-outline-primary" type="submit">찾기</button>
-          </form>
-          <div class="table-responsive">
-            <table class="table table-vcenter card-table qg-table">
-              <thead><tr><th></th><th>설비 · shot</th><th>시각</th><th>검사</th><th>연결</th></tr></thead>
-              <tbody id="cands"><tr><td colspan="5" class="text-secondary">임시 시리얼을 입력하세요.</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header"><h3 class="card-title">2. 확정 시리얼 연결</h3></div>
-        <div class="card-body">
-          <form id="confirm">
-            <div class="mb-2"><label class="form-label" for="confirmed">확정 시리얼</label>
-              <input class="form-control" id="confirmed" placeholder="예: SN-2026-000123" maxlength="40" required></div>
-            <div class="mb-2"><label class="form-label" for="shipmentNo">출하 번호 (선택)</label>
-              <input class="form-control" id="shipmentNo" maxlength="30"></div>
-            <p class="small text-secondary mb-2">고른 shot: <span id="picked">없음 — 후보가 하나면 자동으로 정합니다</span></p>
-            <button class="btn btn-primary" type="submit" id="confirmBtn">연결</button>
-          </form>
-          <p id="msg" class="msg mt-3 mb-0" role="status"></p>
-        </div>
-      </div>
-    </div>
+  <div class="qg-tabs qg-tabs-inline" role="tablist" aria-label="출하 시리얼" id="page-tabs">
+    <button type="button" role="tab" id="tab-link" aria-controls="p-link" aria-selected="true">연결</button>
+    <button type="button" role="tab" id="tab-trace" aria-controls="p-trace" aria-selected="false">추적</button>
   </div>
 
-  <div class="card mt-3">
-    <div class="card-header"><h3 class="card-title">3. 확정 시리얼로 추적</h3></div>
-    <div class="card-body">
-      <form id="traceForm" class="d-flex gap-2 mb-3">
-        <input class="form-control" id="traceSerial" placeholder="확정 시리얼" required>
-        <button class="btn btn-outline-primary" type="submit">추적</button>
+  <!-- ① 연결: 임시 시리얼로 shot 찾기 → 확정 시리얼 연결 (현장 단말: 큰 입력) -->
+  <div class="qg-tabpanel qg-tabpanel-flat" role="tabpanel" id="p-link" aria-labelledby="tab-link">
+    <div class="qg-split">
+      <section class="qg-section" aria-labelledby="h-find">
+        <div class="qg-section-head"><h2 class="qg-h2" id="h-find"><span class="qg-stepno">1</span>임시 시리얼로 shot 찾기</h2></div>
+        <form id="find" class="qg-inline-form">
+          <label class="visually-hidden" for="provisional">임시 시리얼</label>
+          <input class="form-control qg-input-lg qg-mono" id="provisional" placeholder="임시 시리얼 (예: TMP-000123)" required autocomplete="off">
+          <button class="btn qg-btn-lg" type="submit">찾기</button>
+        </form>
+        <div class="table-responsive">
+          <table class="table table-vcenter card-table qg-table">
+            <caption class="visually-hidden">shot 후보</caption>
+            <thead><tr><th scope="col"><span class="visually-hidden">선택</span></th><th scope="col">설비 · shot</th><th scope="col">시각</th><th scope="col">검사</th><th scope="col">연결된 시리얼</th></tr></thead>
+            <tbody id="cands"><tr><td colspan="5" class="qg-empty-cell">임시 시리얼을 입력하세요.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="qg-section" aria-labelledby="h-confirm">
+        <div class="qg-section-head"><h2 class="qg-h2" id="h-confirm"><span class="qg-stepno">2</span>확정 시리얼 연결</h2></div>
+        <form id="confirm" autocomplete="off">
+          <label class="form-label mb-3">확정 시리얼
+            <input class="form-control qg-input-lg qg-mono" id="confirmed" placeholder="예: SN-2026-000123" maxlength="40" required></label>
+          <label class="form-label mb-3">출하 번호 <span class="qg-help d-inline">선택</span>
+            <input class="form-control qg-input-lg qg-mono" id="shipmentNo" maxlength="30"></label>
+          <dl class="qg-facts qg-facts-1"><div><dt>고른 shot</dt><dd id="picked">없음 — 후보가 하나면 자동으로 정합니다</dd></div></dl>
+          <button class="btn btn-primary qg-btn-lg w-100" type="submit" id="confirmBtn">연결</button>
+        </form>
+        <p id="msg" class="msg mt-3 mb-0" role="status"></p>
+      </section>
+    </div>
+
+    <section class="qg-section" aria-labelledby="h-links">
+      <div class="qg-section-head"><h2 class="qg-h2" id="h-links">최근 연결</h2><span class="qg-section-meta">시리얼을 누르면 추적합니다</span></div>
+      <div class="table-responsive">
+        <table class="table table-vcenter card-table qg-table">
+          <caption class="visually-hidden">최근 연결</caption>
+          <thead><tr><th scope="col">확정 시리얼</th><th scope="col">검사</th><th scope="col">설비 · shot</th><th scope="col">임시 시리얼</th><th scope="col">출하 번호</th><th scope="col">확정</th></tr></thead>
+          <tbody id="links"><tr><td colspan="6" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ② 추적: 확정 시리얼 → 그 shot 의 공정 값 + 그 무렵 경보 -->
+  <div class="qg-tabpanel qg-tabpanel-flat" role="tabpanel" id="p-trace" aria-labelledby="tab-trace" hidden>
+    <section class="qg-section" aria-labelledby="h-trace">
+      <div class="qg-section-head"><h2 class="qg-h2" id="h-trace">확정 시리얼로 추적</h2></div>
+      <form id="traceForm" class="qg-inline-form">
+        <label class="visually-hidden" for="traceSerial">확정 시리얼</label>
+        <input class="form-control qg-input-lg qg-mono" id="traceSerial" placeholder="확정 시리얼" required autocomplete="off">
+        <button class="btn btn-primary qg-btn-lg" type="submit">추적</button>
       </form>
-      <div id="trace" class="small"></div>
-    </div>
+      <div id="trace" aria-live="polite"></div>
+    </section>
   </div>
-
-  <div class="card mt-3">
-    <div class="card-header"><h3 class="card-title">최근 연결</h3></div>
-    <div class="table-responsive">
-      <table class="table table-vcenter card-table qg-table">
-        <thead><tr><th>확정 시리얼</th><th>임시 시리얼</th><th>설비 · shot</th><th>검사</th><th>출하 번호</th><th>확정</th></tr></thead>
-        <tbody id="links"><tr><td colspan="6" class="text-secondary">불러오는 중…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
+</section>
 
 </main>
 </div>
 
-<script src="qg-common.js?v=2"></script>
-<script src="shipment.js?v=2"></script>
+<script src="qg-common.js?v=4"></script>
+<script src="shipment.js?v=3"></script>
 </body>
 </html>

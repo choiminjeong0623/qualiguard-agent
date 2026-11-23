@@ -23,3 +23,11 @@ test('확정 시리얼로 추적하면 공정 값과 경보가 보인다', async
   await expect(page.getByText(/평균 이동/)).toBeVisible();
   await expect(page.getByText(/AI-2026-0110/)).toBeVisible();
 });
+
+test('최근 연결의 시리얼을 누르면 추적 탭으로 옮겨 결과를 보인다', async ({ page }) => {
+  await open(page, '/qms/shipment.html');
+  await page.getByRole('link', { name: 'SN-2026-000120' }).click();
+  await expect(page.getByRole('tab', { name: '추적' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText(/평균 이동/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'AI-2026-0110' })).toHaveAttribute('href', 'index.html#AI-2026-0110');
+});

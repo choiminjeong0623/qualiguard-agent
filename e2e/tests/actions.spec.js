@@ -36,3 +36,19 @@ test('조회 전용 계정에는 승인 버튼이 없다', async ({ page }) => {
   await expect(page.getByText('라인 정지·체크 링 교체')).toBeVisible();
   await expect(page.getByRole('button', { name: '승인·실행' })).toHaveCount(0);
 });
+
+test('판단 보류 메모를 쓰는 동안 10초 새로 읽기가 메모를 지우지 않는다', async ({ page }) => {
+  await page.clock.install();
+  await open(page, '/qms/actions.html');
+  await page.getByRole('tab', { name: /판단 보류/ }).click();
+  await page.getByPlaceholder('확인·처리 메모').fill('배선 확인 중');
+  await page.clock.fastForward(21000);
+  await expect(page.getByPlaceholder('확인·처리 메모')).toHaveValue('배선 확인 중');
+});
+
+test('상태 거르개로 승인 대기만 본다', async ({ page }) => {
+  await open(page, '/qms/actions.html');
+  await page.getByRole('button', { name: /승인 대기/ }).click();
+  await expect(page.getByRole('button', { name: /승인 대기/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#rows tr')).toHaveCount(1);
+});
