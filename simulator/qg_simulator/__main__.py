@@ -140,7 +140,8 @@ def write_ground_truth_meta(gt_path: Path, args, sim: dict, shots: int, faults) 
         "seed": sim.get("seed"),
         "shotsPerEquipment": shots,
         "equipment": sim.get("equipment"),
-        "faults": [{"name": f.name, "equipment": f.equipment_id, "startShot": f.start_shot, "duration": f.duration}
+        "faults": [{"name": f.name, "equipment": f.equipment_id, "startShot": f.start_shot, "duration": f.duration,
+                    **({"severity": f.severity} if f.severity != 1.0 else {})}
                    for f in faults],
     }
     meta_path(gt_path).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -189,7 +190,8 @@ def main() -> None:
     outages = {m.equipment_id: OutageTracker() for m in machines}
     delivery = Delivery(missing, miss_rng)
     # 설정 파일에 적힌 고장 시나리오들을 읽어서, 각각을 Fault 객체로 만든다.
-    faults = [Fault(f["name"], f["equipment"], f["start_shot"], f["duration"]) for f in cfg.get("faults", [])]
+    faults = [Fault(f["name"], f["equipment"], f["start_shot"], f["duration"], float(f.get("severity", 1.0)))
+              for f in cfg.get("faults", [])]
     for f in faults:
         if f.name not in FAULT_CATALOG:
             sys.exit(f"알 수 없는 시나리오: {f.name}")
@@ -314,7 +316,15 @@ def main() -> None:
                 if f.equipment_id == m.equipment_id and f.active(m.shot_no + 1):
                     a, s = effects_for(f, m.shot_no + 1, rng)
                     for k, v in a.items():
-                        add[k] = add.get(k, []) + v if k == "_sensorOnlyKeys" else add.get(k, 0.0) + v
+                        if k == "_sensorOnlyKeys":
+                            add[k] = add.get(k, []) + v
+                        elif k == "_defectP":
+                            merged = dict(add.get(k, {}))
+                            for d, q in v.items():
+                                merged[d] = merged.get(d, 0.0) + q
+                            add[k] = merged
+                        else:
+                            add[k] = add.get(k, 0.0) + v
                     for k, v in s.items():
                         scale[k] = scale.get(k, 1.0) * v
                     active.append(f.name)

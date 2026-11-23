@@ -83,6 +83,9 @@ class Machine:
             # 냉각이 고르지 않으면 휨이 생긴다
             "WARPAGE": _sigmoid((real["moldTemp"] - 67.0) * 1.0) * 0.3,
         }
+        # 센서로 바로 설명되지 않는 고장 영향 (원료 수분·노즐 막힘·금형 마모 같은 새 고장, faults.py)
+        for kind, extra in (effects.get("_defectP") or {}).items():
+            p[kind] = p[kind] + extra
         base_rate = 0.004  # 정상 상태에서도 생기는 우발 불량 (약 0.4%)
         total = min(0.95, base_rate + sum(p.values()))
         if self.rng.random() >= total:

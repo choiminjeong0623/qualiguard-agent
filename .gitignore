@@ -23,3 +23,4 @@ infra/mosquitto/conf.d/*.conf
 # 탐지 평가 원본 (scripts/detection_data.sh 가 seed 로 다시 만든다)
 eval/detection/runs/
 eval/ml/runs/
+eval/ml/novel/
