@@ -29,12 +29,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: 단위 테스트
         run: ./gradlew test --no-daemon
-      - name: 테스트 결과 보관
+      - name: 정적 분석 (SpotBugs, 제외 목록은 config/spotbugs-exclude.xml)
+        run: ./gradlew spotbugsMain --no-daemon
+      - name: 테스트·정적 분석 결과 보관
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qms-app-test-results
-          path: qms-app/build/reports/tests/test
+          path: |
+            qms-app/build/reports/tests/test
+            qms-app/build/reports/spotbugs
 
   container:
     # 로드맵 Q3: 실제 SQL Server 2025 컨테이너에 DB 초기화 스크립트를 전부 적용하고 승인 프로시저·아웃박스를 확인

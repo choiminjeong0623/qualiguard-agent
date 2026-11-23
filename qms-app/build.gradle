@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.2'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.github.spotbugs' version '6.5.1'   // 정적 분석 (로드맵 Q4)
 }
 
 group = 'com.qualiguard'
@@ -106,4 +107,20 @@ tasks.register('detectionEval', JavaExec) {
 	mainClass = 'com.qualiguard.qms.quality.DetectionEval'
 	args = ['../eval/detection/runs', '../eval/detection_report.md']
 	jvmArgs = ['-Xmx384m']
+}
+
+// 정적 분석 (로드맵 Q4): 운영 코드만 검사, 중간 이상 심각도에서 실패. 제외 규칙과 이유는 config/spotbugs-exclude.xml
+spotbugs {
+	ignoreFailures = false
+	reportLevel = com.github.spotbugs.snom.Confidence.valueOf('MEDIUM')
+	excludeFilter = file('config/spotbugs-exclude.xml')
+}
+tasks.named('spotbugsTest') {
+	enabled = false
+}
+tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+	reports {
+		html { required = true }
+		xml { required = true }
+	}
 }

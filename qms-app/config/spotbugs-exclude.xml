@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs 제외 목록 (로드맵 Q4). 제외할 때는 반드시 이유를 적는다.
+-->
+<FindBugsFilter>
+    <!--
+      EI_EXPOSE_REP / EI_EXPOSE_REP2: "받은 객체를 복사하지 않고 그대로 들고 있다/돌려준다".
+      이 프로젝트에서는 (1) 스프링이 넣어 주는 빈(JdbcTemplate, ChatClient, ObjectMapper 등)을 필드로 들고 있는 것,
+      (2) record 가 List/Map 을 그대로 돌려주는 것이 대부분이라 경고 130건 가까이가 전부 이 경우였다.
+      빈은 공유가 목적이고, record 에 넣는 목록은 만드는 쪽에서 List.of/copyOf 로 만들어 넘기므로 제외한다.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!--
+      VO_VOLATILE_INCREMENT: Incident.attempts++ 는 오케스트레이터만, 사건마다 이벤트를 하나씩 순서대로 처리하는
+      withIncident 안에서 올린다 (쓰는 쪽이 하나). volatile 은 다른 에이전트 스레드가 최신 값을 읽게 하려는 것이라 안전하다.
+    -->
+    <Match>
+        <Class name="com.qualiguard.qms.agent.pipeline.IncidentOrchestrator"/>
+        <Method name="~lambda\$onVerificationCompleted\$\d+"/>
+        <Bug pattern="VO_VOLATILE_INCREMENT"/>
+    </Match>
+</FindBugsFilter>
