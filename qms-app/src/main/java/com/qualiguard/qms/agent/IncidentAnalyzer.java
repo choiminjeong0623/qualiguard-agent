@@ -710,16 +710,16 @@ public class IncidentAnalyzer {
                 INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, cause_code,
                     confidence, result_json, tool_trace, model, latency_ms, ncr_id, error_message, run_tag,
                     trigger_type, as_of, as_of_shot, parent_analysis_id, attempts, verify_status, verify_json,
-                    incident_id, pipeline_json, prompt_tokens, output_tokens, thought_tokens)
+                    incident_id, pipeline_json, prompt_tokens, output_tokens, thought_tokens, prompt_version)
                 OUTPUT INSERTED.analysis_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATETIMEOFFSET(3)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, Integer.class,
                 job.equipmentId(), job.seedAnomalyId(), String.join(",", job.anomalyIds()), decision, causeCode,
                 confidence, resultJson, String.join("\n", trace), model, (int) ms, ncrId,
                 error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
                 job.parentId(), attempts, verification == null ? null : verification.status(),
                 verification == null ? null : objectMapper.writeValueAsString(verification), incidentId, pipelineJson,
-                tokens.prompt(), tokens.output(), tokens.thought());
+                tokens.prompt(), tokens.output(), tokens.thought(), AgentPrompts.VERSION);
     }
 
     @SuppressWarnings("unchecked")
