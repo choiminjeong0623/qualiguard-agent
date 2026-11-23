@@ -1,0 +1,111 @@
+/* QualiGuard QMS 디자인 토큰 — 콘셉트 A "Industrial Enterprise" (UI 리디자인 계획서 6.1, 2026-11-23 확정)
+   이 파일만 색·크기 값을 가진다. 다른 CSS 는 var(--qg-*) 로만 쓴다.
+   대비는 흰 바탕(또는 짝지은 옅은 배경) 기준으로 계산해 둔 값이다 (WCAG 2.2 AA 1.4.3 / 1.4.11). */
+
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("vendor/pretendard/PretendardVariable.woff2") format("woff2-variations");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ── 브랜드: 누를 수 있는 것(버튼·링크·선택)에만 쓴다. 상태 표시에는 쓰지 않는다 ── */
+  --qg-color-primary: #1F5A96;          /* 흰 바탕 7.09:1 */
+  --qg-color-primary-hover: #184A7D;
+  --qg-color-primary-active: #123A63;
+  --qg-color-primary-subtle: #E6EEF6;   /* 선택된 행 배경, 그 위 파란 글자 6.05:1 */
+  --qg-color-shell: #14273E;            /* 상단 바·사이드 메뉴 */
+  --qg-color-shell-hover: #1E3654;
+  --qg-color-shell-line: #2C4361;
+  --qg-color-shell-text: #FFFFFF;       /* 15.1:1 */
+  --qg-color-shell-muted: #B4C0CC;      /* 8.17:1 */
+  --qg-color-secondary: #4F5B67;
+
+  /* ── 중립 (cool gray) ── */
+  --qg-color-bg: #F3F5F7;
+  --qg-color-surface: #FFFFFF;
+  --qg-color-surface-alt: #F8F9FA;      /* 표 머리, 동작 바 */
+  --qg-color-surface-sunken: #EEF1F4;   /* 코드·로그 블록, 읽기 전용 입력 */
+  --qg-color-border: #D5DBE1;           /* 구분선 */
+  --qg-color-border-strong: #8A96A3;    /* 입력 테두리, 흰 바탕 3.01:1 */
+  --qg-color-text: #1B2733;             /* 15.2:1 */
+  --qg-color-text-2: #4F5B67;           /* 6.94:1 */
+  --qg-color-text-disabled: #8A96A3;
+
+  /* ── 상태 5종: 글자·아이콘 / 옅은 배경 / 테두리. 모양+문구와 함께만 쓴다 ── */
+  --qg-color-success: #1E7B34;  --qg-color-success-subtle: #E7F4EA;  --qg-color-success-line: #9CCFA8;  /* 4.70:1 */
+  --qg-color-warning: #8A5300;  --qg-color-warning-subtle: #FFF3DC;  --qg-color-warning-line: #E8C37E;  /* 5.76:1 */
+  --qg-color-danger:  #B3261E;  --qg-color-danger-subtle:  #FDECEA;  --qg-color-danger-line:  #F0A9A3;  /* 5.72:1 */
+  --qg-color-stopped: #4A5560;  --qg-color-stopped-subtle: #ECEFF2;  --qg-color-stopped-line: #BCC5CE;  /* 6.59:1 */
+  --qg-color-info:    #0B6E99;  --qg-color-info-subtle:    #E3F1F7;  --qg-color-info-line:    #94C6DC;  /* 4.91:1 */
+
+  /* ── 글자 ── */
+  --qg-font-sans: "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --qg-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --qg-fs-xs: 12px;  --qg-lh-xs: 16px;   /* 라벨·열 제목·보조 */
+  --qg-fs-sm: 13px;  --qg-lh-sm: 18px;   /* 표 본문 */
+  --qg-fs-md: 14px;  --qg-lh-md: 20px;   /* 본문·입력 */
+  --qg-fs-lg: 16px;  --qg-lh-lg: 24px;   /* 구역 제목 */
+  --qg-fs-xl: 20px;  --qg-lh-xl: 28px;   /* 화면 제목 */
+
+  /* ── 간격 (4px 격자) ── */
+  --qg-space-1: 4px;  --qg-space-2: 8px;  --qg-space-3: 12px; --qg-space-4: 16px;
+  --qg-space-5: 20px; --qg-space-6: 24px; --qg-space-7: 32px; --qg-space-8: 48px;
+
+  /* ── 모양 ── */
+  --qg-radius-sm: 2px;   /* 입력·버튼·상태 표시 */
+  --qg-radius-md: 4px;   /* 패널·대화상자 */
+  --qg-shadow-overlay: 0 4px 16px rgb(20 39 62 / .16);   /* 대화상자·드로어·펼친 메뉴에만 */
+  --qg-focus-ring: 0 0 0 2px var(--qg-color-surface), 0 0 0 4px var(--qg-color-primary);
+
+  /* ── 높이 ── */
+  --qg-h-shell: 48px;
+  --qg-h-control-sm: 32px;   /* 표 안 버튼 */
+  --qg-h-control-md: 36px;   /* 기본 입력·버튼 */
+  --qg-h-control-lg: 44px;   /* 터치 단말 */
+  --qg-h-row-compact: 32px;
+  --qg-h-row: 40px;
+  --qg-h-action-bar: 56px;
+  --qg-w-sidebar: 224px;
+  --qg-w-sidebar-collapsed: 56px;
+
+  /* ── 쌓임 순서 ── */
+  --qg-z-sticky: 10; --qg-z-drawer: 100; --qg-z-dialog: 200; --qg-z-toast: 300;
+
+  /* ── Tabler(Bootstrap) 변수를 토큰에 연결 ── */
+  --tblr-primary: var(--qg-color-primary);
+  --tblr-primary-rgb: 31, 90, 150;
+  --tblr-primary-text-emphasis: var(--qg-color-primary-active);
+  --tblr-link-color: var(--qg-color-primary);
+  --tblr-link-color-rgb: 31, 90, 150;
+  --tblr-link-hover-color: var(--qg-color-primary-hover);
+  --tblr-body-bg: var(--qg-color-bg);
+  --tblr-body-color: var(--qg-color-text);
+  --tblr-body-color-rgb: 27, 39, 51;
+  --tblr-secondary: var(--qg-color-text-2);
+  --tblr-secondary-color: var(--qg-color-text-2);
+  --tblr-border-color: var(--qg-color-border);
+  --tblr-border-color-translucent: var(--qg-color-border);
+  --tblr-bg-surface: var(--qg-color-surface);
+  --tblr-bg-surface-secondary: var(--qg-color-surface-alt);
+  --tblr-danger: var(--qg-color-danger);
+  --tblr-danger-rgb: 179, 38, 30;
+  --tblr-success: var(--qg-color-success);
+  --tblr-success-rgb: 30, 123, 52;
+  --tblr-warning: var(--qg-color-warning);
+  --tblr-warning-rgb: 138, 83, 0;
+  --tblr-border-radius: var(--qg-radius-sm);
+  --tblr-border-radius-sm: var(--qg-radius-sm);
+  --tblr-border-radius-lg: var(--qg-radius-md);
+  --tblr-box-shadow: none;
+  --tblr-box-shadow-card: none;
+  --tblr-shadow-card: none;
+  --tblr-font-sans-serif: var(--qg-font-sans);
+  --tblr-body-font-size: var(--qg-fs-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
