@@ -110,13 +110,16 @@ public class PipelineConfig {
      *  - off (기본): 쓰지 않음
      *  - shadow    : ML 판단을 분석 기록에 남기기만 하고 LLM 은 그대로
      *  - skip      : 학습한 고장 원인을 threshold 이상으로 고르면 LLM 을 부르지 않음
+     *                (낯선 경보는 LLM 으로 novelty-check, 건너뛸 사건 중 audit-rate 비율은 LLM 이 다시 봄)
      * 모델은 scripts/ml_cascade.sh 가 만든 JSON (기본: 앱에 들어 있는 시뮬레이터 학습 모델).
      */
     @Bean
     MlTriage mlTriage(JdbcTemplate jdbc, ObjectMapper objectMapper, ResourceLoader resources,
             @Value("${qg.agent.ml-triage.mode:off}") String mode,
             @Value("${qg.agent.ml-triage.threshold:0.9}") double threshold,
-            @Value("${qg.agent.ml-triage.model:classpath:ml/cause-forest.json}") String model) throws IOException {
+            @Value("${qg.agent.ml-triage.model:classpath:ml/cause-forest.json}") String model,
+            @Value("${qg.agent.ml-triage.novelty-check:true}") boolean noveltyCheck,
+            @Value("${qg.agent.ml-triage.audit-rate:0.1}") double auditRate) throws IOException {
         String v = mode.strip().toUpperCase(Locale.ROOT);
         // YAML 에 따옴표 없이 off 라고 쓰면 false 로 읽힌다
         MlTriage.Mode m = v.isEmpty() || "FALSE".equals(v) ? MlTriage.Mode.OFF : MlTriage.Mode.valueOf(v);
@@ -125,9 +128,10 @@ public class PipelineConfig {
         }
         try (InputStream in = resources.getResource(model).getInputStream()) {
             CauseForest forest = CauseForest.load(in, objectMapper);
-            LoggerFactory.getLogger(PipelineConfig.class).info("[ML 1차 분류] {} 모드, 기준 확률 {}, 모델 {} (나무 {}개, {})",
-                    m, threshold, model, forest.treeCount(), forest.createdAt());
-            return new MlTriage(jdbc, forest, m, threshold);
+            LoggerFactory.getLogger(PipelineConfig.class).info(
+                    "[ML 1차 분류] {} 모드, 기준 확률 {}, 낯선 경보 검사 {}, 표본 점검 {}, 모델 {} (나무 {}개, {})",
+                    m, threshold, noveltyCheck, auditRate, model, forest.treeCount(), forest.createdAt());
+            return new MlTriage(jdbc, forest, m, threshold, noveltyCheck, auditRate);
         }
     }
 

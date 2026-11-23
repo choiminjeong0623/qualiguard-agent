@@ -74,14 +74,14 @@ def evaluate(args):
     import numpy as np
     import yaml
     from ml_cause_baseline import BASELINE, CAUSE_KO, FAULT_CAUSE, Run, dataset, features, pct
-    from ml_cascade_eval import APP_TREES, KNOWN_FAULTS, forest, predict_all
+    from ml_cascade_eval import APP_TREES, KNOWN_FAULTS, NOVELTY_PERCENTILE, decide, fit
 
     def load(root):
         return [Run(p) for p in sorted(Path(root).glob("seed-*"), key=lambda p: int(p.name.split("-")[1]))]
 
     train = load(Path(args.train) / "train")
     X, y, _ = dataset(train)
-    model = forest(APP_TREES).fit(X, y)
+    model = fit(X, y)
 
     def truth(run, eq, shot):
         f = run.truth[eq].get(shot, "NONE")
@@ -95,9 +95,9 @@ def evaluate(args):
             als = [a for a in run.alarms if a["shot"] > BASELINE and a["eq"] in run.arr]
             if not als:
                 continue
-            cls, p = predict_all(model, np.array([features(run, a) for a in als]))
-            for a, c, q in zip(als, cls, p):
-                rows.append((run, a, truth(run, a["eq"], a["shot"]), str(c), float(q)))
+            cls, p, unf = decide(model, np.array([features(run, a) for a in als]))
+            for a, c, q, u in zip(als, cls, p, unf):
+                rows.append((run, a, truth(run, a["eq"], a["shot"]), str(c), float(q), bool(u)))
         sev = {}
         for run in runs:
             cfg = yaml.safe_load(open(run.path / "scenario.yaml", encoding="utf-8"))
@@ -105,8 +105,8 @@ def evaluate(args):
                 sev[(run.name, f["equipment"], f["start_shot"])] = f["severity"]
         mixes[(known, novel)] = (runs, rows, sev)
 
-    def skip(c, q, t):
-        return c in KNOWN_FAULTS and q >= t
+    def skip(c, q, t, unfamiliar=False):
+        return c in KNOWN_FAULTS and q >= t and not unfamiliar
 
     L = ["# 새 고장을 섞은 무작위 시나리오 — ML 먼저, 애매하면 LLM", ""]
     L.append(f"`./scripts/ml_novel.sh` 로 다시 만들 수 있습니다 (LLM 없이). 생성: {datetime.now():%Y-%m-%d %H:%M}. "
@@ -122,23 +122,26 @@ def evaluate(args):
     L.append("  - 금형 파팅면 마모: 센서는 거의 그대로, 보압만 조금 흔들리고 버 증가")
     L.append(f"- 무작위 시나리오: 설비 2대 × 고장 3개, 시점·길이(280~420 shot)·세기(0.6~1.4배) 무작위. 아는 고장도 세기가 바뀌어 학습 때와 다릅니다")
     L.append(f"- 아는 고장 : 새 고장 = 5:1, 4:2, 3:3 × seed {len(SEEDS)}개. 앱 규칙 그대로: 학습한 고장 원인을 기준 확률 이상 → LLM 생략, 그 밖은 LLM")
+    L.append(f"- **낯선 경보 검사**(앱 기본 켬): ML 이 고른 원인의 학습 경보들과 특징이 많이 다르면(거리 {NOVELTY_PERCENTILE} 백분위 초과) 확률이 높아도 LLM. 아래 표는 검사를 켠 것과 끈 것을 함께 보여 줍니다")
     L.append("")
 
     L.append("## 1. 경보 단위")
     L.append("")
-    L.append("| 섞음 (아는:새) | 경보 | 새 고장 경보 비율 | 기준 확률 | LLM 생략 (호출 감소) | 생략 중 정답 | 생략 중 오답: 아는 고장 혼동 | **생략 중 오답: 새 고장을 아는 고장으로** |")
-    L.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    L.append("| 섞음 (아는:새) | 경보 | 새 고장 경보 비율 | 기준 확률 | LLM 생략 (호출 감소) | 생략 중 정답 | 생략 중 오답: 아는 고장 혼동 | **생략 중 오답: 새 고장을 아는 고장으로** | 낯선 경보 검사 없이: 생략 / 새 고장 오답 |")
+    L.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     summary = {}
     for (known, novel), (runs, rows, _) in mixes.items():
         n = len(rows)
         nov = sum(r[2].startswith("NOVEL") for r in rows)
         for t in THRESHOLDS:
-            sk = [r for r in rows if skip(r[3], r[4], t)]
+            sk = [r for r in rows if skip(r[3], r[4], t, r[5])]
+            raw = [r for r in rows if skip(r[3], r[4], t)]
             ok = sum(r[3] == r[2] for r in sk)
             nov_wrong = sum(r[2].startswith("NOVEL") for r in sk)
             other_wrong = len(sk) - ok - nov_wrong
             mark = " **(기본)**" if t == DEFAULT else ""
-            L.append(f"| {known}:{novel} | {n} | {pct(nov, n)} | {t}{mark} | {pct(len(sk), n)} | {ok} | {other_wrong} | {nov_wrong} |")
+            L.append(f"| {known}:{novel} | {n} | {pct(nov, n)} | {t}{mark} | {pct(len(sk), n)} | {ok} | {other_wrong} | {nov_wrong} | "
+                     f"{len(raw) / n:.0%} / {sum(r[2].startswith('NOVEL') for r in raw)} |")
             if t == DEFAULT:
                 summary[(known, novel)] = (n, nov, len(sk), ok, other_wrong, nov_wrong)
     L.append("")
@@ -171,7 +174,7 @@ def evaluate(args):
                     for i, r in enumerate(rs):
                         per[fault]["alarms"] += 1
                         probs[fault].append(r[4])
-                        if skip(r[3], r[4], DEFAULT):
+                        if skip(r[3], r[4], DEFAULT, r[5]):
                             per[fault]["skipped"] += 1
                             picks[fault][r[3]] += 1
                             if i == 0:
@@ -187,12 +190,14 @@ def evaluate(args):
     L.append("")
     L.append("**ML 이 새 고장 경보에 낸 1순위 답 (모든 경보, 확률과 무관)**")
     L.append("")
-    L.append("| 새 고장 | 경보 | ML 1순위 답 | 1순위가 아는 고장(오답)인 경보 | 그중 가장 높은 확률 |")
-    L.append("|---|---:|---|---:|---:|")
+    L.append("| 새 고장 | 경보 | ML 1순위 답 | 1순위가 아는 고장(오답)인 경보 | 그중 가장 높은 확률 | 그중 낯선 경보 검사에 걸린 경보 |")
+    L.append("|---|---:|---|---:|---:|---:|")
+    caught_all = wrong_all = 0
     worst = 0.0
     for f in NOVEL:
         top = Counter()
         wrong_known = 0
+        caught = 0
         best = 0.0
         for (known, novel), (runs, rows, _) in mixes.items():
             for r in rows:
@@ -200,14 +205,19 @@ def evaluate(args):
                     top[r[3]] += 1
                     if r[3] in KNOWN_FAULTS:
                         wrong_known += 1
+                        caught += r[5]
                         best = max(best, r[4])
         worst = max(worst, best)
         n = sum(top.values())
+        caught_all += caught
+        wrong_all += wrong_known
         L.append(f"| {NOVEL_KO[f]} | {n} | {', '.join(f'{CAUSE_KO[k]} {v}' for k, v in top.most_common())} | "
-                 f"{pct(wrong_known, n)} | {best:.2f} |")
+                 f"{pct(wrong_known, n)} | {best:.2f} | {pct(caught, wrong_known)} |")
     L.append("")
-    L.append(f"- ML 은 새 고장을 자주 **비슷한 아는 고장으로 1순위에 올립니다** (예: 노즐 막힘 → 체크 링 마모). 다만 그때 확률이 낮아(가장 높아도 {worst:.2f}) "
-             f"기준 {DEFAULT} 규칙에서는 모두 LLM 으로 넘어갔습니다. 기준을 {worst:.2f} 아래로 낮추면 이 경보들이 LLM 없이 틀린 원인으로 처리됩니다 (1절의 0.5 행).")
+    L.append(f"- ML 은 새 고장을 자주 **비슷한 아는 고장으로 1순위에 올립니다** (예: 노즐 막힘 → 체크 링 마모). 그때 확률이 낮아(가장 높아도 {worst:.2f}) "
+             f"기준 {DEFAULT} 에서는 확률만으로도 LLM 으로 넘어갔습니다.")
+    L.append(f"- 기준 확률을 낮추면 확률만으로는 막지 못합니다(1절 0.5 행의 '검사 없이' 칸). 낯선 경보 검사는 이런 경보 {pct(caught_all, wrong_all)}를 "
+             "확률과 관계없이 잡아 LLM 으로 넘깁니다. 두 장치가 겹쳐 있어 하나가 놓쳐도 다른 하나가 막습니다.")
     L.append("")
     L.append("- '경보가 난 사례'가 사례보다 적으면 그 고장은 SPC 경보가 늦거나 없었다는 뜻입니다 (탐지 단계의 한계, 이 실험의 대상 아님)")
     L.append("")
@@ -233,7 +243,7 @@ def evaluate(args):
                 r = rs[0]
                 weak = sev.get((run.name, eq, start), 1.0) < 0.8
                 kc[cause]["weak"] += weak
-                if skip(r[3], r[4], DEFAULT):
+                if skip(r[3], r[4], DEFAULT, r[5]):
                     kc[cause]["ok" if r[3] == cause else "wrong"] += 1
                 else:
                     kc[cause]["llm"] += 1
@@ -258,8 +268,8 @@ def evaluate(args):
                  "사람 승인 전에는 확정되지 않지만, `skip` 을 켜기 전에 보완이 필요하다는 근거입니다 (아래 보완 후보).")
     else:
         L.append("- 새 고장 경보가 ML 에 의해 아는 고장으로 확신된 경우는 없었습니다 (2절).")
-    L.append("- 보완 후보: (1) 기준 확률을 높이기 (1절의 0.95 행), (2) 학습 데이터와 얼마나 다른지 보는 이상치 검사를 추가해 낯선 경보는 LLM 으로, "
-             "(3) ML 이 생략한 사건도 일부는 LLM 으로 다시 보는 표본 점검.")
+    L.append("- 앱에 넣은 보완: 낯선 경보 검사(기본 켬), `shadow` 일치율 기록과 집계 API(GET /api/agent/ml-triage/stats), "
+             "LLM 을 건너뛸 사건 일부를 LLM 으로 다시 보는 표본 점검(audit-rate).")
     Path(args.out).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 

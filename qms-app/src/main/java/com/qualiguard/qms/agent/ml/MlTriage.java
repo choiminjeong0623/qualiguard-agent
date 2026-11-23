@@ -30,10 +30,35 @@ import com.qualiguard.qms.quality.SensorCatalog;
  * 단발성(NOISE)은 ML 이 확신해도 LLM 으로 넘긴다. 학습하지 않은 고장은 '단발성'으로 들어가기 때문이다
  * (eval/ml_cause_report.md 3절). 건너뛸 때도 같은 조회 도구로 실제 수치를 근거로 붙이고,
  * 검증 에이전트와 사람 승인을 그대로 거친다 (검증이 되돌리면 두 번째 시도는 LLM).
+ *
+ * 안전장치 (eval/ml_novel_report.md)
+ *  - 낯선 경보 검사: 고른 원인의 학습 경보들과 특징이 많이 다르면 확률이 높아도 LLM 으로 (기본 켬)
+ *  - 표본 점검: 건너뛸 수 있는 사건 중 audit-rate 비율은 LLM 이 분석하고 ML 답과 함께 기록
+ *  - 판단 기록: 사건마다 ML 원인·확률·경로·LLM 원인을 agent_ml_judgment 에 남겨 일치율을 센다
  */
 public final class MlTriage {
 
     public enum Mode { OFF, SHADOW, SKIP }
+
+    /** 사건이 어디로 갔는가 (agent_ml_judgment.route). */
+    public enum Route {
+        /** shadow 모드: LLM 이 분석, ML 은 기록만 */
+        SHADOW,
+        /** LLM 을 건너뛰고 ML 결과로 진행 */
+        SKIPPED,
+        /** 건너뛸 수 있었지만 표본 점검으로 LLM 이 분석 */
+        AUDIT,
+        /** ML 이 단발성이라 LLM 으로 */
+        LLM_NOISE,
+        /** 확률이 기준보다 낮아 LLM 으로 */
+        LLM_LOW,
+        /** 학습 경보들과 많이 달라 LLM 으로 */
+        LLM_UNFAMILIAR;
+
+        public boolean usesLlm() {
+            return this != SKIPPED;
+        }
+    }
 
     /** LLM 없이 끝낼 수 있는 원인: 학습한 고장 원인만 (NOISE 제외). */
     public static final Set<String> KNOWN_FAULTS = Set.of("HEATER_DEGRADATION", "COOLING_ISSUE", "CHECK_RING_WEAR",
@@ -46,13 +71,27 @@ public final class MlTriage {
      * @param probability 그 확률
      * @param proba       원인별 확률
      * @param features    계산한 특징 (근거 문장에 쓸 센서를 고를 때 씀)
+     * @param novelty     고른 원인의 학습 경보들과의 거리 (모델에 정보가 없으면 NaN)
+     * @param noveltyLimit 이보다 멀면 낯선 경보
      */
     public record Prediction(String cause, double probability, Map<String, Double> proba, long alarmShot,
-            String alarmRule, String alarmSensor, double[] features, long millis) {
+            String alarmRule, String alarmSensor, double[] features, long millis, double novelty,
+            double noveltyLimit) {
+
+        public Prediction(String cause, double probability, Map<String, Double> proba, long alarmShot,
+                String alarmRule, String alarmSensor, double[] features, long millis) {
+            this(cause, probability, proba, alarmShot, alarmRule, alarmSensor, features, millis, Double.NaN,
+                    Double.NaN);
+        }
+
+        /** 학습 경보들과 많이 다른가 (낯선 경보 검사 정보가 없으면 false). */
+        public boolean unfamiliar() {
+            return !Double.isNaN(novelty) && !Double.isNaN(noveltyLimit) && novelty > noveltyLimit;
+        }
 
         public String summary(double threshold) {
-            return String.format(Locale.ROOT, "%s %.2f (기준 %.2f, 경보 %s·%s shot %d, %d ms)", cause, probability,
-                    threshold, alarmRule, alarmSensor, alarmShot, millis);
+            return String.format(Locale.ROOT, "%s %.2f (기준 %.2f, 낯선 정도 %.2f/%.2f, 경보 %s·%s shot %d, %d ms)", cause,
+                    probability, threshold, novelty, noveltyLimit, alarmRule, alarmSensor, alarmShot, millis);
         }
     }
 
@@ -60,19 +99,43 @@ public final class MlTriage {
     private final CauseForest forest;
     private final Mode mode;
     private final double threshold;
+    private final boolean noveltyCheck;
+    private final double auditRate;
 
     public MlTriage(JdbcTemplate jdbc, CauseForest forest, Mode mode, double threshold) {
+        this(jdbc, forest, mode, threshold, true, 0.0);
+    }
+
+    /**
+     * @param noveltyCheck 낯선 경보는 LLM 으로 (기본 true)
+     * @param auditRate    skip 모드에서 건너뛸 수 있는 사건 중 LLM 으로 다시 보는 비율 (0~1)
+     */
+    public MlTriage(JdbcTemplate jdbc, CauseForest forest, Mode mode, double threshold, boolean noveltyCheck,
+            double auditRate) {
         if (mode != Mode.OFF && forest == null) {
             throw new IllegalArgumentException("ML 1차 분류를 켜려면 모델이 필요합니다");
+        }
+        if (auditRate < 0 || auditRate > 1) {
+            throw new IllegalArgumentException("audit-rate 는 0~1 이어야 합니다: " + auditRate);
         }
         this.jdbc = jdbc;
         this.forest = forest;
         this.mode = mode;
         this.threshold = threshold;
+        this.noveltyCheck = noveltyCheck;
+        this.auditRate = auditRate;
     }
 
     public static MlTriage off() {
         return new MlTriage(null, null, Mode.OFF, 1.0);
+    }
+
+    public boolean noveltyCheck() {
+        return noveltyCheck;
+    }
+
+    public double auditRate() {
+        return auditRate;
     }
 
     public Mode mode() {
@@ -87,9 +150,67 @@ public final class MlTriage {
         return mode != Mode.OFF;
     }
 
-    /** LLM 을 건너뛰어도 되는가: skip 모드이고, 학습한 고장 원인을 기준 확률 이상으로 골랐을 때. */
+    /** 모드와 관계없이, skip 규칙이라면 LLM 을 건너뛸 판단인가 (학습한 고장 · 기준 확률 이상 · 낯설지 않음). */
+    public boolean wouldSkip(Prediction p) {
+        return p != null && KNOWN_FAULTS.contains(p.cause()) && p.probability() >= threshold
+                && !(noveltyCheck && p.unfamiliar());
+    }
+
+    /** LLM 을 건너뛰어도 되는가 (표본 점검은 따지지 않음, {@link #route} 참고). */
     public boolean skipLlm(Prediction p) {
-        return mode == Mode.SKIP && p != null && KNOWN_FAULTS.contains(p.cause()) && p.probability() >= threshold;
+        return mode == Mode.SKIP && wouldSkip(p);
+    }
+
+    /**
+     * 사건의 경로. 표본 점검은 사건 번호로 정해 같은 사건은 다시 돌려도(재시작 복구) 같은 경로가 된다.
+     */
+    public Route route(Prediction p, String incidentId) {
+        if (mode == Mode.SHADOW) {
+            return Route.SHADOW;
+        }
+        if (!KNOWN_FAULTS.contains(p.cause())) {
+            return Route.LLM_NOISE;
+        }
+        if (p.probability() < threshold) {
+            return Route.LLM_LOW;
+        }
+        if (noveltyCheck && p.unfamiliar()) {
+            return Route.LLM_UNFAMILIAR;
+        }
+        return audited(incidentId) ? Route.AUDIT : Route.SKIPPED;
+    }
+
+    boolean audited(String incidentId) {
+        if (auditRate <= 0 || incidentId == null) {
+            return false;
+        }
+        return Math.floorMod(incidentId.hashCode() * 31 + 17, 10_000) < Math.round(auditRate * 10_000);
+    }
+
+    /**
+     * 판단 기록 (agent_ml_judgment). LLM 이 분석했으면 llmCause 에 첫 시도의 원인을 넣는다.
+     * 기록 실패는 분석을 막지 않는다 (호출하는 쪽에서 잡는다).
+     */
+    public void record(String incidentId, Job job, Prediction p, Route route, String llmCause) {
+        if (jdbc == null || incidentId == null) {
+            return;
+        }
+        jdbc.update("""
+                INSERT INTO dbo.agent_ml_judgment (incident_id, equipment_id, alarm_shot, mode, route, ml_cause,
+                    ml_probability, novelty, novelty_limit, would_skip, llm_cause, threshold)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                WHERE NOT EXISTS (SELECT 1 FROM dbo.agent_ml_judgment WHERE incident_id = ?)
+                """, incidentId, job.equipmentId(), p.alarmShot(), mode.name(), route.name(), p.cause(),
+                round3(p.probability()), finite(p.novelty()), finite(p.noveltyLimit()), wouldSkip(p),
+                llmCause, round3(threshold), incidentId);
+    }
+
+    private static BigDecimal round3(double v) {
+        return BigDecimal.valueOf(Math.round(v * 1000) / 1000.0);
+    }
+
+    private static BigDecimal finite(double v) {
+        return Double.isNaN(v) || Double.isInfinite(v) ? null : round3(Math.min(v, 999_999.0));
     }
 
     /**
@@ -128,7 +249,9 @@ public final class MlTriage {
         for (int c = 0; c < p.length; c++) {
             proba.put(forest.classes().get(c), Math.round(p[c] * 1000) / 1000.0);
         }
-        return new Prediction(forest.classes().get(best), p[best], proba, shot, rule, sensor, x, millis);
+        String cause = forest.classes().get(best);
+        return new Prediction(cause, p[best], proba, shot, rule, sensor, x, millis, forest.novelty(x, cause),
+                forest.noveltyLimit(cause));
     }
 
     /**
