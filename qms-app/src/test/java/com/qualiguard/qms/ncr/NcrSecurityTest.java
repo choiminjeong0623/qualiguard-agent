@@ -53,6 +53,13 @@ class NcrSecurityTest {
     }
 
     @Test
+    void 로그인_화면의_스타일_글꼴은_로그인_전에도_받을_수_있다() throws Exception {
+        mvc.perform(get("/qms/qg-tokens.css")).andExpect(status().isOk());
+        mvc.perform(get("/qms/vendor/tabler/tabler.min.css")).andExpect(status().isOk());
+        mvc.perform(get("/qms/vendor/pretendard/PretendardVariable.woff2")).andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(username = "viewer", roles = "VIEWER")
     void 조회_전용은_목록을_볼_수_있다() throws Exception {
         when(service.list(any(), any(), eq(100))).thenReturn(List.of());
