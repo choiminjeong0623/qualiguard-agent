@@ -33,6 +33,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
 
+import com.qualiguard.qms.agent.IncidentAnalyzer;
 import com.qualiguard.qms.agent.TokenBudget;
 import com.qualiguard.qms.ncr.NcrReviewService;
 
@@ -240,6 +241,8 @@ class MssqlInitScriptsContainerTest {
             Map<String, Object> before = service.reviewStats();
 
             insertDraft(c, "IT-P3-01", "히터 열화", "HEATER_DEGRADATION");   // 그대로 승인
+            // 담당자·기한 지정은 사람 몫이라 "AI 초안을 고침"으로 세지 않는다 (P2)
+            service.assign("IT-P3-01", "통합 시험", Map.of("actionOwner", "김반장", "actionDueDate", "2026-12-01"));
             service.approve("IT-P3-01", "통합 시험", null);
             insertDraft(c, "IT-P3-02", null, "HEATER_DEGRADATION");          // 사람이 원인을 고쳐 승인
             service.update("IT-P3-02", "통합 시험", Map.of("rootCause", "냉각수 배관 막힘", "causeCode", "COOLING_ISSUE"));
@@ -261,12 +264,57 @@ class MssqlInitScriptsContainerTest {
             insertDraft(c, "IT-P2-01", null, "UNKNOWN");   // 원인·근거·조치·센서·불량유형·경보 없음
             @SuppressWarnings("unchecked")
             Map<String, Object> comp = (Map<String, Object>) service.detail("IT-P2-01").get("completeness");
-            assertThat(comp).containsEntry("total", 9);
-            assertThat((List<Object>) comp.get("missing")).contains("원인 코드", "근거", "영향 범위");
+            assertThat(comp).containsEntry("total", 11);
+            assertThat((List<Object>) comp.get("missing"))
+                    .contains("원인 코드", "근거", "영향 범위", "담당자", "조치 기한");
+
+            // 사람이 담당자·기한·영향 로트를 정하면 빠짐에서 사라진다 (승인 전·후 모두 가능)
+            Map<String, Object> d = service.assign("IT-P2-01", "통합 시험", Map.of("actionOwner", "성형1팀 김반장",
+                    "actionDueDate", "2026-11-30", "affectedLots", "L261123-IMM-01-03 , L261123-IMM-01-04"));
+            assertThat(d).containsEntry("action_owner", "성형1팀 김반장").containsEntry("action_due_date", "2026-11-30")
+                    .containsEntry("affected_lots", "L261123-IMM-01-03,L261123-IMM-01-04");
+            assertThat((List<Object>) ((Map<String, Object>) d.get("completeness")).get("missing"))
+                    .doesNotContain("담당자", "조치 기한", "영향 범위");
+            assertThatThrownBy(() -> service.assign("IT-P2-01", "통합 시험", Map.of("actionDueDate", "11/30")))
+                    .hasMessageContaining("yyyy-MM-dd");
+            // 빈 값은 칸을 비운다
+            d = service.assign("IT-P2-01", "통합 시험", Map.of("actionOwner", ""));
+            assertThat(d.get("action_owner")).isNull();
+            assertThat(d.get("action_due_date")).isEqualTo("2026-11-30");
 
             Map<String, Object> stats = service.completenessStats();
             assertThat((int) stats.get("count")).isPositive();
             assertThat(stats.get("items")).isInstanceOf(Map.class);
+        }
+    }
+
+    @Test
+    void 영향_로트는_첫_경보부터_분석_시점까지의_로트() throws Exception {
+        try (Connection c = connect()) {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO dbo.process_shot (message_id, line_id, equipment_id, shot_no, shot_ts, inspection_result, lot_no)
+                    VALUES (?, 'LINE1', 'IMM-02', ?, DATEADD(SECOND, ?, CAST('2026-11-23T10:00:00+09:00' AS DATETIMEOFFSET(3))), 'OK', ?)
+                    """)) {
+                for (int shot = 240; shot <= 520; shot += 10) {   // 240~250 → 01, 260~500 → 02, 510~520 → 03
+                    ps.setString(1, "it-lot-" + shot);
+                    ps.setLong(2, shot);
+                    ps.setInt(3, shot * 30);
+                    ps.setString(4, String.format("L261123-IMM-02-%02d", (shot - 1) / 250 + 1));
+                    ps.executeUpdate();
+                }
+            }
+            var jdbc = new JdbcTemplate(new SingleConnectionDataSource(c, true));
+            // 첫 경보 shot 250, 분석 기준 shot 510 → 로트 01·02·03
+            var job = new IncidentAnalyzer.Job("ALARM", "IMM-02", "a-1", "2026-11-23T12:05:00+09:00",
+                    List.of(Map.of("shot_no", 250L), Map.of("shot_no", 300L)), List.of("a-1"), true, Map.of(),
+                    "2026-11-23T14:15:00+09:00", 510L, null, null, null, null);
+            assertThat(IncidentAnalyzer.affectedLots(jdbc, job))
+                    .isEqualTo("L261123-IMM-02-01,L261123-IMM-02-02,L261123-IMM-02-03");
+            // 재생처럼 경보 shot 만 보면 그 로트 하나
+            var single = new IncidentAnalyzer.Job("ALARM", "IMM-02", "a-2", "2026-11-23T12:30:00+09:00",
+                    List.of(Map.of("shot_no", 300L)), List.of("a-2"), true, Map.of(),
+                    "2026-11-23T12:30:00+09:00", 300L, null, null, null, null);
+            assertThat(IncidentAnalyzer.affectedLots(jdbc, single)).isEqualTo("L261123-IMM-02-02");
         }
     }
 

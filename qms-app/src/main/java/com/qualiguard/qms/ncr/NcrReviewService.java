@@ -81,6 +81,8 @@ public class NcrReviewService {
                     SELECT ncr_id, ncr_no, equipment_id, anomaly_id, status, title, phenomenon, suspected_cause,
                            root_cause, evidence, recommended_action, action_taken, cause_code, confidence,
                            defect_type, related_sensors, created_by, approved_by, reviewed_by, review_comment,
+                           affected_lots, action_owner,
+                           CONVERT(VARCHAR(10), action_due_date, 23) AS action_due_date,
                            CONVERT(VARCHAR(33), occurred_at, 127) AS occurred_at,
                            CONVERT(VARCHAR(33), created_at, 127)  AS created_at,
                            CONVERT(VARCHAR(33), reviewed_at, 127) AS reviewed_at,
@@ -162,6 +164,63 @@ public class NcrReviewService {
                 ncrNo, who, next.get("title"), next.get("phenomenon"), next.get("suspectedCause"),
                 next.get("rootCause"), next.get("evidence"), next.get("recommendedAction"), next.get("causeCode"),
                 emptyToNull(next.get("defectType")), emptyToNull(next.get("relatedSensors")),
+                objectMapper.writeValueAsString(changes)));
+        return detail(ncrNo);
+    }
+
+    /** 조치 지정 항목 (로드맵 P2): 화면 이름 → DB 컬럼. AI 초안 수정률(P3)에는 넣지 않는다. */
+    static final Map<String, String> ASSIGNABLE = new LinkedHashMap<>();
+    static {
+        ASSIGNABLE.put("actionOwner", "action_owner");
+        ASSIGNABLE.put("actionDueDate", "action_due_date");
+        ASSIGNABLE.put("affectedLots", "affected_lots");
+    }
+
+    /**
+     * 조치 담당자·기한·영향 로트 지정 (로드맵 P2). 초안·승인 상태에서 바꿀 수 있다.
+     * 빈 값을 보내면 그 칸을 비운다. 기한은 yyyy-MM-dd.
+     */
+    public Map<String, Object> assign(String ncrNo, String actor, Map<String, Object> body) {
+        String who = requireActor(actor);
+        Map<String, Object> current = detail(ncrNo);
+        Map<String, String> next = new LinkedHashMap<>();
+        Map<String, Object> changes = new LinkedHashMap<>();
+        for (Map.Entry<String, String> f : ASSIGNABLE.entrySet()) {
+            if (body == null || !body.containsKey(f.getKey())) {
+                continue;
+            }
+            String value = body.get(f.getKey()) == null ? "" : String.valueOf(body.get(f.getKey())).strip();
+            if (f.getKey().equals("actionOwner") && value.length() > 50) {
+                throw new ReviewException(400, "담당자 이름은 50자까지입니다.");
+            }
+            if (f.getKey().equals("affectedLots")) {
+                value = value.replaceAll("\\s*,\\s*", ",");
+                if (value.length() > 400) {
+                    throw new ReviewException(400, "영향 로트는 400자까지입니다.");
+                }
+            }
+            if (f.getKey().equals("actionDueDate") && !value.isEmpty()) {
+                try {
+                    value = java.time.LocalDate.parse(value).toString();
+                } catch (java.time.format.DateTimeParseException e) {
+                    throw new ReviewException(400, "조치 기한은 yyyy-MM-dd 형식입니다: " + value);
+                }
+            }
+            String before = current.get(f.getValue()) == null ? "" : String.valueOf(current.get(f.getValue()));
+            if (!Objects.equals(before, value)) {
+                next.put(f.getKey(), value);
+                changes.put(f.getKey(), Map.of("before", before, "after", value));
+            }
+        }
+        if (changes.isEmpty()) {
+            return current;
+        }
+        String owner = next.get("actionOwner");
+        String due = next.get("actionDueDate");
+        String lots = next.get("affectedLots");
+        exec(() -> jdbc.update("EXEC dbo.usp_AssignNcrAction ?, ?, ?, ?, ?, ?, ?, ?, ?",
+                ncrNo, who, emptyToNull(owner), emptyToNull(due), emptyToNull(lots),
+                "".equals(owner), "".equals(due), "".equals(lots),
                 objectMapper.writeValueAsString(changes)));
         return detail(ncrNo);
     }
@@ -272,7 +331,7 @@ public class NcrReviewService {
         });
         List<NcrCompleteness.Result> results = jdbc.queryForList("""
                 SELECT ncr_id, title, phenomenon, suspected_cause, root_cause, evidence, recommended_action,
-                       cause_code, defect_type, related_sensors
+                       cause_code, defect_type, related_sensors, affected_lots, action_owner, action_due_date
                 FROM dbo.ncr WHERE created_by = 'AGENT' ORDER BY ncr_id
                 """).stream()
                 .map(r -> NcrCompleteness.check(r, anomalyCounts.getOrDefault(r.get("ncr_id"), 0)))

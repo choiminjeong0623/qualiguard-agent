@@ -11,7 +11,9 @@
   var ACTION_LABEL = { EDIT: '수정', APPROVE: '승인', REJECT: '반려', CLOSE: '조치 완료' };
   var FIELD_LABEL = { title: '제목', phenomenon: '현상', suspectedCause: '추정 원인', rootCause: '확정 원인',
     evidence: '근거', recommendedAction: '권고 조치', causeCode: '원인 코드', defectType: '불량 유형',
-    relatedSensors: '관련 센서' };
+    relatedSensors: '관련 센서', actionOwner: '담당자', actionDueDate: '조치 기한', affectedLots: '영향 로트' };
+  // 조치 지정 (로드맵 P2): 화면 이름 → 응답 컬럼
+  var ASSIGN = { actionOwner: 'action_owner', actionDueDate: 'action_due_date', affectedLots: 'affected_lots' };
 
   var state = { status: 'DRAFT', selected: null, current: null, me: null, rows: [] };
 
@@ -117,6 +119,11 @@
     $('#btn-save, #btn-approve, #btn-reject, #reject-reason').prop('disabled', !editable);
     $('#edit-form > .qg-actions').first().prop('hidden', !editable);
     $('#edit-state').text(editable ? '수정 가능' : '읽기 전용');
+    var $a = $('#assign-form');
+    Object.keys(ASSIGN).forEach(function (k) { $a.find('[name="' + k + '"]').val(d[ASSIGN[k]] || ''); });
+    var assignable = (d.status === 'DRAFT' || d.status === 'APPROVED') && canWrite();
+    $a.find('input, button').prop('disabled', !assignable);
+    $('#assign-state').text(assignable ? '초안·승인 상태에서 지정 가능' : '읽기 전용');
     var inKb = d.status === 'APPROVED' || d.status === 'CLOSED';
     $('#d-kb').prop('hidden', !inKb);
     $('#close-box').prop('hidden', d.status !== 'APPROVED' || !canWrite());
@@ -274,6 +281,17 @@
   }
 
   $('#edit-form').on('submit', function (e) { e.preventDefault(); save(); });
+
+  // 조치 담당자·기한·영향 로트 저장 (로드맵 P2). 빈 칸으로 저장하면 그 값을 지운다.
+  $('#assign-form').on('submit', function (e) {
+    e.preventDefault();
+    if (!requireActor()) { return; }
+    var body = {};
+    Object.keys(ASSIGN).forEach(function (k) { body[k] = $('#assign-form [name="' + k + '"]').val(); });
+    send('PUT', API + '/' + encodeURIComponent(state.selected) + '/assignment', body)
+      .done(function (d) { render(d); msg('조치 지정을 저장했습니다.', 'ok'); })
+      .fail(function (xhr) { msg(errorText(xhr), 'err'); });
+  });
 
   $('#btn-approve').on('click', function () {
     var a = requireActor();

@@ -94,6 +94,13 @@ public class NcrController {
                 fields instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of());
     }
 
+    /** 조치 담당자·기한·영향 로트 지정 (로드맵 P2). body: {"actionOwner", "actionDueDate", "affectedLots"} */
+    @PutMapping("/ncrs/{ncrNo}/assignment")
+    public Map<String, Object> assign(@PathVariable String ncrNo, @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        return service.assign(ncrNo, actor(auth), body);
+    }
+
     @PostMapping("/ncrs/{ncrNo}/approve")
     public Map<String, Object> approve(@PathVariable String ncrNo, @RequestBody Map<String, String> body,
             Authentication auth) {

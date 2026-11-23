@@ -19,7 +19,7 @@ import signal
 import sys
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -68,8 +68,19 @@ def device_password(env: dict, equipment_id: str) -> str | None:
     return env.get("MQTT_DEVICE_PASSWORD_" + equipment_id.replace("-", "_")) or None
 
 
+LOT_SIZE = 250
+
+
+def lot_no(equipment_id: str, shot_no: int, day: date, lot_size: int = LOT_SIZE) -> str:
+    """생산 로트 번호: 시작일 + 설비 + 순번. shot 번호로만 정해지므로 난수 흐름(정답 재현)에 영향이 없다.
+    예) 2026-11-23 시작, IMM-01 의 501번째 shot → L261123-IMM-01-03 (로드맵 P2 영향 범위용)"""
+    seq = (max(shot_no, 1) - 1) // lot_size + 1
+    return f"L{day:%y%m%d}-{equipment_id}-{seq:02d}"
+
+
 def build_payload(m: Machine, values: dict, defect: str | None, serial_no: str | None = None,
-                  now: datetime | None = None) -> dict:
+                  now: datetime | None = None, lot_day: date | None = None,
+                  lot_size: int = LOT_SIZE) -> dict:
     """결측이 없는 완전한 페이로드. 결측은 missing.apply_missing 이 나중에 섞는다."""
     now = now or datetime.now(KST)
     return {
@@ -78,6 +89,7 @@ def build_payload(m: Machine, values: dict, defect: str | None, serial_no: str |
         "equipmentId": m.equipment_id,
         "shotNo": m.shot_no,
         "serialNo": serial_no,                   # 공정 중 임시값(TMP-…)·null·중복 가능, 확정은 출하 때 (ADR-017)
+        "lotNo": lot_no(m.equipment_id, m.shot_no, lot_day or now.date(), lot_size),
         "ts": now.isoformat(timespec="milliseconds"),
         "sensors": {k: {"value": v, "unit": SENSORS[k][1]} for k, v in values.items()},
         "inspection": {"result": "NG" if defect else "OK", "defectType": defect},
@@ -274,6 +286,10 @@ def main() -> None:
     def clock(step: int) -> datetime:
         return clock_start + timedelta(seconds=30 * step) if out_dir else datetime.now(KST)
 
+    # 로트는 실행 시작일 기준으로 lot_size shot 마다 바뀐다 (자정을 넘겨도 같은 로트는 같은 번호)
+    lot_day = clock(0).date()
+    lot_size = int(sim.get("lot_size", LOT_SIZE))
+
     def publish(equipment_id: str, body: str) -> None:
         nonlocal pending, published
         published += 1
@@ -304,7 +320,8 @@ def main() -> None:
                     active.append(f.name)
             values, defect = m.next_shot(add, scale)
             now = clock(step)
-            payload = build_payload(m, values, defect, serial_for(serials[m.equipment_id], missing, miss_rng, now), now)
+            payload = build_payload(m, values, defect, serial_for(serials[m.equipment_id], missing, miss_rng, now), now,
+                                    lot_day, lot_size)
             if out_dir:
                 payload["messageId"] = str(uuid.UUID(int=id_rng.getrandbits(128), version=4))
             apply_missing(payload, missing, miss_rng,

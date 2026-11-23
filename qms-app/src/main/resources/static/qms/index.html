@@ -119,6 +119,24 @@
           <div class="qg-msg-wrap"><p id="msg" class="msg" role="status"></p></div>
         </form>
 
+        <!-- 조치 지정 (로드맵 P2): 담당자·기한은 사람이 정한다. 비어 있어도 승인은 되지만 필수 항목에서 "빠짐"으로 보인다 -->
+        <form id="assign-form" class="card mb-3" autocomplete="off">
+          <div class="card-header"><h3 class="card-title">조치 지정</h3><span class="ms-auto text-secondary small" id="assign-state"></span></div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4"><label class="form-label">담당자 <input name="actionOwner" class="form-control" maxlength="50" placeholder="예: 성형1팀 김반장"></label></div>
+              <div class="col-md-3"><label class="form-label">조치 기한 <input name="actionDueDate" type="date" class="form-control"></label></div>
+              <div class="col-md-5"><label class="form-label">영향 로트 <span class="badge bg-azure-lt ms-1">자동</span>
+                <input name="affectedLots" class="form-control qg-mono" maxlength="400" placeholder="L261123-IMM-01-03,L261123-IMM-01-04"></label></div>
+            </div>
+          </div>
+          <div class="card-footer qg-actions">
+            <span class="text-secondary small">영향 로트는 첫 경보부터 분석 시점까지 생산된 로트로 자동으로 채워집니다. 고칠 수 있습니다.</span>
+            <span class="qg-toolbar-spacer"></span>
+            <button type="submit" id="btn-assign" class="btn">조치 지정 저장</button>
+          </div>
+        </form>
+
         <!-- MES/ERP 연계: 승인 → 전송 → 시스템별 응답을 단계로 보여 준다 -->
         <div class="card mb-3">
           <div class="card-header"><h3 class="card-title">MES/ERP 연계</h3>

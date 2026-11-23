@@ -109,7 +109,7 @@ public class SpcProcessor implements Processor<String, String, String, String> {
 
         CleanShot clean = new CleanShot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(),
                 result.cleanValues(), result.invalidSensors(), inspected ? (ng ? "NG" : "OK") : null, defectType,
-                t.serialNo(), result.late(), result.lateStatus());
+                t.serialNo(), result.late(), result.lateStatus(), t.lotNo());
         context.forward(new Record<>(equipmentId, CLEAN + objectMapper.writeValueAsString(clean), record.timestamp()));
 
         for (Anomaly anomaly : result.anomalies()) {

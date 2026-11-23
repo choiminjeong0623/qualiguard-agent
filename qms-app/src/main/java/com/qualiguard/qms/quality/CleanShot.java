@@ -12,8 +12,17 @@ import java.util.Map;
  *   REJUDGED      — 최근 30 shot 안이라 시간 순서에 끼워 모든 규칙으로 다시 판정
  *   OUT_OF_WINDOW — 더 늦어서 순서와 무관한 규칙(개별값·불량률)만 판정
  * 늦지 않은 shot 은 null.
+ * lotNo 는 생산 로트 번호 (없으면 null). NCR 영향 범위(affected_lots)를 채우는 데 쓴다 (로드맵 P2).
  */
 public record CleanShot(String messageId, String lineId, String equipmentId, Long shotNo, String ts,
         Map<String, Double> values, List<String> invalidSensors, String inspectionResult, String defectType,
-        String serialNo, boolean lateArrival, String lateStatus) {
+        String serialNo, boolean lateArrival, String lateStatus, String lotNo) {
+
+    /** 로트 번호 없이 만든다 (시험·예전 메시지). */
+    public CleanShot(String messageId, String lineId, String equipmentId, Long shotNo, String ts,
+            Map<String, Double> values, List<String> invalidSensors, String inspectionResult, String defectType,
+            String serialNo, boolean lateArrival, String lateStatus) {
+        this(messageId, lineId, equipmentId, shotNo, ts, values, invalidSensors, inspectionResult, defectType,
+                serialNo, lateArrival, lateStatus, null);
+    }
 }
