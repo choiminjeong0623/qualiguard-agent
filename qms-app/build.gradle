@@ -128,6 +128,18 @@ tasks.register('ewmaEval', JavaExec) {
 	jvmArgs = ['-Xmx384m']
 }
 
+// 에이전트 전달 방식 비교 (로드맵 A2): direct vs Kafka, 가짜 LLM 으로 전달 비용만 → eval/transport_report.md
+// 먼저 docker compose up -d kafka kafka-init. 인자: [bootstrap] [사건 수] [출력 파일]
+tasks.register('transportBench', JavaExec) {
+	group = 'verification'
+	description = '에이전트 사이 전달을 direct 와 Kafka 로 각각 돌려 사건당 시간 P50·P95 를 eval/transport_report.md 에 남긴다 (로드맵 A2)'
+	dependsOn 'testClasses'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.qualiguard.qms.agent.pipeline.TransportBench'
+	args = ['localhost:9092', '200', '../eval/transport_report.md']
+	jvmArgs = ['-Xmx384m']
+}
+
 // 정적 분석 (로드맵 Q4): 운영 코드만 검사, 중간 이상 심각도에서 실패. 제외 규칙과 이유는 config/spotbugs-exclude.xml
 spotbugs {
 	ignoreFailures = false
