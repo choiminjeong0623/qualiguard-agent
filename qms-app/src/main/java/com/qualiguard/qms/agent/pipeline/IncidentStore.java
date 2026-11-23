@@ -19,10 +19,16 @@ public class IncidentStore {
 
     private final Map<String, Incident> live = new ConcurrentHashMap<>();
     private final JdbcTemplate jdbc;
+    private final AgentMetrics metrics;
 
     /** @param jdbc null 이면 DB 기록 없이 메모리만 (단위 시험) */
     public IncidentStore(JdbcTemplate jdbc) {
+        this(jdbc, AgentMetrics.none());
+    }
+
+    public IncidentStore(JdbcTemplate jdbc, AgentMetrics metrics) {
         this.jdbc = jdbc;
+        this.metrics = metrics;
     }
 
     void open(Incident i) {
@@ -45,6 +51,7 @@ public class IncidentStore {
     /** 오케스트레이터가 상태를 바꿀 때마다: 메모리 기록 + DB 기록. */
     void transition(Incident i, String topic, Incident.State to, String detail) {
         i.mark(topic, to, detail);
+        recordStage(i);
         db(() -> {
             jdbc.update("UPDATE dbo.agent_incident SET state = ?, attempts = ?, updated_at = SYSDATETIMEOFFSET() "
                     + "WHERE incident_id = ?", to.name(), i.attempts, i.id);
@@ -55,6 +62,7 @@ public class IncidentStore {
 
     /** 메모리 기록은 이미 남겼고(Incident.mark) DB 에만 남길 때. */
     void transitionLogged(Incident i, String topic, Incident.State to, String detail) {
+        recordStage(i);
         db(() -> {
             jdbc.update("UPDATE dbo.agent_incident SET state = ?, attempts = ?, updated_at = SYSDATETIMEOFFSET() "
                     + "WHERE incident_id = ?", to.name(), i.attempts, i.id);
@@ -67,6 +75,19 @@ public class IncidentStore {
         live.remove(i.id);
         db(() -> jdbc.update("UPDATE dbo.agent_incident SET analysis_id = ?, ncr_no = ?, updated_at = SYSDATETIMEOFFSET() "
                 + "WHERE incident_id = ?", analysisId, ncrNo, i.id));
+    }
+
+    /** 사건 결과 지표 (로드맵 O2). 오케스트레이터가 사건을 닫을 때 부른다. */
+    void recordResult(Incident i, String decision) {
+        String verify = i.verification == null ? "-" : i.verification.status();
+        metrics.result(decision, verify, i.state.name(), i.attempts > 1, i.elapsedMs());
+    }
+
+    private void recordStage(Incident i) {
+        Object[] s = i.lastStage();
+        if (s != null) {
+            metrics.stage(String.valueOf(s[0]), (Long) s[1]);
+        }
     }
 
     public Collection<Incident> inFlight() {

@@ -115,6 +115,7 @@ public class IncidentOrchestrator {
         IncidentAnalyzer.Outcome o = analyzer.complete(i.id, i.job, i.result, List.copyOf(i.trace), i.elapsedMs(),
                 i.attempts, i.verification, i.written, pipelineJson(i));
         store.transitionLogged(i, topic, end, detail + (o.ncrNo() == null ? "" : " → " + o.ncrNo()));
+        store.recordResult(i, upper(i.result.decision()));
         store.close(i, o.analysisId(), o.ncrNo());
         if (actionStage && i.job.tag() == null && o.analysisId() != null) {
             requestAction(i, o);
@@ -146,6 +147,7 @@ public class IncidentOrchestrator {
         IncidentAnalyzer.Outcome o = analyzer.fail(i.id, i.job, List.copyOf(i.trace), i.elapsedMs(), i.attempts, error,
                 pipelineJson(i));
         store.transitionLogged(i, topic, Incident.State.FAILED, shorten(error));
+        store.recordResult(i, "FAILED");
         store.close(i, o.analysisId(), null);
         i.done.complete(o.withPipeline(i.id, i.triage.toMap(), i.report, List.copyOf(i.timeline)));
     }

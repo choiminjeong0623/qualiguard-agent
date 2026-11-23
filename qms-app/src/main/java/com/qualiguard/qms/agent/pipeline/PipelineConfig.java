@@ -2,7 +2,10 @@ package com.qualiguard.qms.agent.pipeline;
 
 import java.time.Duration;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -29,8 +32,9 @@ import tools.jackson.databind.ObjectMapper;
 public class PipelineConfig {
 
     @Bean
-    IncidentStore incidentStore(JdbcTemplate jdbc) {
-        return new IncidentStore(jdbc);
+    IncidentStore incidentStore(JdbcTemplate jdbc, ObjectProvider<MeterRegistry> registry) {
+        // 단계별 시간·결과 지표 (로드맵 O2). 지표 저장소가 없으면(일부 시험) 기록하지 않는다
+        return new IncidentStore(jdbc, new AgentMetrics(registry.getIfAvailable()));
     }
 
     @Bean

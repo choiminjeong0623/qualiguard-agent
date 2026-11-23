@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 
 import com.qualiguard.qms.agent.AgentProperties;
@@ -142,11 +145,16 @@ class AgentPipelineTest {
 
     /** actionEvents 가 null 이 아니면 조치 단계를 켜고, 조치 에이전트 대신 받은 이벤트를 모은다. */
     static Wired wire(String writerMode, ReportWriterAgent.LocalModel local, List<AgentEvent> actionEvents) {
+        return wire(writerMode, local, actionEvents, null);
+    }
+
+    static Wired wire(String writerMode, ReportWriterAgent.LocalModel local, List<AgentEvent> actionEvents,
+            MeterRegistry registry) {
         var analyzer = new FakeAnalyzer();
         var json = JsonMapper.builder().build();
         var router = new AgentEventRouter();
         var bus = new DirectEventBus(router);
-        var store = new IncidentStore(null);
+        var store = new IncidentStore(null, new AgentMetrics(registry));
         new AnalysisAgent(analyzer, store, bus, router);
         new VerifierStage(new VerifierAgent(new NoFacts()), analyzer, store, bus, router);
         new ReportWriterAgent(new ReportWriterAgent.Settings(writerMode, "http://x", "m", 5), local, null, json, store,
@@ -157,6 +165,23 @@ class AgentPipelineTest {
         }
         return new Wired(analyzer, new AgentPipeline(new TriageAgent(analyzer, store, bus), store, Duration.ofSeconds(5)),
                 store);
+    }
+
+    @Test
+    void 단계별_시간과_사건_결과를_지표로_남긴다() {
+        var registry = new SimpleMeterRegistry();
+        Wired w = wire("analysis-text", null, null, registry);
+        w.analyzer.answers.add(draft(11, List.of("온도가 낮아짐")));             // 한 번 되돌림
+        w.analyzer.answers.add(draft(78, List.of("온도 224.1℃", "불량률 6%")));
+        w.pipeline.analyzeAndWait("a-1", true, "t1");
+
+        assertEquals(2, registry.get(AgentMetrics.STAGE).tag("stage", "ANALYZING").timer().count(), "되돌려서 분석 2번");
+        assertEquals(2, registry.get(AgentMetrics.STAGE).tag("stage", "VERIFYING").timer().count());
+        assertEquals(1, registry.get(AgentMetrics.STAGE).tag("stage", "TRIAGED").timer().count());
+        assertEquals(1, registry.get(AgentMetrics.STAGE).tag("stage", "WRITING").timer().count());
+        assertEquals(1.0, registry.get(AgentMetrics.RESULT).tag("decision", "NCR_DRAFT").tag("verify", "PASS")
+                .tag("outcome", "AWAITING_APPROVAL").tag("retried", "true").counter().count());
+        assertEquals(1, registry.get(AgentMetrics.INCIDENT).tag("outcome", "AWAITING_APPROVAL").timer().count());
     }
 
     @Test
