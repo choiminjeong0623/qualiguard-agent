@@ -355,6 +355,14 @@ MQTT → 브리지 → Kafka → Kafka Streams 전체 경로에서 같은 시나
 - 자료에 없는 수치가 하나라도 있으면 초안에 쓰지 않고 근거 표 초안으로 대신합니다(`report.mode = TEMPLATE_NUMBER_GUARD`, `fallbackReason` 에 그 수치).
 - **수치 변조율** = `numberUnsupported` 합 / `numberClaims` 합. 평가 단계 기록(`writerNumberClaims`·`writerNumberUnsupported`)에 남으므로, 맥에서 Ollama 를 켜고 `QG_AGENT_WRITER_MODE=local` 로 평가를 돌리면 잴 수 있습니다. 아직 측정 전입니다.
 
+### 에이전트 전달 방식 비교 (로드맵 A2)
+
+`./gradlew transportBench` (먼저 `docker compose up -d kafka kafka-init`): LLM 을 즉시 답하는 가짜로 바꾸고 사건 200건을 direct 와 Kafka 로 각각 돌려 **전달 비용만** 잽니다. 결과는 [eval/transport_report.md](../eval/transport_report.md).
+
+- 클라우드 컨테이너(Linux amd64, CPU 4개) 1회 측정: direct P50 0.43 ms, Kafka P50 47.9 ms / P95 56.6 ms. 사건당 약 48 ms 를 더하지만 분석 1단계(LLM, 평균 40초 이상)에 비하면 0.1% 수준입니다. 맥에서 다시 재면 파일이 덮어써집니다.
+- 장애 복구는 지금 구조에서 Kafka 도 이점이 없습니다. 사건 상태가 메모리(`IncidentStore`)에 있어 재시작 뒤 남은 이벤트는 버려집니다. 복구까지 얻으려면 사건 상태를 `agent_incident` 에서 되살리는 작업이 필요합니다.
+- 기본값(`qg.agent.pipeline.transport`)을 무엇으로 둘지, ADR-016 보강 문장은 민정님 판단입니다.
+
 ### A/B 실험 한 줄 실행 (로드맵 A1·F4)
 
 맥에서 `./scripts/ab_eval.sh prefetch` (A1) 또는 `./scripts/ab_eval.sh vector` (F4). 설정만 바꿔 앱을 두 번 띄워 같은 평가를 돌리고, `eval/ab_<실험>.md` 비교표를 만듭니다. 결과는 **아직 측정 전**입니다.
