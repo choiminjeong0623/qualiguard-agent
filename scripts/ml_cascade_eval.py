@@ -5,6 +5,7 @@
 - ML 이 '학습한 고장 원인'(히터·냉각·체크 링·압력 센서)을 확률 threshold 이상으로 고르면 LLM 을 부르지 않는다.
 - '단발성(NOISE)'이거나 확률이 낮으면 LLM 에이전트가 분석한다. 단발성은 ML 이 확신해도 넘긴다:
   학습하지 않은 고장이 '단발성'으로 들어가 놓치는 것을 막기 위해서다 (ml_cause_report.md 3절).
+- 낯선 경보(고른 원인의 학습 경보들과 특징이 많이 다름, Novelty)도 확률과 관계없이 LLM 으로 넘긴다.
 
 측정
 1. 경보 단위: LLM 을 건너뛴 비율(= 줄어드는 LLM 호출), 건너뛴 경보의 정확도
@@ -44,8 +45,47 @@ def forest(n_trees=300):
                                   random_state=0, n_jobs=1)
 
 
-def skips(cls: str, p: float, t: float) -> bool:
-    return cls in KNOWN_FAULTS and p >= t
+NOVELTY_PERCENTILE = 99.5   # 학습 경보의 이 백분위보다 멀면 '낯선 경보'
+NOVELTY_CLIP = 100.0        # 특징 하나의 z² 상한 (한 특징이 거리를 다 차지하지 않게)
+
+
+class Novelty:
+    """낯선 경보 검사: ML 이 고른 원인의 학습 경보들과 얼마나 다른가.
+
+    원인마다 학습 경보 특징의 평균·표준편차를 두고, 새 경보의 표준화 거리 sqrt(mean(min(z², 100)))를 잰다.
+    그 원인 학습 경보들의 거리 99.5 백분위보다 멀면 낯설다고 보고, 확률이 높아도 LLM 으로 넘긴다.
+    (학습에 없는 고장이 비슷한 아는 고장으로 분류될 때를 막는 장치, eval/ml_novel_report.md)
+    """
+
+    def __init__(self, X, y):
+        floor = np.maximum(0.1 * X.std(axis=0), 1e-3)   # 거의 변하지 않는 특징(경보 규칙 등)에서 거리가 터지지 않게
+        self.stats = {}
+        for c in sorted(set(y)):
+            Xc = X[y == c]
+            mean, scale = Xc.mean(axis=0), np.maximum(Xc.std(axis=0), floor)
+            d = self._dist(Xc, mean, scale)
+            self.stats[c] = (mean, scale, float(np.percentile(d, NOVELTY_PERCENTILE)))
+
+    @staticmethod
+    def _dist(X, mean, scale):
+        z = (np.atleast_2d(X) - mean) / scale
+        return np.sqrt(np.mean(np.minimum(z * z, NOVELTY_CLIP), axis=1))
+
+    def distance(self, X, cls):
+        return np.array([self._dist(x, *self.stats[c][:2])[0] for x, c in zip(np.atleast_2d(X), cls)])
+
+    def unfamiliar(self, X, cls):
+        return np.array([d > self.stats[c][2] for d, c in zip(self.distance(X, cls), cls)])
+
+
+def skips(cls: str, p: float, t: float, unfamiliar: bool = False) -> bool:
+    return cls in KNOWN_FAULTS and p >= t and not unfamiliar
+
+
+def fit(X, y, n_trees=APP_TREES):
+    m = forest(n_trees).fit(X, y)
+    m.novelty_ = Novelty(X, y)
+    return m
 
 
 def predict_all(model, X):
@@ -54,18 +94,27 @@ def predict_all(model, X):
     return model.classes_[best], proba[np.arange(len(X)), best]
 
 
+def decide(model, X, use_novelty=True):
+    """원인, 확률, 낯선 경보 여부."""
+    cls, p = predict_all(model, X)
+    nov = getattr(model, "novelty_", None)
+    unf = nov.unfamiliar(X, cls) if nov is not None and use_novelty else np.zeros(len(cls), dtype=bool)
+    return cls, p, unf
+
+
 def alarm_table(model, splits) -> list[str]:
-    out = ["| 시험 | 기준 확률 | 경보 | LLM 건너뜀 (호출 감소) | 건너뛴 경보 정답 | 건너뛴 경보 오답 | LLM 으로 넘김 |",
-           "|---|---:|---:|---:|---:|---:|---:|"]
+    out = ["| 시험 | 기준 확률 | 경보 | LLM 건너뜀 (호출 감소) | 건너뛴 경보 정답 | 건너뛴 경보 오답 | LLM 으로 넘김 | 그중 낯선 경보라 넘김 |",
+           "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for title, runs in splits:
         X, y, _ = dataset(runs)
-        cls, p = predict_all(model, X)
+        cls, p, unf = decide(model, X)
         for t in THRESHOLDS:
-            sk = np.array([skips(c, q, t) for c, q in zip(cls, p)])
+            sk = np.array([skips(c, q, t, u) for c, q, u in zip(cls, p, unf)])
+            by_novelty = int(sum(skips(c, q, t) and u for c, q, u in zip(cls, p, unf)))
             right = int(np.sum(sk & (cls == y)))
             wrong = int(np.sum(sk & (cls != y)))
             mark = " **(기본)**" if t == DEFAULT_THRESHOLD else ""
-            out.append(f"| {title} | {t}{mark} | {len(y)} | {pct(int(sk.sum()), len(y))} | {right} | {wrong} | {int((~sk).sum())} |")
+            out.append(f"| {title} | {t}{mark} | {len(y)} | {pct(int(sk.sum()), len(y))} | {right} | {wrong} | {int((~sk).sum())} | {by_novelty} |")
     return out
 
 
@@ -78,11 +127,11 @@ def case_rows(model, runs, t) -> dict:
             if not als:
                 continue
             x = np.array([features(run, als[0])])
-            cls, p = predict_all(model, x)
+            cls, p, unf = decide(model, x)
             cause = FAULT_CAUSE[fault]
             r = by.setdefault(cause, Counter())
             r["n"] += 1
-            if skips(cls[0], p[0], t):
+            if skips(cls[0], p[0], t, unf[0]):
                 r["skip_ok" if cls[0] == cause else "skip_wrong"] += 1
             else:
                 r["llm"] += 1
@@ -95,7 +144,7 @@ def novel_table(X, y, runs, t) -> list[str]:
     harm_total = 0
     for held in KNOWN_FAULTS:
         keep = y != held
-        m = forest().fit(X[keep], y[keep])
+        m = fit(X[keep], y[keep], 300)
         n = wrong = passed = 0
         cases = first_wrong = 0
         for run in runs:
@@ -106,10 +155,10 @@ def novel_table(X, y, runs, t) -> list[str]:
                 if not als:
                     continue
                 cases += 1
-                cls, p = predict_all(m, np.array([features(run, a) for a in als]))
-                for i, (c, q) in enumerate(zip(cls, p)):
+                cls, p, unf = decide(m, np.array([features(run, a) for a in als]))
+                for i, (c, q, u) in enumerate(zip(cls, p, unf)):
                     n += 1
-                    if skips(c, q, t):
+                    if skips(c, q, t, u):
                         wrong += 1
                         if i == 0:
                             first_wrong += 1
@@ -142,6 +191,10 @@ def export_model(model, path: Path):
         "features": feature_names(),
         "classes": [str(c) for c in model.classes_],
         "trees": trees,
+        # 낯선 경보 검사 (Novelty): 원인별 학습 경보 특징의 평균·척도와 거리 한계
+        "novelty": {"percentile": NOVELTY_PERCENTILE, "clip": NOVELTY_CLIP,
+                    "classes": {str(c): {"mean": [float(v) for v in st[0]], "scale": [float(v) for v in st[1]],
+                                         "limit": st[2]} for c, st in model.novelty_.stats.items()}},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
@@ -161,9 +214,11 @@ def export_fixture(model, run: Run, path: Path, per_class=6):
     for al in picked:
         f = features(run, al)
         proba = model.predict_proba(np.array([f]))[0]
+        best = str(model.classes_[int(np.argmax(proba))])
         rows.append({"eq": al["eq"], "shot": al["shot"], "rule": al["rule"], "sensor": al["sensor"],
                      "label": run.label(al["eq"], al["shot"]),
-                     "features": [float(v) for v in f], "proba": [float(v) for v in proba]})
+                     "features": [float(v) for v in f], "proba": [float(v) for v in proba],
+                     "novelty": float(model.novelty_.distance(np.array([f]), [best])[0])})
     shots = {}
     for eq in sorted({a["eq"] for a in picked}):
         upto = max(a["shot"] for a in picked if a["eq"] == eq)
@@ -197,7 +252,7 @@ def main():
     test = [r for r in test_all if not r.name.endswith("seed-42")]
     seed42 = [r for r in test_all if r.name.endswith("seed-42")]
     X, y, _ = dataset(train)
-    model = forest(APP_TREES).fit(X, y)     # 앱에 넣는 것과 같은 모델로 잰다
+    model = fit(X, y)     # 앱에 넣는 것과 같은 모델로 잰다 (낯선 경보 검사 포함)
 
     splits = [("같은 시나리오 (seed 1~5)", test), ("seed 42", seed42), ("고장 배치 변경 (seed 1~5)", shifted)]
     L = ["# ML 먼저, 애매하면 LLM — 실험 측정", ""]
@@ -212,6 +267,8 @@ def main():
              "이때도 같은 조회 도구(SPC 요약·센서 추이·불량 요약)로 실제 수치를 근거로 붙이고, 검증 에이전트와 사람 승인을 그대로 거칩니다.")
     L.append("- **단발성(NOISE)** 은 ML 이 확신해도 LLM 으로 넘깁니다. 학습하지 않은 고장은 '단발성'으로 들어가기 때문입니다 (ml_cause_report.md 3절).")
     L.append("- 확률이 낮으면 LLM 으로 넘깁니다. 검증 에이전트가 되돌리면 두 번째 시도는 LLM 이 합니다.")
+    L.append(f"- **낯선 경보 검사**: ML 이 고른 원인의 학습 경보들과 특징이 많이 다르면(그 원인 학습 경보 거리의 {NOVELTY_PERCENTILE} 백분위 초과) 확률이 높아도 LLM 으로 넘깁니다.")
+    L.append("- 표본 점검(앱 설정 audit-rate): LLM 을 건너뛸 사건 중 일부는 LLM 이 분석하고 ML 답과 비교해 기록합니다 (이 보고서의 수치에는 넣지 않음).")
     L.append("")
     L.append("## 1. 경보 단위: LLM 호출이 얼마나 줄고, 건너뛴 경보는 맞았나")
     L.append("")

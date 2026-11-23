@@ -3,7 +3,9 @@ package com.qualiguard.qms.agent.ml;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -20,16 +22,25 @@ public final class CauseForest {
     private record Tree(int[] left, int[] right, int[] feature, double[] threshold, double[][] value) {
     }
 
+    /** 원인 하나의 학습 경보 특징 평균·척도와 거리 한계 (낯선 경보 검사). */
+    private record NoveltyStats(double[] mean, double[] scale, double limit) {
+    }
+
     private final List<String> features;
     private final List<String> classes;
     private final List<Tree> trees;
     private final String createdAt;
+    private final Map<String, NoveltyStats> novelty;
+    private final double noveltyClip;
 
-    private CauseForest(List<String> features, List<String> classes, List<Tree> trees, String createdAt) {
+    private CauseForest(List<String> features, List<String> classes, List<Tree> trees, String createdAt,
+            Map<String, NoveltyStats> novelty, double noveltyClip) {
         this.features = features;
         this.classes = classes;
         this.trees = trees;
         this.createdAt = createdAt;
+        this.novelty = novelty;
+        this.noveltyClip = noveltyClip;
     }
 
     public static CauseForest load(InputStream in, ObjectMapper mapper) throws IOException {
@@ -63,8 +74,21 @@ public final class CauseForest {
         if (trees.isEmpty() || features.isEmpty() || classes.isEmpty()) {
             throw new IOException("원인 분류 모델에 나무·특징·클래스가 없습니다");
         }
+        Map<String, NoveltyStats> novelty = new HashMap<>();
+        JsonNode nov = root.path("novelty");
+        nov.path("classes").properties().forEach(e -> novelty.put(e.getKey(), new NoveltyStats(
+                doubles(e.getValue().path("mean")), doubles(e.getValue().path("scale")),
+                e.getValue().path("limit").asDouble())));
         return new CauseForest(List.copyOf(features), List.copyOf(classes), List.copyOf(trees),
-                root.path("createdAt").asString(""));
+                root.path("createdAt").asString(""), Map.copyOf(novelty), nov.path("clip").asDouble(100.0));
+    }
+
+    private static double[] doubles(JsonNode arr) {
+        double[] out = new double[arr.size()];
+        for (int k = 0; k < out.length; k++) {
+            out[k] = arr.get(k).asDouble();
+        }
+        return out;
     }
 
     private static List<String> strings(JsonNode arr) {
@@ -94,6 +118,29 @@ public final class CauseForest {
             sum[c] /= trees.size();
         }
         return sum;
+    }
+
+    /**
+     * 낯선 정도: 이 원인으로 분류된 학습 경보들의 특징 평균에서 얼마나 먼가 (표준화 거리, sqrt(mean(min(z², clip)))).
+     * 모델 파일에 낯선 경보 검사 정보가 없으면 NaN.
+     */
+    public double novelty(double[] x, String cls) {
+        NoveltyStats st = novelty.get(cls);
+        if (st == null || st.mean().length != x.length) {
+            return Double.NaN;
+        }
+        double sum = 0;
+        for (int k = 0; k < x.length; k++) {
+            double z = (x[k] - st.mean()[k]) / st.scale()[k];
+            sum += Math.min(z * z, noveltyClip);
+        }
+        return Math.sqrt(sum / x.length);
+    }
+
+    /** 이 원인의 낯선 경보 기준 거리 (학습 경보 거리의 99.5 백분위). 없으면 NaN. */
+    public double noveltyLimit(String cls) {
+        NoveltyStats st = novelty.get(cls);
+        return st == null ? Double.NaN : st.limit();
     }
 
     public List<String> features() {

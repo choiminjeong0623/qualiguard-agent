@@ -41,6 +41,7 @@ import com.qualiguard.qms.agent.ToolObservations;
 import com.qualiguard.qms.agent.VerifierAgent;
 import com.qualiguard.qms.agent.ml.CauseForest;
 import com.qualiguard.qms.agent.ml.MlTriage;
+import com.qualiguard.qms.agent.ml.MlTriageStats;
 import com.qualiguard.qms.agent.TokenBudget;
 import com.qualiguard.qms.agent.pipeline.AgentMetrics;
 import com.qualiguard.qms.agent.pipeline.Incident;
@@ -61,7 +62,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 5) AI 초안 검토 지표(P3): 그대로 승인 / 고쳐서 승인을 이력으로 구분
  * 6) 운영 리포트 SQL(O3, scripts/ops_report.sql): 실패율·지연 P50·P95·되돌림율·단계별 시간
  * 7) 앱 전용 계정(Q5, app_login.sqlcmd): 읽기·쓰기·프로시저 실행은 되고 표 생성·삭제(DDL)는 거부
- * 8) ML 1차 분류(실험): DB 에 넣은 shot 으로 파이썬과 같은 원인, LLM 없이 만든 결과가 검증 에이전트 통과
+ * 8) ML 1차 분류(실험): DB 에 넣은 shot 으로 파이썬과 같은 원인, LLM 없이 만든 결과가 검증 에이전트 통과,
+ *    판단 기록(agent_ml_judgment)과 일치율 집계
  *
  * 실행: cd qms-app && ./gradlew containerTest  (Docker 필요, CI 의 별도 작업에서 돈다)
  */
@@ -456,6 +458,21 @@ class MssqlInitScriptsContainerTest {
                     List.of(alarm.get("rule").asString()), r, trace, observed));
             assertThat(v.fails()).as("근거 %s / 도구 %s", r.evidence(), trace).isEmpty();
             assertThat(v.numberVerified()).isEqualTo(v.numberClaims());
+            assertThat(p.unfamiliar()).as("학습 데이터와 같은 시나리오의 경보는 낯설지 않다 (거리 %s / 한계 %s)",
+                    p.novelty(), p.noveltyLimit()).isFalse();
+
+            // 판단 기록과 일치율 집계 (shadow 로 LLM 과 같은 원인이었다고 기록, 같은 사건은 한 번만)
+            MlTriage shadow = new MlTriage(jdbc, forest, MlTriage.Mode.SHADOW, 0.9);
+            shadow.record("it-ml-inc-1", job, p, MlTriage.Route.SHADOW, p.cause());
+            shadow.record("it-ml-inc-1", job, p, MlTriage.Route.SHADOW, "NOISE");
+            ml.record("it-ml-inc-2", job, p, MlTriage.Route.SKIPPED, null);
+            Map<String, Object> stats = new MlTriageStats(jdbc).stats(7);
+            assertThat(stats.get("incidents")).isEqualTo(2);
+            assertThat(stats.get("wouldSkip")).isEqualTo(1.0);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> vsLlm = (Map<String, Object>) stats.get("vsLlm");
+            assertThat(vsLlm.get("wouldSkipCompared")).isEqualTo(1);
+            assertThat(vsLlm.get("wouldSkipAgreement")).isEqualTo(1.0);
         }
     }
 

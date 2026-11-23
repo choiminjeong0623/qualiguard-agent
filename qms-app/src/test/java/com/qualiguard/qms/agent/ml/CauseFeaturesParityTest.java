@@ -86,6 +86,9 @@ class CauseFeaturesParityTest {
                     best = c;
                 }
             }
+            // 낯선 정도(고른 원인의 학습 경보들과의 거리)도 파이썬과 같아야 한다
+            assertThat(forest.novelty(x, classes.get(best))).isCloseTo(a.get("novelty").asDouble(), within(1e-6));
+            assertThat(forest.noveltyLimit(classes.get(best))).isPositive();
             // 시험 데이터는 같은 시나리오(seed 42)라 원인도 맞아야 한다 (ml_cascade_report: seed 42 경보 정확도 100%)
             assertThat(classes.get(best)).isEqualTo(a.get("label").asString());
             checked++;

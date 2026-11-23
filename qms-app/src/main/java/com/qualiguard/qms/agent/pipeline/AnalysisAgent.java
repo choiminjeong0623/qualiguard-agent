@@ -50,19 +50,18 @@ public class AnalysisAgent {
         }
         List<String> attemptTrace = Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> data = new LinkedHashMap<>();
+        // 첫 시도에만 ML 을 먼저 본다 (검증 에이전트가 되돌린 두 번째 시도는 LLM 이 지적을 보고 다시 분석)
+        MlTriage.Prediction p = e.attempt() == 1 ? mlPredict(i, attemptTrace) : null;
+        MlTriage.Route route = p == null ? null : ml.route(p, i.id);
+        if (p != null) {
+            data.put("mlCause", p.cause());
+            data.put("mlProbability", Math.round(p.probability() * 1000) / 1000.0);
+            data.put("mlRoute", route.name());
+            attemptTrace.add("[ML 1차 분류] " + p.summary(ml.threshold()) + " → " + routeText(route));
+        }
         try {
-            // 첫 시도에만 ML 을 먼저 본다 (검증 에이전트가 되돌린 두 번째 시도는 LLM 이 지적을 보고 다시 분석)
-            MlTriage.Prediction p = e.attempt() == 1 ? mlPredict(i, attemptTrace) : null;
-            boolean skipped = ml.skipLlm(p);
-            if (p != null) {
-                data.put("mlCause", p.cause());
-                data.put("mlProbability", Math.round(p.probability() * 1000) / 1000.0);
-                data.put("mlSkippedLlm", skipped);
-                attemptTrace.add("[ML 1차 분류] " + p.summary(ml.threshold()) + " → "
-                        + (skipped ? "LLM 건너뜀, 조회 도구로 근거 수집" : ml.mode() == MlTriage.Mode.SHADOW
-                                ? "기록만 함 (shadow), LLM 분석" : "LLM 으로 넘김"));
-            }
-            AnalysisResult r = skipped ? ml.result(i.job, p, i.startNanos, attemptTrace, i.observed)
+            AnalysisResult r = route == MlTriage.Route.SKIPPED
+                    ? ml.result(i.job, p, i.startNanos, attemptTrace, i.observed)
                     : analyzer.analyzeOnce(i.job, i.prompt, i.startNanos, attemptTrace, i.observed);
             i.result = r;
             data.put("decision", r.decision());
@@ -74,6 +73,9 @@ public class AnalysisAgent {
         } finally {
             i.lastAttemptTrace = List.copyOf(attemptTrace);
             i.trace.addAll(attemptTrace);   // 실패해도 어디까지 조사했는지 남긴다
+        }
+        if (p != null) {
+            recordMl(i, p, route);
         }
         data.put("toolCalls", attemptTrace.size());
         store.checkpoint(i);   // 분석 결과를 먼저 남기고 알린다 (재시작해도 LLM 을 다시 부르지 않게)
@@ -90,6 +92,27 @@ public class AnalysisAgent {
         } catch (RuntimeException ex) {
             trace.add("[ML 1차 분류] 실패, LLM 으로 넘김: " + ex.getMessage());
             return null;
+        }
+    }
+
+    static String routeText(MlTriage.Route route) {
+        return switch (route) {
+            case SKIPPED -> "LLM 건너뜀, 조회 도구로 근거 수집";
+            case SHADOW -> "기록만 함 (shadow), LLM 분석";
+            case AUDIT -> "건너뛸 수 있지만 표본 점검으로 LLM 분석";
+            case LLM_NOISE -> "단발성이라 LLM 으로 넘김";
+            case LLM_LOW -> "확률이 기준보다 낮아 LLM 으로 넘김";
+            case LLM_UNFAMILIAR -> "학습 경보들과 많이 달라(낯선 경보) LLM 으로 넘김";
+        };
+    }
+
+    /** ML 판단 기록 (일치율 집계용). 실패해도 분석은 계속한다. */
+    private void recordMl(Incident i, MlTriage.Prediction p, MlTriage.Route route) {
+        try {
+            String llmCause = route.usesLlm() && i.result != null ? i.result.causeCode() : null;
+            ml.record(i.id, i.job, p, route, llmCause);
+        } catch (RuntimeException ex) {
+            i.trace.add("[ML 1차 분류] 판단 기록 실패: " + ex.getMessage());
         }
     }
 
