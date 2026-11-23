@@ -121,6 +121,12 @@ qg:
       ollama-url: http://localhost:11434
       model: qwen2.5:1.5b             # 로컬 소형 모델 (M1 8GB: 4bit 1.5B, docs/03)
       timeout-seconds: 120            # 넘으면 클라우드로 넘기지 않고 근거 표 초안으로 (F-13)
+  quality:
+    mewma:
+      # 다변량 이상 탐지(MEWMA). off / shadow (로그·지표 qg.spc.mewma_shadow_alarms 만, 경보는 지금 SPC 규칙 그대로)
+      mode: "off"
+      lambda: 0.2
+      limit: 35.26
   knowledge:
     vector-enabled: true              # 유사 사례 의미 검색 (SQL Server VECTOR, ADR-014). 끄면 키워드 검색만
     refresh-ms: 60000                 # 지식저장소 사례 벡터를 새로 만들 주기
