@@ -96,6 +96,8 @@ a { color: var(--qg-color-primary); }
 .qg-toolbar-spacer { flex: 1; }
 .qg-search { width: 220px; max-width: 100%; }
 .qg-table { font-size: 13px; }
+/* 표 안의 화면 낭독기용 숨김 글자(position:absolute)가 표 상자 밖으로 나가 페이지를 넓히지 않게 */
+.table-responsive { position: relative; }
 .qg-table thead th { position: sticky; top: 0; z-index: 1; background: var(--qg-color-surface-alt); color: var(--qg-color-text);
   font-size: var(--qg-fs-xs); border-bottom: 1px solid var(--qg-color-border); font-weight: 600; text-transform: none; letter-spacing: 0; white-space: nowrap; }
 .qg-list .qg-table td { white-space: nowrap; }

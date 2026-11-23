@@ -52,3 +52,11 @@ test('상태 거르개로 승인 대기만 본다', async ({ page }) => {
   await expect(page.getByRole('button', { name: /승인 대기/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#rows tr')).toHaveCount(1);
 });
+
+test('좁은 화면(390px)에서 판단 보류 탭이 가로로 넘치지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, '/qms/actions.html');
+  await page.getByRole('tab', { name: /판단 보류/ }).click();
+  await page.getByPlaceholder('확인·처리 메모').waitFor();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
