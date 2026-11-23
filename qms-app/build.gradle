@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.1.2'
+	id 'org.springframework.boot' version '4.2.0'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'com.github.spotbugs' version '6.5.1'   // 정적 분석 (로드맵 Q4)
 }
@@ -77,7 +77,7 @@ tasks.named('bootRun') {
 // Spring AI 버전 관리 (Spring Boot 4 기반 2.0 계열)
 dependencyManagement {
 	imports {
-		mavenBom 'org.springframework.ai:spring-ai-bom:2.0.2'
+		mavenBom 'org.springframework.ai:spring-ai-bom:2.1.0'
 	}
 }
 
