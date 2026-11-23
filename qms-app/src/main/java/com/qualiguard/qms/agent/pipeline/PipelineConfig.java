@@ -1,7 +1,10 @@
 package com.qualiguard.qms.agent.pipeline;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -13,6 +16,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaAdmin;
@@ -21,6 +25,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import com.qualiguard.qms.agent.AgentProperties;
 import com.qualiguard.qms.agent.IncidentAnalyzer;
 import com.qualiguard.qms.agent.VerifierAgent;
+import com.qualiguard.qms.agent.ml.CauseForest;
+import com.qualiguard.qms.agent.ml.MlTriage;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -94,8 +100,35 @@ public class PipelineConfig {
     }
 
     @Bean
-    AnalysisAgent analysisAgent(IncidentAnalyzer analyzer, IncidentStore store, EventBus bus, AgentEventRouter router) {
-        return new AnalysisAgent(analyzer, store, bus, router);
+    AnalysisAgent analysisAgent(IncidentAnalyzer analyzer, IncidentStore store, EventBus bus, AgentEventRouter router,
+            MlTriage mlTriage) {
+        return new AnalysisAgent(analyzer, store, bus, router, mlTriage);
+    }
+
+    /**
+     * ML 먼저, 애매하면 LLM (실험 기능). qg.agent.ml-triage.mode
+     *  - off (기본): 쓰지 않음
+     *  - shadow    : ML 판단을 분석 기록에 남기기만 하고 LLM 은 그대로
+     *  - skip      : 학습한 고장 원인을 threshold 이상으로 고르면 LLM 을 부르지 않음
+     * 모델은 scripts/ml_cascade.sh 가 만든 JSON (기본: 앱에 들어 있는 시뮬레이터 학습 모델).
+     */
+    @Bean
+    MlTriage mlTriage(JdbcTemplate jdbc, ObjectMapper objectMapper, ResourceLoader resources,
+            @Value("${qg.agent.ml-triage.mode:off}") String mode,
+            @Value("${qg.agent.ml-triage.threshold:0.9}") double threshold,
+            @Value("${qg.agent.ml-triage.model:classpath:ml/cause-forest.json}") String model) throws IOException {
+        String v = mode.strip().toUpperCase(Locale.ROOT);
+        // YAML 에 따옴표 없이 off 라고 쓰면 false 로 읽힌다
+        MlTriage.Mode m = v.isEmpty() || "FALSE".equals(v) ? MlTriage.Mode.OFF : MlTriage.Mode.valueOf(v);
+        if (m == MlTriage.Mode.OFF) {
+            return MlTriage.off();
+        }
+        try (InputStream in = resources.getResource(model).getInputStream()) {
+            CauseForest forest = CauseForest.load(in, objectMapper);
+            LoggerFactory.getLogger(PipelineConfig.class).info("[ML 1차 분류] {} 모드, 기준 확률 {}, 모델 {} (나무 {}개, {})",
+                    m, threshold, model, forest.treeCount(), forest.createdAt());
+            return new MlTriage(jdbc, forest, m, threshold);
+        }
     }
 
     @Bean

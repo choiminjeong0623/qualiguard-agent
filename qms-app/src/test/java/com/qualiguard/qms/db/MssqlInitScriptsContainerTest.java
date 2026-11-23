@@ -2,7 +2,9 @@ package com.qualiguard.qms.db;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.CallableStatement;
@@ -33,13 +35,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
 
+import com.qualiguard.qms.agent.AnalysisResult;
 import com.qualiguard.qms.agent.IncidentAnalyzer;
+import com.qualiguard.qms.agent.ToolObservations;
+import com.qualiguard.qms.agent.VerifierAgent;
+import com.qualiguard.qms.agent.ml.CauseForest;
+import com.qualiguard.qms.agent.ml.MlTriage;
 import com.qualiguard.qms.agent.TokenBudget;
 import com.qualiguard.qms.agent.pipeline.AgentMetrics;
 import com.qualiguard.qms.agent.pipeline.Incident;
 import com.qualiguard.qms.agent.pipeline.IncidentStore;
 import com.qualiguard.qms.ncr.NcrReviewService;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -53,6 +61,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 5) AI 초안 검토 지표(P3): 그대로 승인 / 고쳐서 승인을 이력으로 구분
  * 6) 운영 리포트 SQL(O3, scripts/ops_report.sql): 실패율·지연 P50·P95·되돌림율·단계별 시간
  * 7) 앱 전용 계정(Q5, app_login.sqlcmd): 읽기·쓰기·프로시저 실행은 되고 표 생성·삭제(DDL)는 거부
+ * 8) ML 1차 분류(실험): DB 에 넣은 shot 으로 파이썬과 같은 원인, LLM 없이 만든 결과가 검증 에이전트 통과
  *
  * 실행: cd qms-app && ./gradlew containerTest  (Docker 필요, CI 의 별도 작업에서 돈다)
  */
@@ -366,6 +375,87 @@ class MssqlInitScriptsContainerTest {
                 rs.next();
                 assertThat(rs.getString(1)).isEqualTo("FAILED");
             }
+        }
+    }
+
+    @Test
+    void ML_1차_분류는_DB_의_shot_으로_파이썬과_같은_원인을_내고_검증을_통과한다() throws Exception {
+        var mapper = JsonMapper.builder().build();
+        JsonNode fixture;
+        CauseForest forest;
+        try (InputStream in = getClass().getResourceAsStream("/ml/parity.json")) {
+            fixture = mapper.readTree(in);
+        }
+        try (InputStream in = getClass().getResourceAsStream("/ml/cause-forest.json")) {
+            forest = CauseForest.load(in, mapper);
+        }
+        // 학습한 고장으로 확신한 경보 하나 (scikit-learn 확률 0.9 이상)
+        JsonNode alarm = null;
+        for (JsonNode a : fixture.path("alarms")) {
+            double max = 0;
+            for (JsonNode p : a.path("proba")) {
+                max = Math.max(max, p.asDouble());
+            }
+            if (MlTriage.KNOWN_FAULTS.contains(a.get("label").asString()) && !"SENSOR_FAULT".equals(a.get("label").asString())
+                    && max >= 0.9) {
+                alarm = a;
+                break;
+            }
+        }
+        assertThat(alarm).as("시험 데이터에 확신한 고장 경보가 있어야 함").isNotNull();
+        String eq = alarm.get("eq").asString();
+        long shot = alarm.get("shot").asLong();
+        String base = "2026-11-20T08:00:00+09:00";   // 다른 시험의 shot(11-23)과 겹치지 않는 날
+        try (Connection c = connect()) {
+            c.setAutoCommit(false);
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO dbo.process_shot (message_id, line_id, equipment_id, shot_no, shot_ts, mold_temp, barrel_temp,
+                        injection_pressure, holding_pressure, cushion, cycle_time, motor_current, inspection_result, defect_type)
+                    VALUES (?, 'LINE1', ?, ?, DATEADD(SECOND, ?, CAST(? AS DATETIMEOFFSET(3))), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """)) {
+                for (JsonNode row : fixture.path("shots").path(eq)) {
+                    long n = row.get(0).asLong();
+                    ps.setString(1, "it-ml-" + eq + "-" + n);
+                    ps.setString(2, eq);
+                    ps.setLong(3, n);
+                    ps.setLong(4, n * 10);
+                    ps.setString(5, base);
+                    for (int j = 0; j < 7; j++) {
+                        JsonNode v = row.get(1).get(j);
+                        ps.setObject(6 + j, v == null || v.isNull() ? null : v.decimalValue());
+                    }
+                    ps.setString(13, row.get(2).isNull() ? null : row.get(2).asString());
+                    ps.setString(14, row.get(3).isNull() ? null : row.get(3).asString());
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+            c.commit();
+            c.setAutoCommit(true);
+            var jdbc = new JdbcTemplate(new SingleConnectionDataSource(c, true));
+            String asOf = jdbc.queryForObject("SELECT CONVERT(VARCHAR(33), shot_ts, 127) FROM dbo.process_shot "
+                    + "WHERE message_id = ?", String.class, "it-ml-" + eq + "-" + shot);
+            var job = new IncidentAnalyzer.Job("ALARM", eq, "a-ml", asOf,
+                    List.of(Map.of("shot_no", shot, "rule_code", alarm.get("rule").asString(),
+                            "sensor_key", alarm.get("sensor").asString())),
+                    List.of("a-ml"), true, Map.of(), asOf, shot, null, null, null, null);
+            MlTriage ml = new MlTriage(jdbc, forest, MlTriage.Mode.SKIP, 0.9);
+            MlTriage.Prediction p = ml.predict(job).orElseThrow();
+            assertThat(p.cause()).isEqualTo(alarm.get("label").asString());
+            int best = forest.classes().indexOf(p.cause());
+            assertThat(p.probability()).isCloseTo(alarm.get("proba").get(best).asDouble(), within(0.02));
+            assertThat(ml.skipLlm(p)).isTrue();
+
+            // LLM 없이 만든 결과도 검증 에이전트를 똑같이 거친다: 조회 도구 호출 + 도구 값과 맞는 수치 근거
+            List<String> trace = new java.util.ArrayList<>();
+            var observed = new ToolObservations();
+            AnalysisResult r = ml.result(job, p, System.nanoTime(), trace, observed);
+            assertThat(r.decision()).isEqualTo("NCR_DRAFT");
+            assertThat(r.evidence()).hasSizeGreaterThanOrEqualTo(2);
+            var v = new VerifierAgent(jdbc).verify(new VerifierAgent.Input(eq, asOf,
+                    List.of(alarm.get("rule").asString()), r, trace, observed));
+            assertThat(v.fails()).as("근거 %s / 도구 %s", r.evidence(), trace).isEmpty();
+            assertThat(v.numberVerified()).isEqualTo(v.numberClaims());
         }
     }
 
