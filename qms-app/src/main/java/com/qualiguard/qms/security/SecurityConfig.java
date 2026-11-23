@@ -56,7 +56,9 @@ public class SecurityConfig {
         csrfHandler.setCsrfRequestAttributeName(null);   // 쿠키 값을 그대로 헤더로 받는다 (화면 JS 가 읽어 보냄)
         http
             .authorizeHttpRequests(a -> a
-                .requestMatchers("/qms/login.html", "/qms/qms.css", "/login", "/error").permitAll()
+                // 로그인 화면이 쓰는 스타일·글꼴(앱에 포함한 vendor 파일)은 로그인 전에도 받아야 한다
+                .requestMatchers("/qms/login.html", "/qms/qms.css", "/qms/qg-tokens.css", "/qms/vendor/**",
+                        "/login", "/error").permitAll()
                 .requestMatchers("/qms/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/qms/**").hasAnyRole("REVIEWER", "VIEWER")
                 .requestMatchers("/api/qms/**").hasRole("REVIEWER")

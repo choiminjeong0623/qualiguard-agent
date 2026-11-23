@@ -4,19 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QMS 에이전트 조치</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css">
-<link rel="stylesheet" href="qms.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
+<link rel="stylesheet" href="qg-tokens.css?v=3">
+<link rel="stylesheet" href="qms.css?v=3">
+<script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
-<header class="qg-shell">
-  <a class="qg-brand" href="index.html"><span class="qg-logo" aria-hidden="true">QG</span>QualiGuard <span class="qg-brand-sub">QMS</span></a>
-  <a class="qg-shell-title" href="index.html">부적합 검토</a>
-  <span class="qg-shell-title">에이전트 조치</span>
-  <a class="qg-shell-title" href="shipment.html">출하 시리얼</a>
-  <span class="qg-shell-spacer"></span>
-  <span class="qg-shell-item"><span id="me"></span></span>
-</header>
+<!-- 공통 셸: 상단 바와 사이드 메뉴는 qg-common.js 가 그린다 -->
+<header class="qg-shell" data-active="actions"></header>
+<div class="qg-app">
+<nav class="qg-side" id="qg-side"></nav>
+<div class="qg-side-scrim" id="qg-side-scrim" aria-hidden="true"></div>
+<main class="qg-main">
 
 <div class="page-wrapper qg-page">
   <div class="qg-page-head">
@@ -59,6 +58,10 @@
   </div>
 </div>
 
-<script src="actions.js"></script>
+</main>
+</div>
+
+<script src="qg-common.js?v=2"></script>
+<script src="actions.js?v=2"></script>
 </body>
 </html>

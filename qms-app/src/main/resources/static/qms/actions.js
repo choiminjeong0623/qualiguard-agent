@@ -12,21 +12,10 @@
     WAITING_APPROVAL: '승인 대기', EXECUTED: '효과 확인 중', RESOLVED: '해소', NOT_RESOLVED: '효과 없음 · 재분석',
     ESCALATED: '사람 확인 필요', REJECTED: '반려'
   };
-  var STATUS_COLOR = {
-    WAITING_APPROVAL: 'bg-yellow-lt', EXECUTED: 'bg-blue-lt', RESOLVED: 'bg-green-lt', NOT_RESOLVED: 'bg-orange-lt',
-    ESCALATED: 'bg-red-lt', REJECTED: 'bg-secondary-lt'
-  };
-  var RISK_COLOR = { LOW: 'bg-green-lt', MEDIUM: 'bg-yellow-lt', HIGH: 'bg-red-lt' };
   var state = { rows: [], filter: '', me: null };
 
-  function csrf() {
-    var c = document.cookie.split('; ').find(function (x) { return x.indexOf('XSRF-TOKEN=') === 0; });
-    return c ? decodeURIComponent(c.split('=')[1]) : '';
-  }
-  $.ajaxSetup({ beforeSend: function (xhr, s) { if (s.type !== 'GET') { xhr.setRequestHeader('X-XSRF-TOKEN', csrf()); } } });
-  $(document).ajaxError(function (e, xhr) { if (xhr.status === 401) { location.href = 'login.html'; } });
-  function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
-  function badge(text, color) { return '<span class="badge ' + color + '">' + esc(text) + '</span>'; }
+  // CSRF 헤더·401·로그인 사용자 표시는 qg-common.js 가 맡는다
+  var esc = QG.esc;
   function canWrite() { return state.me && state.me.role === 'REVIEWER'; }
 
   function matches(r, f) {
@@ -59,10 +48,10 @@
         + (r.effect_detail ? '<div class="small">' + esc(r.effect_detail) + '</div>' : '');
       return '<tr><td>' + r.action_id + (r.attempt > 1 ? '<div class="small text-secondary">' + r.attempt + '번째</div>' : '')
         + '</td><td>' + esc(r.equipment_id) + '</td>'
-        + '<td>' + esc(r.cause_code) + ' → ' + esc(ACTION_LABEL[r.action_code] || r.action_code) + '</td>'
-        + '<td>' + badge(r.risk, RISK_COLOR[r.risk] || '') + '</td>'
+        + '<td>' + esc(QG.label('cause', r.cause_code)) + ' → ' + esc(ACTION_LABEL[r.action_code] || r.action_code) + '</td>'
+        + '<td>' + QG.stateTag('risk', r.risk) + '</td>'
         + '<td>' + (r.mode === 'AUTO' ? '에이전트 자동' : '사람 승인' + (r.decided_by ? ' · ' + esc(r.decided_by) : '')) + '</td>'
-        + '<td>' + badge(STATUS_LABEL[r.status] || r.status, STATUS_COLOR[r.status] || '') + '</td>'
+        + '<td>' + QG.stateTag('action', r.status, STATUS_LABEL[r.status]) + '</td>'
         + '<td>' + note + '</td><td class="text-nowrap">' + buttons + '</td></tr>';
     }).join(''));
   }
@@ -74,15 +63,22 @@
     draw();
   });
 
+  // 승인·반려는 설비에 직접 영향을 주므로 대상과 결과를 보여 주고 한 번 더 확인한다
   $('#rows').on('click', 'button[data-act]', function () {
     var id = $(this).attr('data-id'), act = $(this).attr('data-act');
-    $.ajax({ method: 'POST', url: API + '/' + id + '/' + act }).done(function () {
+    var r = state.rows.filter(function (x) { return String(x.action_id) === String(id); })[0] || {};
+    var what = (r.equipment_id || '') + ' · ' + (ACTION_LABEL[r.action_code] || r.action_code || '');
+    QG.confirm(act === 'approve'
+      ? { title: '조치 ' + id + ' 승인·실행', ok: '승인·실행', danger: r.risk === 'HIGH',
+          body: what + ' 을(를) 실행합니다. ' + (r.risk === 'HIGH' ? '고위험 조치로 라인 정지가 따를 수 있습니다. ' : '') + '40 shot 뒤 효과를 확인합니다.' }
+      : { title: '조치 ' + id + ' 반려', ok: '반려', body: what + ' 을(를) 실행하지 않습니다.' })
+    .done(function () { $.ajax({ method: 'POST', url: API + '/' + id + '/' + act }).done(function () {
       $('#msg').text('조치 ' + id + (act === 'approve' ? ' 승인 · 실행 표시했습니다. 40 shot 뒤 효과를 확인합니다.' : ' 반려했습니다.'))
         .attr('class', 'msg ok');
       load();
     }).fail(function (xhr) {
-      $('#msg').text((xhr.responseJSON && xhr.responseJSON.error) || '실패 (' + xhr.status + ')').attr('class', 'msg err');
-    });
+      $('#msg').text(QG.errorText(xhr)).attr('class', 'msg err');
+    }); });
   });
 
   // ── 판단 보류 (로드맵 F2) ─────────────────────────────────────
@@ -102,8 +98,8 @@
           : '';
         return '<tr><td>' + r.analysis_id + '<div class="small text-secondary">' + esc(r.trigger_type || '') + (r.as_of_shot != null ? ' · shot ' + r.as_of_shot : '') + '</div></td>'
           + '<td>' + esc(r.equipment_id) + '</td>'
-          + '<td>' + esc(DECISION_LABEL[r.decision] || r.decision) + '<div class="small text-secondary">' + esc(r.cause_code) + ' · 확신도 ' + esc(r.confidence) + '</div></td>'
-          + '<td>' + badge(HOLD_REASON[r.hold_reason] || r.hold_reason, 'bg-red-lt') + '<div class="small">' + esc(r.hold_detail) + '</div></td>'
+          + '<td>' + esc(DECISION_LABEL[r.decision] || r.decision) + '<div class="small text-secondary">' + esc(QG.label('cause', r.cause_code)) + ' · 확신도 ' + esc(r.confidence) + '</div></td>'
+          + '<td>' + QG.tone('danger', HOLD_REASON[r.hold_reason] || r.hold_reason) + '<div class="small">' + esc(r.hold_detail) + '</div></td>'
           + '<td><div class="small">' + esc(r.summary) + '</div>'
           + (watch.length ? '<div class="small text-secondary">확인할 항목: ' + watch.map(esc).join(', ') + '</div>' : '')
           + briefHtml(r) + '</td>'
@@ -142,9 +138,8 @@
       .fail(function (xhr) { $('#msg').text((xhr.responseJSON && xhr.responseJSON.error) || '실패 (' + xhr.status + ')').attr('class', 'msg err'); });
   });
 
-  $.getJSON('/api/qms/me').done(function (me) {
+  QG.me().done(function (me) {
     state.me = me;
-    $('#me').text(me.displayName + (me.role === 'REVIEWER' ? ' (품질 담당자)' : ' (조회 전용)'));
     load();
     loadHolds();
     setInterval(function () { load(); loadHolds(); }, 10000);   // 효과 검증은 서버가 주기적으로 하므로 화면도 10초마다 새로 읽는다
