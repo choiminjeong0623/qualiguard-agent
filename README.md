@@ -194,6 +194,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.br
 curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.agent.stage?tag=stage:ANALYZING"  # 단계별 시간 P50·P95 (O2)
 curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.agent.result"                     # 사건 결과 수 (O2)
 ./scripts/sql.sh "EXEC dbo.usp_GetDefectSummary 'IMM-01', 2000, 200"
+./scripts/ops_report.sh 7 ALL                       # 에이전트 운영 리포트: 실패율·지연 P50/P95·분석당 비용·되돌림율 (O3)
 
 # 5) 원인 분석 에이전트 평가 (사례마다 LLM 호출)
 python3 scripts/evaluate_agent.py                  # 기본 평가
