@@ -290,5 +290,6 @@ Kafka 내구성, MQTT 유실 방지 범위, exactly-once 경계, 심각도 규�
 - [향후 계획: 로컬 LLM·장비 보안](docs/03-future-local-llm-and-device-security.md) — 로컬 소형 LLM, MQTT 장비 인증·ACL, Redis 판단
 - [한계와 보완할 점](docs/05-limitations-and-improvements.md) — 면접관 관점의 반박 10가지: 현재 상태, 한계, 보완 우선순위
 - [MES/ERP 연계 EAI 계획](docs/06-mes-erp-eai-plan.md) — 아웃박스는 유지하고 Kafka 대신 인터페이스 서버로 보내는 설계와 손코딩 체크리스트 (계획)
+- [에이전트 설계·평가 산출물](docs/agent/README.md) — 도구 명세서, 프롬프트 정의·변경 이력, 메모리 아키텍처, 가드레일·폴백 정책 (도구 호출 상한 `qg.agent.max-tool-calls` 포함)
 
 > 이 프로젝트의 데이터는 시뮬레이터가 만든 합성 데이터이며, 성과 수치는 모두 시뮬레이션 환경에서 측정한 값입니다.

@@ -20,6 +20,7 @@ public class SopTools {
     private final SopLibrary library;
     private final List<String> trace;
     private final long startNanos;
+    private ToolCallLimit limit = ToolCallLimit.NONE;
 
     public SopTools(SopLibrary library, List<String> trace, long startNanos) {
         this.library = library;
@@ -27,11 +28,21 @@ public class SopTools {
         this.startNanos = startNanos;
     }
 
+    /** QualityTools 와 같은 상한을 나눠 쓴다. */
+    public SopTools withLimit(ToolCallLimit limit) {
+        this.limit = limit == null ? ToolCallLimit.NONE : limit;
+        return this;
+    }
+
     @Tool(description = "현장 표준 절차(SOP)·설비 매뉴얼에서 관련 절차를 찾는다. 결과는 문서 번호(docId), 제목, 절(section), 본문이다. "
             + "추정 원인이나 현상(센서 키, 불량 유형, 증상)을 넣으면 점검 절차·판단 기준·조치·격리 방법을 찾는다. "
             + "recommendedAction 을 쓸 때 이 결과의 절차를 따르고 문서 번호를 함께 적는다.")
     public List<Map<String, Object>> searchSop(
             @ToolParam(description = "찾을 내용, 예: \"barrelTemp 하락 사출 압력 상승 미성형 히터\"") String query) {
+        if (!limit.tryAcquire()) {
+            trace.add("searchSop(\"" + shorten(query, 80) + "\") @" + (System.nanoTime() - startNanos) / 1_000_000 + "ms");
+            return limit.rejected(trace, "searchSop");
+        }
         List<SopLibrary.Hit> hits = library.search(query, TOP_K);
         trace.add("searchSop(\"" + shorten(query, 80) + "\") → "
                 + hits.stream().map(SopLibrary.Hit::docId).toList() + " @"
