@@ -1,6 +1,6 @@
 /* QMS 공통 스크립트 (UI 리디자인 2단계) — 모든 화면이 body 끝, 화면 스크립트 바로 앞에 싣는다 (셸 자리가 먼저 있어야 함).
    - 요청 공통 처리: 쓰기 요청에 CSRF 헤더, 401 이면 로그인 화면으로
-   - 공통 셸: 상단 바 + 사이드 메뉴를 한 곳에서 그린다 (화면마다 다르던 헤더 정리)
+   - 공통 셸: 머리 띠(이름·주 메뉴·사용자 + 화면 제목)를 한 곳에서 그린다 (v3 테마)
    - 표기: 코드의 한글 이름, 상태 표시(모양+문구+색), 시각 형식
    - 위험 동작 확인 대화상자 (<dialog>)
    화면 스크립트는 window.QG 로 쓴다. */
@@ -145,62 +145,77 @@
     return { select: function (id) { pick($list.find('#' + id), false); } };
   }
 
-  // ── 공통 셸: 상단 바 + 사이드 메뉴 ─────────────────────────────
-  // 메뉴는 저장소에 화면이 있는 것만 둔다 (계획서 6.2, 결정 D6)
+  // ── 공통 셸 (v3 테마): 짙은 그라데이션 머리 띠 = 윗줄(이름·주 메뉴·사용자) + 화면 제목 ──
+  // 메뉴는 저장소에 화면이 있는 것만 둔다 (계획서 6.2, 결정 D6). 사이드 메뉴는 v3 에서 없앴다.
+  var ICON = {
+    ncr: '<rect x="4" y="3" width="12" height="15" rx="1.5"/><path d="M7.5 3V2h5v1M7.5 11l2 2 3.5-4"/>',
+    shipment: '<path d="M3 5v10M6 5v10M9 5v10M12 5v10M15 5v10M17.5 5v10"/>',
+    actions: '<circle cx="10" cy="10" r="7"/><path d="M8 7.5v5M12 7.5v5"/>'
+  };
   var MENU = [
-    { group: '품질 관리', items: [
-      { id: 'ncr', href: 'index.html', label: '부적합 검토' },
-      { id: 'shipment', href: 'shipment.html', label: '출하 시리얼' }] },
-    { group: 'AI 에이전트', items: [
-      { id: 'actions', href: 'actions.html', label: '조치·판단 보류' }] }
+    { id: 'ncr', href: 'index.html', label: '부적합 검토' },
+    { id: 'shipment', href: 'shipment.html', label: '출하 시리얼' },
+    { id: 'actions', href: 'actions.html', label: '조치·판단 보류' }
   ];
-  var SIDE_KEY = 'qg.sidebar.collapsed';
-  function stored(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
-  function store(key, v) { try { localStorage.setItem(key, v); } catch (e) { /* 저장 못 해도 화면은 동작 */ } }
+  function svg(path, cls) {
+    return '<svg class="' + (cls || '') + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
+  }
 
   function renderShell() {
     var $header = $('header.qg-shell[data-active]');
     if (!$header.length) { return; }
     var active = $header.attr('data-active');
-    $header.html(
-      '<button type="button" class="qg-shell-icon" id="qg-menu-toggle" aria-controls="qg-side" aria-expanded="true" title="메뉴 접기·펼치기">' +
-      '<span class="qg-burger" aria-hidden="true"></span><span class="visually-hidden">메뉴</span></button>' +
-      '<a class="qg-brand" href="index.html"><span class="qg-logo" aria-hidden="true">QG</span>QualiGuard <span class="qg-brand-sub">QMS</span></a>' +
-      '<span class="qg-shell-spacer"></span>' +
-      '<span id="kb" class="qg-shell-item" hidden></span>' +
-      '<span class="qg-shell-item" id="me" aria-live="polite"></span>' +
-      '<button type="button" id="btn-logout" class="qg-shell-btn">로그아웃</button>');
-    var nav = MENU.map(function (g) {
-      return '<div class="qg-side-group"><div class="qg-side-title">' + esc(g.group) + '</div><ul>' +
-        g.items.map(function (it) {
-          var cur = it.id === active;
-          return '<li><a href="' + it.href + '"' + (cur ? ' aria-current="page" class="active"' : '') +
-            ' title="' + esc(it.label) + '"><span class="qg-side-mark" aria-hidden="true">' + esc(it.label.charAt(0)) +
-            '</span><span class="qg-side-label">' + esc(it.label) + '</span></a></li>';
-        }).join('') + '</ul></div>';
+    // 오른쪽 장식: 옅은 격자 위에서 칸 몇 개가 차례로 켜졌다 꺼진다 (동작 줄이기 설정이면 멈춤)
+    var cells = [[15, 15], [43, 29], [85, 15], [29, 57], [127, 43], [71, 71], [169, 29], [113, 85]].map(function (c, i) {
+      return '<span class="v-fx-cell" style="right:' + c[0] + 'px;top:' + c[1] + 'px;animation-delay:' + (i * 1.1).toFixed(1) + 's"></span>';
     }).join('');
-    $('#qg-side').attr('aria-label', '주 메뉴').html(nav);
+    var nav = MENU.map(function (it) {
+      var cur = it.id === active;
+      return '<a href="' + it.href + '"' + (cur ? ' aria-current="page" class="v-on"' : '') + '>' + svg(ICON[it.id], 'v-ni') +
+        '<span>' + esc(it.label) + '</span><span class="v-n" data-badge="' + it.id + '" hidden></span></a>';
+    }).join('');
+    $header.addClass('v-hero').attr('data-fx', 'c').html(
+      '<div class="v-hero-fx" aria-hidden="true"><span class="v-fx-grid"></span>' + cells + '</div>' +
+      '<div class="v-topbar">' +
+      '<button type="button" class="v-iconbtn v-menu-btn" id="qg-menu-toggle" aria-controls="qg-nav" aria-expanded="false" title="메뉴">' +
+      svg('<path d="M4 6h12M4 10h12M4 14h12"/>') + '<span class="visually-hidden">메뉴</span></button>' +
+      '<a class="v-logo" href="index.html">QualiGuard</a><span class="v-vsep" aria-hidden="true"></span>' +
+      '<nav class="v-nav" id="qg-nav" aria-label="주 메뉴">' + nav + '</nav>' +
+      '<span class="v-sp"></span>' +
+      '<span id="kb" class="qg-shell-item" hidden></span>' +
+      '<span class="v-me"><span id="me" aria-live="polite"></span><span class="v-avatar" id="me-avatar" aria-hidden="true"></span></span>' +
+      '<button type="button" id="btn-logout" class="v-iconbtn" title="로그아웃">' + svg('<path d="M8 4H4v12h4M12 6l4 4-4 4M16 10H8"/>') +
+      '<span class="visually-hidden">로그아웃</span></button></div>');
+    // 화면 제목 줄(data-hero)은 머리 띠 안으로 옮긴다
+    var $title = $('[data-hero]').first();
+    if ($title.length) { $title.addClass('v-hero-body').appendTo($header); }
 
-    var narrow = window.matchMedia('(max-width: 1023px)');
-    function apply(collapsed) {
-      $('body').toggleClass('qg-side-collapsed', collapsed);
-      $('#qg-menu-toggle').attr('aria-expanded', String(!collapsed));
+    // 좁은 화면: 메뉴 단추로 주 메뉴를 펼친다. Esc 나 바깥을 누르면 닫는다
+    function openNav(open) {
+      $header.toggleClass('v-nav-open', open);
+      $('#qg-menu-toggle').attr('aria-expanded', String(open));
     }
-    apply(narrow.matches ? true : stored(SIDE_KEY) === '1');
-    $('#qg-menu-toggle').on('click', function () {
-      var collapsed = !$('body').hasClass('qg-side-collapsed');
-      apply(collapsed);
-      if (!narrow.matches) { store(SIDE_KEY, collapsed ? '1' : '0'); }
-    });
-    // 좁은 화면: 메뉴는 화면 위에 겹쳐 열리고, 바깥을 누르거나 Esc 로 닫는다
-    $(document).on('keydown', function (e) {
-      if (e.key === 'Escape' && narrow.matches && !$('body').hasClass('qg-side-collapsed')) { apply(true); }
-    });
-    $('#qg-side-scrim').on('click', function () { apply(true); });
+    $('#qg-menu-toggle').on('click', function (e) { e.stopPropagation(); openNav(!$header.hasClass('v-nav-open')); });
+    $(document).on('keydown', function (e) { if (e.key === 'Escape' && $header.hasClass('v-nav-open')) { openNav(false); } });
+    $(document).on('click', function (e) { if (!$(e.target).closest('#qg-nav').length) { openNav(false); } });
 
     $('#btn-logout').on('click', function () {
       $.ajax({ method: 'POST', url: '/logout' }).always(function () { location.href = 'login.html?logout'; });
     });
+    loadBadges();
+  }
+
+  // 메뉴 배지: 사람이 처리할 건수 (부적합 검토 대기, 승인 대기 조치 + 판단 보류)
+  function badge(id, n) {
+    $('[data-badge="' + id + '"]').text(n).attr('aria-label', '처리할 일 ' + n + '건').prop('hidden', !n);
+  }
+  function loadBadges() {
+    $.getJSON('/api/qms/ncrs', { status: 'DRAFT', top: 500 }).done(function (rows) { badge('ncr', rows.length); });
+    $.when($.getJSON('/api/qms/actions', { top: 100 }), $.getJSON('/api/qms/holds', { status: 'PENDING', top: 50 }))
+      .done(function (a, h) {
+        var waiting = (a[0] || []).filter(function (x) { return x.status === 'WAITING_APPROVAL'; }).length;
+        badge('actions', waiting + (h[0] || []).length);
+      });
   }
 
   // ── 로그인 사용자: 한 번만 읽어 셸에 표시하고 화면 스크립트에 넘긴다 ──
@@ -209,14 +224,15 @@
     if (!meReq) {
       meReq = $.getJSON('/api/qms/me').done(function (u) {
         var role = u.role === 'REVIEWER' ? '품질 담당자' : '조회 전용';
-        $('#me').text(u.displayName === role ? role : u.displayName + ' · ' + role);
+        $('#me').html(u.displayName === role ? esc(role) : '<b>' + esc(u.displayName) + '</b> · ' + esc(role));
+        $('#me-avatar').text((u.displayName || role).charAt(0));
       });
     }
     return meReq;
   }
 
   window.QG = { csrf: csrf, esc: esc, errorText: errorText, time: time, label: label, labelWithCode: labelWithCode,
-    stateTag: stateTag, tone: tone, confirm: confirmDialog, tabs: tabs, me: me, LABELS: LABELS };
+    stateTag: stateTag, tone: tone, confirm: confirmDialog, tabs: tabs, me: me, LABELS: LABELS, svg: svg, badge: badge };
 
   renderShell();
 

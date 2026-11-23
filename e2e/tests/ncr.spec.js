@@ -7,12 +7,14 @@ test('검토 대기 목록과 상태별 건수가 보인다', async ({ page }) =
   await expect(page.getByRole('row', { name: /AI-2026-0110/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /AI-2026-0111/ })).toBeVisible();
   await expect(page.locator('[data-count="DRAFT"]').first()).toHaveText('2');
-  await expect(page.locator('[data-count=""]').first()).toHaveText('5');
+  await expect(page.locator('#f-status option[value=""]')).toHaveText('전체 (5)');
+  await expect(page.locator('#f-status option[value="DRAFT"]')).toHaveText('검토 대기 (2)');
 });
 
 test('검색어로 목록을 거른다', async ({ page }) => {
   await open(page, '/qms/index.html');
   await page.getByRole('searchbox').fill('IMM-02');
+  await page.getByRole('button', { name: '검색' }).click();
   await expect(page.getByRole('row', { name: /AI-2026-0111/ })).toBeVisible();
   await expect(page.getByRole('row', { name: /AI-2026-0110/ })).toHaveCount(0);
 });
@@ -47,9 +49,9 @@ test('반려는 사유가 있어야 한다', async ({ page }) => {
 
 test('승인된 부적합: MES/ERP 처리 결과와 조치 완료', async ({ page }) => {
   const s = await open(page, '/qms/index.html');
-  await page.getByRole('tab', { name: /승인\s*1/ }).click();
+  await page.getByLabel('상태').selectOption('APPROVED');
   await page.getByRole('row', { name: /AI-2026-0036/ }).click();
-  await showTab(page, /MES\/ERP/);
+  await showTab(page, /이력/);
   await expect(page.getByText(/MES: 처리 완료 WO-55120/)).toBeVisible();
   await expect(page.getByText(/ERP: 처리 완료 QN-20261114-0007/)).toBeVisible();
   await page.getByPlaceholder(/실제로 한 조치/).fill('커넥터 교체');
@@ -62,6 +64,7 @@ test('승인된 부적합: MES/ERP 처리 결과와 조치 완료', async ({ pag
 test('조치 지정(담당자·기한)을 저장한다', async ({ page }) => {
   const s = await open(page, '/qms/index.html');
   await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await showTab(page, /분류/);
   await page.getByLabel('담당자').fill('성형1팀 김반장');
   await page.getByLabel('조치 기한').fill('2026-11-30');
   await page.getByRole('button', { name: '조치 지정 저장' }).click();
@@ -78,7 +81,7 @@ test('에이전트 분석 기록과 연결된 경보가 보인다', async ({ pag
   await expect(page.getByText(/관리 범위를 벗어남/)).toBeVisible();
   await showTab(page, /분석|근거/);
   await expect(page.getByText(/부적합 초안을 발행합니다/)).toBeVisible();
-  await expect(page.getByText(/검증 통과/).first()).toBeVisible();
+  await expect(page.locator('#analyses').getByText(/검증 통과/).first()).toBeVisible();
 });
 
 test('조회 전용 계정은 입력과 승인 버튼이 막혀 있다', async ({ page }) => {
@@ -124,7 +127,7 @@ test('승인 확인 대화상자에서 취소하면 승인하지 않는다', asy
   expect(calls(s, 'POST', '/approve')).toHaveLength(0);
 });
 
-test('사이드 메뉴로 화면을 옮기고 현재 화면을 표시한다', async ({ page }) => {
+test('주 메뉴로 화면을 옮기고 현재 화면을 표시한다', async ({ page }) => {
   await open(page, '/qms/index.html');
   const nav = page.getByRole('navigation', { name: '주 메뉴' });
   await expect(nav.getByRole('link', { name: '부적합 검토' })).toHaveAttribute('aria-current', 'page');
@@ -133,22 +136,59 @@ test('사이드 메뉴로 화면을 옮기고 현재 화면을 표시한다', as
   await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible();
 });
 
-test('상세는 주소에 남고, 목록으로 돌아가거나 다음 건으로 옮길 수 있다', async ({ page }) => {
+test('상세는 주소에 남고, 탭은 화살표로 옮기며, 목록으로 돌아갈 수 있다', async ({ page }) => {
   await open(page, '/qms/index.html');
   await page.getByRole('row', { name: /AI-2026-0110/ }).click();
   await expect(page).toHaveURL(/#AI-2026-0110$/);
-  await expect(page.getByRole('tab', { name: '부적합 내용' })).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('tab', { name: '부적합 내용' }).press('ArrowRight');
-  await expect(page.getByRole('tab', { name: /근거/ })).toHaveAttribute('aria-selected', 'true');
-  const next = page.getByRole('button', { name: '다음' });
-  const prev = page.getByRole('button', { name: '이전' });
-  // 목록은 작성 시각 최신순: 0111 → 0110
-  await expect(next).toBeDisabled();
-  await prev.click();
-  await expect(page.getByRole('heading', { name: '사출 압력 단발 변동' })).toBeVisible();
-  await page.getByRole('link', { name: '부적합 검토' }).first().click();
+  await expect(page.getByRole('tab', { name: /검토·확정/ })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: /검토·확정/ }).press('ArrowRight');
+  await expect(page.getByRole('tab', { name: /분류/ })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('link', { name: '부적합 검토', exact: true }).last().click();
   await expect(page.getByRole('row', { name: /AI-2026-0111/ })).toBeVisible();
   await page.goto(page.url().replace(/#.*$/, '') + '#AI-2026-0110');
   await page.reload();
-  await expect(page.getByRole('heading', { name: '실린더 온도 지속 하강' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /실린더 온도 지속 하강/ })).toBeVisible();
+});
+
+test('추정 원인을 확정 원인으로 옮기고, 줄의 [수정]으로 고친 값을 저장한다', async ({ page }) => {
+  const s = await open(page, '/qms/index.html#AI-2026-0110');
+  await page.getByRole('button', { name: '확정 원인으로 옮기기' }).click();
+  await expect(page.getByLabel(/확정 원인/)).toHaveValue('2번 존 히터 밴드 열화로 온도 제어가 늦어짐.');
+  await page.locator('[data-row="recommendedAction"]').getByRole('button', { name: '수정' }).click();
+  await page.getByLabel('권고 조치').fill('히터 밴드 교체 후 20 shot 관찰');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.getByText('저장했습니다.')).toBeVisible();
+  const f = calls(s, 'PUT', '/AI-2026-0110')[0].body.fields;
+  expect(f.recommendedAction).toBe('히터 밴드 교체 후 20 shot 관찰');
+  expect(f.rootCause).toBe('2번 존 히터 밴드 열화로 온도 제어가 늦어짐.');
+  expect(f.causeCode).toBe('HEATER_DEGRADATION');
+  expect(f.title).toBe('실린더 온도 지속 하강');
+});
+
+test('목록: 페이지당 건수를 고르고, 고른 행만 CSV·엑셀로 내려받는다', async ({ page }) => {
+  await open(page, '/qms/index.html');
+  await page.getByLabel('상태').selectOption('');
+  await expect(page.locator('#list-count')).toHaveText('5건 중 1–5');
+  await page.getByLabel('페이지당 건수').selectOption('30');
+  await page.getByRole('checkbox', { name: 'AI-2026-0110 선택' }).check();
+  await expect(page.getByText('선택 1건')).toBeVisible();
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'CSV' }).click()]);
+  expect(csv.suggestedFilename()).toMatch(/^ncr-list-\d{8}-\d{4}\.csv$/);
+  const text = require('fs').readFileSync(await csv.path(), 'utf8');
+  expect(text.charCodeAt(0)).toBe(0xFEFF);
+  const lines = text.trim().split(/\r\n/);
+  expect(lines).toHaveLength(2);
+  expect(lines[1]).toContain('AI-2026-0110,실린더 온도 지속 하강,검토 대기,IMM-01');
+  const [xlsx] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '엑셀' }).click()]);
+  expect(xlsx.suggestedFilename()).toMatch(/\.xlsx$/);
+  const buf = require('fs').readFileSync(await xlsx.path());
+  expect(buf.subarray(0, 2).toString()).toBe('PK');
+  expect(buf.toString('utf8')).toContain('실린더 온도 지속 하강');
+});
+
+test('상세: 이 부적합 한 건을 엑셀로 내려받는다', async ({ page }) => {
+  await open(page, '/qms/index.html#AI-2026-0110');
+  await page.getByRole('heading', { name: /실린더 온도 지속 하강/ }).waitFor();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '엑셀' }).click()]);
+  expect(dl.suggestedFilename()).toMatch(/^AI-2026-0110-\d{8}-\d{4}\.xlsx$/);
 });
