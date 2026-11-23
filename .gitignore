@@ -16,3 +16,5 @@ __pycache__/
 !.vscode/extensions.json
 # MQTT 계정 파일 (scripts/mqtt_users.sh 가 생성)
 infra/mosquitto/passwd
+# 탐지 평가 원본 (scripts/detection_data.sh 가 seed 로 다시 만든다)
+eval/detection/runs/

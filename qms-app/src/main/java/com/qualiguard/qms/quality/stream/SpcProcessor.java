@@ -52,6 +52,21 @@ public class SpcProcessor implements Processor<String, String, String, String> {
         this.store = context.getStateStore(STORE);
     }
 
+    /**
+     * 설비 메시지 → SPC 입력. 탐지 평가기(DetectionEval)도 같은 변환을 쓰도록 꺼내 둔다 (로드맵 E2).
+     * 결측 허용(ADR-017): sensors 가 없으면 빈 맵, 값이 없는 센서는 SpcEngine 이 invalid 로 처리한다.
+     * 검사 결과가 없거나 result 가 비면 '검사 안 함' — OK 로 세지 않는다.
+     */
+    public static Shot toShot(TelemetryMessage t) {
+        Map<String, Double> values = new LinkedHashMap<>();
+        t.sensorsOrEmpty().forEach((key, sv) -> values.put(key, sv == null ? null : sv.value()));
+        boolean inspected = t.inspection() != null && t.inspection().result() != null;
+        boolean ng = inspected && "NG".equals(t.inspection().result());
+        String defectType = inspected ? t.inspection().defectType() : null;
+        return new Shot(t.messageId(), t.lineId(), t.equipmentId(), t.shotNo(), t.ts(), values, ng, defectType,
+                inspected, t.serialNo());
+    }
+
     @Override
     public void process(Record<String, String> record) {
         TelemetryMessage t;
@@ -65,16 +80,10 @@ public class SpcProcessor implements Processor<String, String, String, String> {
 
         String equipmentId = t.equipmentId();
         EquipmentState state = load(equipmentId);
-
-        // 결측 허용(ADR-017): sensors 가 없으면 빈 맵, 값이 없는 센서는 SpcEngine 이 invalid 로 처리한다
-        Map<String, Double> values = new LinkedHashMap<>();
-        t.sensorsOrEmpty().forEach((key, sv) -> values.put(key, sv == null ? null : sv.value()));
-        // 검사 결과가 없거나 result 가 비면 '검사 안 함' — OK 로 세지 않는다
-        boolean inspected = t.inspection() != null && t.inspection().result() != null;
-        boolean ng = inspected && "NG".equals(t.inspection().result());
-        String defectType = inspected ? t.inspection().defectType() : null;
-        Shot shot = new Shot(t.messageId(), t.lineId(), equipmentId, t.shotNo(), t.ts(), values, ng, defectType,
-                inspected, t.serialNo());
+        Shot shot = toShot(t);
+        boolean inspected = shot.inspected();
+        boolean ng = shot.ng();
+        String defectType = shot.defectType();
 
         SpcEngine.Result result = engine.process(state, shot);
         if (result.duplicate()) {

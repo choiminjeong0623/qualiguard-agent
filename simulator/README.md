@@ -10,6 +10,8 @@ cd ~/dev/qualiguard-agent/simulator
 uv sync                                   # Python 3.12 가상환경과 의존성 설치
 uv run qg-simulator --dry-run --shots 3   # 브로커 없이 출력만 확인
 uv run qg-simulator                       # Mosquitto(localhost:1883)로 발행
+uv run qg-simulator --out ../eval/detection/runs/seed-1 --seed 1
+                                          # 탐지 평가용 파일 출력 (MQTT·대기 없음, 같은 seed 면 같은 파일)
 ```
 
 설비마다 따로 접속하며 **사용자명 = 설비 ID**, 비밀번호는 프로젝트 루트 `.env` 의 `MQTT_DEVICE_PASSWORD_IMM_01` 처럼 설비 ID 의 `-` 를 `_` 로 바꾼 키에서 읽습니다. 브로커는 장비 인증·토픽 권한을 켠 상태라 `./scripts/mqtt_users.sh` 를 먼저 실행해야 합니다 ([ADR-015](../docs/decisions/ADR-015-mqtt-device-auth.md)). 다른 `.env` 를 쓰려면 `--env-file`.
