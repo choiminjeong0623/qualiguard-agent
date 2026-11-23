@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -33,6 +34,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
 
 import com.qualiguard.qms.agent.TokenBudget;
+import com.qualiguard.qms.ncr.NcrReviewService;
+
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * DB 초기화 스크립트 통합 시험 (로드맵 Q3). 실제 SQL Server 2025 컨테이너에서 확인한다.
@@ -42,6 +46,7 @@ import com.qualiguard.qms.agent.TokenBudget;
  * 2) 한 번 더 실행해도 성공 (모든 스크립트가 "없을 때만 생성")
  * 3) 승인 프로시저: 확정 원인 없이 승인 거부, 반려는 사유 필수, 승인하면 이력 + 아웃박스 이벤트가 같은 트랜잭션에 생김
  * 4) 하루 토큰 예산(O5) 집계 SQL: 서울 0시 경계, UTC 로 기록된 시각, NULL 토큰
+ * 5) AI 초안 검토 지표(P3): 그대로 승인 / 고쳐서 승인을 이력으로 구분
  *
  * 실행: cd qms-app && ./gradlew containerTest  (Docker 필요, CI 의 별도 작업에서 돈다)
  */
@@ -191,6 +196,26 @@ class MssqlInitScriptsContainerTest {
             assertThat(s.used()).isEqualTo(415_000);
             assertThat(s.exceeded()).isTrue();
             assertThat(budget.allowsAuto()).isFalse();
+        }
+    }
+
+    @Test
+    void AI_초안_검토_지표는_이력에서_원문을_되살려_센다() throws Exception {
+        try (Connection c = connect()) {
+            var service = new NcrReviewService(new JdbcTemplate(new SingleConnectionDataSource(c, true)),
+                    JsonMapper.builder().build());
+            Map<String, Object> before = service.reviewStats();
+
+            insertDraft(c, "IT-P3-01", "히터 열화", "HEATER_DEGRADATION");   // 그대로 승인
+            service.approve("IT-P3-01", "통합 시험", null);
+            insertDraft(c, "IT-P3-02", null, "HEATER_DEGRADATION");          // 사람이 원인을 고쳐 승인
+            service.update("IT-P3-02", "통합 시험", Map.of("rootCause", "냉각수 배관 막힘", "causeCode", "COOLING_ISSUE"));
+            service.approve("IT-P3-02", "통합 시험", null);
+
+            Map<String, Object> after = service.reviewStats();
+            assertThat((int) after.get("approved") - (int) before.get("approved")).isEqualTo(2);
+            assertThat((int) after.get("approvedAsIs") - (int) before.get("approvedAsIs")).isEqualTo(1);
+            assertThat(after.get("editRate")).isNotNull();
         }
     }
 

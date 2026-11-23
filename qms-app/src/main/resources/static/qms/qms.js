@@ -312,6 +312,13 @@
       var total = 0, ai = 0;
       rows.forEach(function (r) { total += r.total; ai += r.ai_approved; });
       $('#kb').text('지식저장소 ' + total + '건 (AI 초안 승인 ' + ai + '건)');
+      // AI 초안 검토 지표 (로드맵 P3): 결정된 초안 가운데 반려·그대로 승인한 비율
+      $.getJSON(API + '/review-stats').done(function (s) {
+        if (!s.decided) { return; }
+        var pct = function (x) { return x == null ? '-' : Math.round(x * 100) + '%'; };
+        $('#kb').text($('#kb').text() + ' · AI 초안 ' + s.decided + '건 중 그대로 승인 ' + pct(s.asIsRate)
+          + ', 반려 ' + pct(s.rejectionRate));
+      });
     });
   }
 
