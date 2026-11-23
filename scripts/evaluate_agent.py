@@ -43,6 +43,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 API = os.environ.get("QG_AGENT_API", "http://localhost:8080/api/agent")  # 다른 포트로 띄웠을 때 바꿔 쓴다
+
+
+def api_token():
+    """에이전트 API 토큰 (로드맵 Q2): 환경 변수 QG_AGENT_API_TOKEN, 없으면 루트 .env 에서 읽는다. 값은 출력하지 않는다."""
+    token = os.environ.get("QG_AGENT_API_TOKEN")
+    env = ROOT / ".env"
+    if not token and env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("QG_AGENT_API_TOKEN="):
+                token = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return token or None
+
+
+TOKEN = api_token()
 MAX_STEPS = 5
 
 # simulator/scenarios.yaml 의 고장 시나리오와 기대 결과
@@ -63,6 +77,8 @@ MATCHING_CAUSES = ["HEATER_DEGRADATION", "COOLING_ISSUE", "CHECK_RING_WEAR", "SE
 
 def http(method, path):
     req = urllib.request.Request(API + path, method=method)
+    if TOKEN:
+        req.add_header("Authorization", "Bearer " + TOKEN)
     try:
         with urllib.request.urlopen(req, timeout=600) as r:
             return json.loads(r.read().decode("utf-8"))

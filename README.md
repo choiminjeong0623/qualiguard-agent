@@ -165,6 +165,7 @@ flowchart LR
 # 1) 인프라
 cp .env.example .env                     # MSSQL_SA_PASSWORD, GEMINI_API_KEY, QMS 화면 계정(QG_REVIEWER_PASSWORD 등) 입력
 ./scripts/mqtt_users.sh                  # MQTT 장비·브리지 계정 만들기 (비밀번호는 .env 에 자동 생성, ADR-015)
+echo "QG_AGENT_API_TOKEN=$(openssl rand -hex 32)" >> .env   # 에이전트 API·MCP 토큰 (평가 스크립트가 .env 에서 읽음)
 docker compose up -d                     # Mosquitto, Kafka, SQL Server
 ./scripts/test_mqtt_acl.sh               # (선택) 익명 거부·토픽 권한 시험 6항목
 docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0) 이 정상
