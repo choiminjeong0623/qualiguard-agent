@@ -1,0 +1,116 @@
+// 부적합 검토 화면 (index.html) 스모크
+const { test, expect } = require('@playwright/test');
+const { open, calls } = require('./helpers');
+
+test('검토 대기 목록과 상태별 건수가 보인다', async ({ page }) => {
+  await open(page, '/qms/index.html');
+  await expect(page.getByRole('row', { name: /AI-2026-0110/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /AI-2026-0111/ })).toBeVisible();
+  await expect(page.locator('[data-count="DRAFT"]').first()).toHaveText('2');
+  await expect(page.locator('[data-count=""]').first()).toHaveText('5');
+});
+
+test('검색어로 목록을 거른다', async ({ page }) => {
+  await open(page, '/qms/index.html');
+  await page.getByRole('searchbox').fill('IMM-02');
+  await expect(page.getByRole('row', { name: /AI-2026-0111/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /AI-2026-0110/ })).toHaveCount(0);
+});
+
+test('초안을 열어 확정 원인을 적고 승인하면 저장 뒤 승인 API 를 부른다', async ({ page }) => {
+  const s = await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await expect(page.getByText('실린더 온도 지속 하강').first()).toBeVisible();
+  await page.getByLabel(/확정 원인/).fill('2번 존 히터 밴드 단선');
+  await page.getByRole('button', { name: '승인', exact: true }).click();
+  await confirmIfAsked(page);
+  await expect(page.getByText(/승인했습니다/)).toBeVisible();
+  const put = calls(s, 'PUT', '/AI-2026-0110');
+  expect(put).toHaveLength(1);
+  expect(put[0].body.fields.rootCause).toBe('2번 존 히터 밴드 단선');
+  expect(put[0].csrf).toBe('test-csrf');
+  expect(calls(s, 'POST', '/AI-2026-0110/approve')).toHaveLength(1);
+});
+
+test('반려는 사유가 있어야 한다', async ({ page }) => {
+  const s = await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0111/ }).click();
+  await startReject(page);
+  await submitReject(page);
+  await expect(page.getByText('반려 사유를 입력하세요.')).toBeVisible();
+  expect(calls(s, 'POST', '/reject')).toHaveLength(0);
+  await page.getByPlaceholder('반려 사유').fill('단발성 노이즈');
+  await submitReject(page);
+  await expect(page.getByText('반려했습니다.')).toBeVisible();
+  expect(calls(s, 'POST', '/AI-2026-0111/reject')[0].body.reason).toBe('단발성 노이즈');
+});
+
+test('승인된 부적합: MES/ERP 처리 결과와 조치 완료', async ({ page }) => {
+  const s = await open(page, '/qms/index.html');
+  await page.getByRole('button', { name: /승인\s*1/ }).click();
+  await page.getByRole('row', { name: /AI-2026-0036/ }).click();
+  await showTab(page, /MES\/ERP/);
+  await expect(page.getByText(/MES: 처리 완료 WO-55120/)).toBeVisible();
+  await expect(page.getByText(/ERP: 처리 완료 QN-20261114-0007/)).toBeVisible();
+  await page.getByPlaceholder(/실제로 한 조치/).fill('커넥터 교체');
+  await page.getByRole('button', { name: '조치 완료', exact: true }).click();
+  await confirmIfAsked(page);
+  await expect(page.getByText('조치 완료로 닫았습니다.')).toBeVisible();
+  expect(calls(s, 'POST', '/AI-2026-0036/close')[0].body.actionTaken).toBe('커넥터 교체');
+});
+
+test('조치 지정(담당자·기한)을 저장한다', async ({ page }) => {
+  const s = await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await page.getByLabel('담당자').fill('성형1팀 김반장');
+  await page.getByLabel('조치 기한').fill('2026-11-30');
+  await page.getByRole('button', { name: '조치 지정 저장' }).click();
+  await expect(page.getByText('조치 지정을 저장했습니다.')).toBeVisible();
+  const put = calls(s, 'PUT', '/AI-2026-0110/assignment')[0].body;
+  expect(put.actionOwner).toBe('성형1팀 김반장');
+  expect(put.actionDueDate).toBe('2026-11-30');
+});
+
+test('에이전트 분석 기록과 연결된 경보가 보인다', async ({ page }) => {
+  await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await showTab(page, /경보|근거/);
+  await expect(page.getByText(/관리 범위를 벗어남/)).toBeVisible();
+  await showTab(page, /분석|근거/);
+  await expect(page.getByText(/부적합 초안을 발행합니다/)).toBeVisible();
+  await expect(page.getByText(/검증 통과/).first()).toBeVisible();
+});
+
+test('조회 전용 계정은 입력과 승인 버튼이 막혀 있다', async ({ page }) => {
+  await open(page, '/qms/index.html', 'VIEWER');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await expect(page.getByText(/조회 전용 계정입니다/)).toBeVisible();
+  await expect(page.getByLabel(/확정 원인/)).toBeDisabled();
+  const approve = page.getByRole('button', { name: '승인', exact: true });
+  if (await approve.count()) { await expect(approve).toBeHidden({ timeout: 1000 }).catch(() => expect(approve).toBeDisabled()); }
+});
+
+// ── 리디자인 전후에 모두 통하도록 둔 도우미 ──────────────────────
+// 확인 대화상자가 있으면 확인을 누른다 (리디자인 2단계에서 생김)
+async function confirmIfAsked(page) {
+  const dlg = page.locator('dialog[open]');
+  if (await dlg.count()) { await dlg.getByRole('button').filter({ hasNotText: '취소' }).first().click(); }
+}
+// 탭이 있으면 그 탭을 연다 (리디자인 3단계), 없으면 아코디언을 연다 (현행)
+async function showTab(page, name) {
+  const tab = page.getByRole('tab', { name });
+  if (await tab.count()) { await tab.first().click(); return; }
+  const acc = page.locator('.accordion-button.collapsed').filter({ hasText: name });
+  if (await acc.count()) { await acc.first().click(); }
+}
+// 반려: 현행은 입력칸 + 버튼, 리디자인 뒤에는 대화상자 안 입력칸
+async function startReject(page) {
+  if (!(await page.getByPlaceholder('반려 사유').isVisible())) {
+    await page.getByRole('button', { name: /반려/ }).first().click();
+  }
+}
+async function submitReject(page) {
+  const dlg = page.locator('dialog[open]');
+  if (await dlg.count()) { await dlg.getByRole('button', { name: '반려' }).click(); return; }
+  await page.getByRole('button', { name: '반려', exact: true }).click();
+}
