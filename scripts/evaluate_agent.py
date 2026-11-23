@@ -42,6 +42,8 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import cause_metrics  # 같은 폴더: 원인 평가 지표 (로드맵 E5)
+
 ROOT = Path(__file__).resolve().parent.parent
 API = os.environ.get("QG_AGENT_API", "http://localhost:8080/api/agent")  # 다른 포트로 띄웠을 때 바꿔 쓴다
 
@@ -211,6 +213,25 @@ def next_seed(c):
     return None
 
 
+def hold_status(analysis_id):
+    """판단 보류 여부 (F2): agent_analysis.hold_status (PENDING/RESOLVED) 또는 None."""
+    if not analysis_id:
+        return None
+    rows = sql(f"SELECT ISNULL(hold_status, '-') FROM dbo.agent_analysis WHERE analysis_id = {int(analysis_id)}")
+    v = rows[0][0] if rows and rows[0] else "-"
+    return None if v == "-" else v
+
+
+def existing_ncr(numbers):
+    """인용한 부적합 번호 가운데 DB 에 실제로 있는 번호 (E5 인용 사례 실재율)."""
+    safe = [n for n in (numbers or []) if isinstance(n, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,40}", n)]
+    if not safe:
+        return []
+    found = {r[0] for r in sql("SELECT ncr_no FROM dbo.ncr WHERE ncr_no IN ("
+                               + ",".join(f"'{n}'" for n in safe) + ")") if r}
+    return [n for n in safe if n in found]
+
+
 def tool_times(trace):
     """trace 의 '도구(...) @1234ms' 에서 도구가 불린 시각(분석 시작 후 ms)을 읽는다."""
     return [int(m.group(1)) for t in trace if not t.startswith("verify#") for m in [re.search(r" @(\d+)ms$", t)] if m]
@@ -255,6 +276,11 @@ def run_case(c, run, stamp, gt, cfg):
             "correct": ok, "ncrNo": out.get("ncrNo"), "mergedIntoExistingNcr": out.get("mergedIntoExistingNcr"),
             "watchItems": result.get("watchItems"), "reasoningSummary": result.get("reasoningSummary"),
             "similarCases": result.get("similarCases"),
+            "similarCasesReal": existing_ncr(result.get("similarCases")),
+            "candidateCauses": result.get("candidateCauses"),
+            "numberClaims": (out.get("verification") or {}).get("numberClaims"),
+            "numberVerified": (out.get("verification") or {}).get("numberVerified"),
+            "holdStatus": hold_status(out.get("analysisId")),
             "toolCalls": len([t for t in trace if not t.startswith(" ") and not t.startswith("repairJsonFormat")
                               and not t.startswith("verify#")]),
             "attempts": out.get("attempts") or 1,
@@ -384,6 +410,8 @@ def summarize(results, runs, mode):
         lines.append(f"- 분석 1단계 토큰 평균: 입력 {avg('prompt')}, 출력 {avg('output')}, 생각 {avg('thought')} ({len(toks)}단계)")
     lines.append("- '진단까지 shot', '첫 불량 shot'은 고장 시작 shot 기준 차이. 단발성 경보는 고장 구간이 없어 '-'")
     lines.append("- 단발성 경보는 첫 판단으로 채점하고, 이어진 재확인에서 만든 초안은 '잘못된 초안'에 셉니다")
+    lines.append("")
+    lines.append(cause_metrics.markdown(cause_metrics.compute(results)))
     lines.append("")
     lines.append("### 단계별 판단")
     for r in results:

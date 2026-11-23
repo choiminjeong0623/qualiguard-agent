@@ -135,6 +135,9 @@ class VerifierAgentTest {
         assertTrue(v.passed(), v.toString());
         assertTrue(v.warns().stream().noneMatch(w -> w.contains("맞지 않습니다")),
                 "20 shot(조회 범위)·1.8σ(계산 값)는 대조하지 않는다: " + v.warns());
+        // 평가 지표(E5)용 집계: 224.1·220·6.2% 세 수치를 대조했고 모두 맞음
+        assertEquals(3, v.numberClaims());
+        assertEquals(3, v.numberVerified());
     }
 
     @Test
