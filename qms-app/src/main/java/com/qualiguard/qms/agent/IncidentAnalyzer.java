@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.qualiguard.qms.agent.hold.JudgementHoldPolicy;
 import com.qualiguard.qms.knowledge.NcrEmbeddingService;
+import com.qualiguard.qms.knowledge.SopLibrary;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -152,6 +153,8 @@ public class IncidentAnalyzer {
     /** 분석 방식 (로드맵 A1): tools(모델이 도구를 골라 부름) / prefetch(정해진 도구 결과를 미리 넣고 LLM 1회). */
     private final String analysisMode;
     private volatile ChatClient chatClient;
+    /** 현장 표준 절차 검색 (null 이면 도구를 주지 않음) */
+    private volatile SopLibrary sop;
 
     /** 시험용: LLM 호출 보호는 기본값(90초, 재시도 1회). */
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
@@ -182,6 +185,12 @@ public class IncidentAnalyzer {
         this.chatClientBuilder = chatClientBuilder;
         this.model = model;
         this.embeddings = embeddings;
+    }
+
+    /** SOP 검색 도구를 붙인다 (qg.knowledge.sop.enabled=false 면 붙이지 않음). */
+    @Autowired(required = false)
+    public void setSopLibrary(SopLibrary library, @Value("${qg.knowledge.sop.enabled:true}") boolean enabled) {
+        this.sop = enabled ? library : null;
     }
 
     /** 가장 오래된 미처리 경보 (같은 경보로 2번 실패했으면 건너뛴다). */
@@ -598,13 +607,20 @@ public class IncidentAnalyzer {
                 embeddings == null ? null : embeddings::queryVector, observed);
         Map<String, Object> fetched = prefetch(tools, job.equipmentId(), alarmSensors(job), defectType(job),
                 situation(job));
+        SopLibrary library = sop;
+        if (library != null) {
+            String dt = defectType(job);
+            String sit = situation(job);
+            String q = String.join(" ", alarmSensors(job)) + " " + (dt == null ? "" : dt) + " " + (sit == null ? "" : sit);
+            fetched.put("searchSop(" + q.strip() + ")", new SopTools(library, trace, t0).searchSop(q));
+        }
         String prompt = userPrompt + "\n\n" + PREFETCH_NOTE + "\n" + objectMapper.writeValueAsString(fetched);
-        return analyzeWith(prompt, trace, null);
+        return analyzeWith(prompt, trace, null, t0);
     }
 
     /** prefetch 모드 안내: 시스템 프롬프트(조사 절차)는 그대로 두고, 도구 결과가 이미 들어 있음을 알린다. */
     static final String PREFETCH_NOTE = "[미리 조회한 도구 결과] 이번 분석에서는 도구를 직접 부를 수 없습니다. "
-            + "조사 절차의 도구 1~5를 아래와 같이 미리 실행해 두었습니다 (키 = 도구 이름과 인자). "
+            + "조사 절차의 도구를 아래와 같이 미리 실행해 두었습니다 (키 = 도구 이름과 인자). "
             + "이 결과만으로 판단하고, evidence 의 수치도 이 결과에서 옮기세요.";
 
     /**
@@ -645,17 +661,20 @@ public class IncidentAnalyzer {
     public AnalysisResult analyzeOnce(String userPrompt, String asOf, long t0, List<String> trace,
             ToolObservations observed) {
         return analyzeWith(userPrompt, trace, new QualityTools(jdbc, trace, asOf, t0,
-                embeddings == null ? null : embeddings::queryVector, observed));
+                embeddings == null ? null : embeddings::queryVector, observed), t0);
     }
 
     /** tools 가 null 이면 도구 없이 1회 호출한다 (prefetch). */
-    private AnalysisResult analyzeWith(String userPrompt, List<String> trace, QualityTools tools) {
+    private AnalysisResult analyzeWith(String userPrompt, List<String> trace, QualityTools tools, long t0) {
+        SopLibrary library = sop;
+        Object[] toolObjects = tools == null ? null
+                : library == null ? new Object[] {tools} : new Object[] {tools, new SopTools(library, trace, t0)};
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
         // 시간 제한·일시 장애 재시도 (로드맵 O4). 재시도하면 조사(도구 호출)를 처음부터 다시 한다
         ChatResponse response = llm.call("analysis", () -> {
             var spec = chatClient().prompt().system(AgentPrompts.SYSTEM).user(userPrompt);
-            return (tools == null ? spec : spec.tools(tools)).call().chatResponse();
+            return (toolObjects == null ? spec : spec.tools(toolObjects)).call().chatResponse();
         }, trace);
         trace.add(Tokens.of(response).traceLine());
         String text = allText(response);
