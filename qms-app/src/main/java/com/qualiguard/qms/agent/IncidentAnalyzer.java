@@ -351,9 +351,10 @@ public class IncidentAnalyzer {
         return depth;
     }
 
-    /** 분석 에이전트에게 줄 입력: 사건 + 같은 설비의 이전 판단. */
+    /** 분석 에이전트에게 줄 입력: 사건 + 같은 설비의 이전 판단 + 사람 검토자의 판단 보류 처리 메모. */
     public String userPrompt(Job job) {
-        return buildUserPrompt(job, previousJudgements(job.equipmentId(), job.previousBefore(), job.tag()));
+        return buildUserPrompt(job, previousJudgements(job.equipmentId(), job.previousBefore(), job.tag()),
+                reviewerNotes(job.equipmentId(), job.previousBefore(), job.tag()));
     }
 
     /** 검증 에이전트가 되돌렸을 때의 재분석 입력: 원래 입력 + 앞선 결과 + 지적. */
@@ -583,7 +584,45 @@ public class IncidentAnalyzer {
         return out;
     }
 
-    private String buildUserPrompt(Job job, List<Map<String, Object>> previous) {
+    /**
+     * 같은 설비에서 사람 검토자가 판단 보류를 처리하며 남긴 메모 (ADR-020 후속). 최근 3건.
+     * 기준 시각(before) 전에 처리된 것만 쓴다(미래 정보 차단). 평가 실행(tag 있음)에는 넣지 않는다:
+     * 사람이 남긴 메모가 채점 결과를 바꾸지 않도록.
+     */
+    private List<Map<String, Object>> reviewerNotes(String equipmentId, String before, String tag) {
+        if (tag != null || before == null) {
+            return List.of();
+        }
+        return toReviewerNotes(jdbc.queryForList("""
+                SELECT TOP 3 g.as_of_shot, g.decision, g.cause_code, g.hold_reason, g.hold_note,
+                       CONVERT(VARCHAR(33), g.hold_resolved_at, 127) AS resolved_at
+                FROM dbo.agent_analysis AS g
+                WHERE g.equipment_id = ?
+                  AND g.hold_status = 'RESOLVED'
+                  AND g.run_tag IS NULL
+                  AND g.hold_note IS NOT NULL
+                  AND g.hold_resolved_at < CAST(? AS DATETIMEOFFSET(3))
+                ORDER BY g.hold_resolved_at DESC
+                """, equipmentId, before));
+    }
+
+    /** DB 행 → 프롬프트에 넣을 검토자 메모. 처리자 이름은 넣지 않는다. */
+    static List<Map<String, Object>> toReviewerNotes(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("shotNo", r.get("as_of_shot"));
+            m.put("agentDecision", r.get("decision"));
+            m.put("agentCause", r.get("cause_code"));
+            m.put("holdReason", r.get("hold_reason"));
+            m.put("reviewerNote", r.get("hold_note"));
+            m.put("resolvedAt", r.get("resolved_at"));
+            out.add(m);
+        }
+        return out;
+    }
+
+    private String buildUserPrompt(Job job, List<Map<String, Object>> previous, List<Map<String, Object>> notes) {
         List<Map<String, Object>> alarmList = new ArrayList<>();
         for (Map<String, Object> a : job.alarms()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -623,6 +662,10 @@ public class IncidentAnalyzer {
             incident.put("previousJudgements", previous);
             sb.append("previousJudgements 는 같은 설비에서 앞서 내린 판단입니다(최근 순). ")
                     .append("shotNo 는 그 판단의 기준 shot, trigger 는 경보(ALARM)·재확인(RECHECK) 구분입니다.\n");
+        }
+        if (!notes.isEmpty()) {
+            incident.put("reviewerNotes", notes);
+            sb.append("reviewerNotes 는 같은 설비에서 에이전트가 결론을 못 내 판단 보류된 건을 사람 검토자가 확인하고 남긴 메모입니다(최근 순).\n");
         }
         return sb.append('\n').append(objectMapper.writeValueAsString(incident)).toString();
     }

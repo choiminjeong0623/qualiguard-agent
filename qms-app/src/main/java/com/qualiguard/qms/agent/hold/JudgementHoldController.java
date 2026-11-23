@@ -21,6 +21,7 @@ import com.qualiguard.qms.security.AppUser;
  *
  *   GET  /api/qms/holds?status=PENDING&top=50&replay=false   보류 목록 (replay=true 면 평가 실행 기록도 포함)
  *   POST /api/qms/holds/{analysisId}/resolve  {"note": "..."} 검토자가 확인하고 처리 메모를 남김
+ *   POST /api/qms/holds/{analysisId}/brief    분석 흐름 3줄 요약·현장 확인 항목 만들기 (HoldBriefService, 보조 정보)
  * /api/qms/** 라서 조회는 REVIEWER·VIEWER, 처리는 REVIEWER 만 (SecurityConfig, CSRF 확인 포함).
  */
 @RestController
@@ -28,9 +29,20 @@ import com.qualiguard.qms.security.AppUser;
 public class JudgementHoldController {
 
     private final JdbcTemplate jdbc;
+    private final HoldBriefService briefs;
 
-    public JudgementHoldController(JdbcTemplate jdbc) {
+    public JudgementHoldController(JdbcTemplate jdbc, HoldBriefService briefs) {
         this.jdbc = jdbc;
+        this.briefs = briefs;
+    }
+
+    @PostMapping("/{analysisId}/brief")
+    public ResponseEntity<?> brief(@PathVariable int analysisId) {
+        try {
+            return ResponseEntity.ok(briefs.generate(analysisId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping
@@ -40,7 +52,7 @@ public class JudgementHoldController {
         return jdbc.queryForList("""
                 SELECT TOP (?) g.analysis_id, g.equipment_id, g.trigger_type, g.as_of_shot, g.parent_analysis_id,
                        g.decision, g.cause_code, g.confidence, g.verify_status, g.run_tag,
-                       g.hold_status, g.hold_reason, g.hold_detail, g.hold_resolved_by, g.hold_note,
+                       g.hold_status, g.hold_reason, g.hold_detail, g.hold_resolved_by, g.hold_note, g.hold_brief,
                        JSON_VALUE(g.result_json, '$.reasoningSummary') AS summary,
                        JSON_QUERY(g.result_json, '$.watchItems') AS watch_items,
                        CONVERT(VARCHAR(33), g.created_at, 127) AS created_at,
