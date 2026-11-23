@@ -150,6 +150,7 @@ Kafka 메시지 key 는 부적합 번호.
 | 이상 탐지 재처리 | 경보 중복 발행 | Kafka Streams **exactly-once v2** |
 | DB 적재 | 같은 메시지 두 번 저장, 취소된 트랜잭션 메시지 저장 | `INSERT ... WHERE NOT EXISTS` + 고유 인덱스, `read_committed` |
 | 에이전트 | 같은 원인의 보고서 중복 | 사건 단위 묶기, 같은 원인 초안이 있으면 연결 |
+| 에이전트 사건 진행 중 앱 재시작 | 분석 중이던 사건이 사라지고 경보가 `ANALYZING` 에 머묾 | 단계마다 **사건 기록**(`agent_incident.checkpoint_json`)을 남기고, 켜질 때 되살려 멈춘 단계부터 이어 감. 같은 요청이 두 번 와도 상태·시도 번호로 한 번만 처리 ([ADR-016](decisions/ADR-016-multi-agent-pipeline.md) 3단계) |
 | 형식 오류 | 조용히 버려짐 | DLQ에 오류 사유와 함께 보관 |
 | 승인 → MES/ERP | 승인은 됐는데 이벤트가 사라짐 / 승인 안 된 건이 나감 | **트랜잭션 아웃박스**: 승인과 이벤트 기록을 한 트랜잭션, 발행은 Kafka 기록 확인 뒤에만 완료 표시 ([ADR-010](decisions/ADR-010-ncr-integration-outbox.md)) |
 | 아웃박스 재발행 | 같은 승인 이벤트 두 번 수신 | 수신 쪽 `(event_id, 시스템)` 고유 제약 + `NOT EXISTS` |

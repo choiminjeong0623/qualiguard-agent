@@ -57,6 +57,9 @@ public class IncidentOrchestrator {
 
     void onTriaged(AgentEvent e) {
         withIncident(e, AgentTopics.TRIAGED, i -> {
+            if (i.state != Incident.State.TRIAGED) {
+                return;   // 같은 이벤트가 다시 옴 (이미 분석 단계로 넘김)
+            }
             i.basePrompt = analyzer.userPrompt(i.job);
             i.prompt = i.basePrompt;
             i.attempts = 1;
@@ -68,6 +71,9 @@ public class IncidentOrchestrator {
 
     void onAnalysisCompleted(AgentEvent e) {
         withIncident(e, AgentTopics.ANALYSIS_COMPLETED, i -> {
+            if (i.state != Incident.State.ANALYZING || e.attempt() != i.attempts) {
+                return;   // 지난 시도의 완료가 다시 옴
+            }
             if (i.error != null || i.result == null) {
                 finishFailed(i, AgentTopics.ANALYSIS_COMPLETED, i.error == null ? "분석 결과 없음" : i.error);
                 return;
@@ -80,6 +86,9 @@ public class IncidentOrchestrator {
 
     void onVerificationCompleted(AgentEvent e) {
         withIncident(e, AgentTopics.VERIFICATION_COMPLETED, i -> {
+            if (i.state != Incident.State.VERIFYING || e.attempt() != i.attempts) {
+                return;
+            }
             VerifierAgent.Verification v = i.verification;
             if (v != null && !v.passed() && i.attempts <= verifyMaxRetries) {
                 // 근거가 약함: 지적을 붙여 분석 에이전트로 되돌린다 (횟수 제한)
@@ -103,8 +112,62 @@ public class IncidentOrchestrator {
     }
 
     void onReportCompleted(AgentEvent e) {
-        withIncident(e, AgentTopics.REPORT_COMPLETED, i -> finish(i, AgentTopics.REPORT_COMPLETED,
-                "작성 " + (i.report == null ? "-" : i.report.get("mode"))));
+        withIncident(e, AgentTopics.REPORT_COMPLETED, i -> {
+            if (i.state != Incident.State.WRITING) {
+                return;
+            }
+            finish(i, AgentTopics.REPORT_COMPLETED, "작성 " + (i.report == null ? "-" : i.report.get("mode")));
+        });
+    }
+
+    /**
+     * 재시작 복구 (로드맵 A2): 되살린 사건을 멈춘 단계부터 이어 간다. 그 단계의 요청 이벤트를 다시 보내고,
+     * 이미 끝난 일이면 각 에이전트가 다시 하지 않고 완료만 알린다 (중복 요청은 상태·시도 번호로 걸러진다).
+     * 평가 재생 사건(run_tag)과 너무 오래된 사건은 이어 가지 않고 실패로 닫는다 (경보는 다시 분석 대상으로).
+     *
+     * @param maxAgeMinutes 마지막 기록 뒤 이만큼 지난 사건은 이어 가지 않는다
+     * @return 이어 간 사건 수
+     */
+    public int resume(List<Incident> restored, long maxAgeMinutes) {
+        int resumed = 0;
+        for (Incident i : restored) {
+            try {
+                if (i.job.tag() != null) {
+                    finishFailed(i, AgentTopics.RESUMED, "앱 재시작으로 중단 (평가 재생은 이어 하지 않음)");
+                    continue;
+                }
+                if (i.restoredAgeMinutes > maxAgeMinutes) {
+                    finishFailed(i, AgentTopics.RESUMED, "앱 재시작으로 중단 (마지막 기록 뒤 " + i.restoredAgeMinutes
+                            + "분 지나 이어 하지 않음)");
+                    continue;
+                }
+                String next = switch (i.state) {
+                    case TRIAGED -> AgentTopics.TRIAGED;
+                    case ANALYZING -> AgentTopics.ANALYSIS_REQUESTED;
+                    case VERIFYING -> AgentTopics.VERIFICATION_REQUESTED;
+                    case WRITING -> AgentTopics.REPORT_REQUESTED;
+                    default -> null;
+                };
+                if (next == null) {
+                    continue;
+                }
+                store.note(i, AgentTopics.RESUMED, "재시작 뒤 " + i.state + " 단계부터 이어 감");
+                log.info("[재시작 복구] 사건 {} ({} {}) — {} 단계부터 이어 감", i.id, i.job.equipmentId(), i.job.trigger(),
+                        i.state);
+                resumed++;
+                bus.publish(next, new AgentEvent(i.id, next.equals(AgentTopics.TRIAGED) ? 0 : i.attempts, Map.of()));
+            } catch (RuntimeException ex) {
+                log.error("[재시작 복구] 사건 {} 이어 가기 실패: {}", i.id, ex.toString(), ex);
+                if (!i.done.isDone()) {
+                    try {
+                        finishFailed(i, AgentTopics.RESUMED, AnalysisAgent.causeChain(ex));
+                    } catch (RuntimeException ex2) {
+                        store.close(i, null, null);
+                    }
+                }
+            }
+        }
+        return resumed;
     }
 
     /** 결과 저장: 초안이면 사람 승인 대기, 아니면 종결. */

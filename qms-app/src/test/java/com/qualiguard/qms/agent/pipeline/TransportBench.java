@@ -40,8 +40,8 @@ import tools.jackson.databind.json.JsonMapper;
  *   ./gradlew transportBench                     # → eval/transport_report.md
  *   ./gradlew transportBench --args="localhost:9092 500 ../eval/transport_report.md"
  *
- * 장애 복구는 재지 않는다: 사건 상태(IncidentStore)가 메모리에 있어, 앱이 재시작하면 Kafka 에 남은 이벤트도
- * "모르는 사건"으로 버려진다 (KafkaEventBus 주석). 이 사실을 보고서에 적는다.
+ * 장애 복구는 재지 않는다: 재시작 복구는 전달 방식과 무관하게 DB 사건 기록으로 한다 (IncidentStore.restore,
+ * IncidentRecoveryTest). 이 사실을 보고서에 적는다.
  */
 public final class TransportBench {
 
@@ -139,10 +139,8 @@ public final class TransportBench {
         sb.append(String.format(Locale.ROOT, "%n- Kafka 가 더하는 시간(P50): 사건당 약 %.1f ms. 실제 분석 1단계는 평균 40초 이상(LLM)이라 "
                 + "전체 대비 비중은 %.3f%% 수준. 이벤트 7개마다 생산자 linger.ms=5(묶어 보내기 대기)와 acks=all 확인을 "
                 + "기다리므로 대부분이 그 몫입니다%n", k.p50() - d.p50(), (k.p50() - d.p50()) / 40000 * 100));
-        sb.append("- 장애 복구: 지금 구조에서는 Kafka 도 재시작 후 이어 가지 못합니다. 사건 상태(IncidentStore)가 메모리에 있어서, "
-                + "재시작 뒤 토픽에 남은 이벤트는 \"모르는 사건\"으로 버려집니다. Kafka 의 이점은 지금은 '에이전트를 다른 프로세스로 "
-                + "떼어 낼 수 있는 토픽 계약'과 '단계별 기록'이고, 복구까지 얻으려면 사건 상태를 DB(agent_incident)에서 되살려야 합니다.\n");
-        sb.append("- 판단(기본값을 무엇으로 할지)과 ADR-016 보강 문장은 사람 몫입니다.\n");
+        sb.append("- 장애 복구: 재시작 복구는 전달 방식과 무관하게 DB 사건 기록(agent_incident.checkpoint_json)으로 합니다 (2026-11-23, 결정 C). 앱이 다시 켜지면 끝나지 않은 사건을 되살려 멈춘 단계의 요청을 다시 보내고, 이미 끝난 일은 다시 하지 않습니다. Kafka 는 기본값으로 유지합니다: 에이전트를 다른 프로세스로 떼어 낼 때의 토픽 계약과, 프로세스가 나뉘었을 때 보낸 이벤트를 잃지 않는 전달(최소 한 번)을 위해서입니다.\n");
+        sb.append("- 판단 기록: ADR-016 '3단계: 전달 방식과 재시작 복구'.\n");
         return sb.toString();
     }
 

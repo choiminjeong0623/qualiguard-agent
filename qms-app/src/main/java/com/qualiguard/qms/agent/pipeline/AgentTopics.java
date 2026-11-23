@@ -21,6 +21,8 @@ public final class AgentTopics {
     public static final String ACTION_REQUESTED = "agent.action.requested";
     public static final String REPORT_REQUESTED = "agent.report.requested";
     public static final String REPORT_COMPLETED = "agent.report.completed";
+    /** 토픽이 아니라 사건 이력의 표시: 앱 재시작 뒤 DB 기록에서 되살려 이어 감 (로드맵 A2) */
+    public static final String RESUMED = "agent.incident.resumed";
 
     public static final List<String> ALL = List.of(TRIAGED, ANALYSIS_REQUESTED, ANALYSIS_COMPLETED,
             VERIFICATION_REQUESTED, VERIFICATION_COMPLETED, REPORT_REQUESTED, REPORT_COMPLETED, ACTION_REQUESTED);

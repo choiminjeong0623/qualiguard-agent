@@ -365,8 +365,7 @@ MQTT → 브리지 → Kafka → Kafka Streams 전체 경로에서 같은 시나
 `./gradlew transportBench` (먼저 `docker compose up -d kafka kafka-init`): LLM 을 즉시 답하는 가짜로 바꾸고 사건 200건을 direct 와 Kafka 로 각각 돌려 **전달 비용만** 잽니다. 결과는 [eval/transport_report.md](../eval/transport_report.md).
 
 - 클라우드 컨테이너(Linux amd64, CPU 4개) 1회 측정: direct P50 0.43 ms, Kafka P50 47.9 ms / P95 56.6 ms. 사건당 약 48 ms 를 더하지만 분석 1단계(LLM, 평균 40초 이상)에 비하면 0.1% 수준입니다. 맥에서 다시 재면 파일이 덮어써집니다.
-- 장애 복구는 지금 구조에서 Kafka 도 이점이 없습니다. 사건 상태가 메모리(`IncidentStore`)에 있어 재시작 뒤 남은 이벤트는 버려집니다. 복구까지 얻으려면 사건 상태를 `agent_incident` 에서 되살리는 작업이 필요합니다.
-- 기본값(`qg.agent.pipeline.transport`)을 무엇으로 둘지, ADR-016 보강 문장은 민정님 판단입니다.
+- **판단 (2026-11-23, 결정 C)**: Kafka 를 기본값으로 유지하고, 재시작 복구를 따로 만들었습니다. 복구는 전달 방식과 무관하게 **DB 사건 기록**(`agent_incident.checkpoint_json`)으로 합니다. 앱이 다시 켜지면 끝나지 않은 사건을 되살려 멈춘 단계부터 이어 가고, 이미 끝난 분석·검증·작성은 다시 하지 않습니다(LLM 재호출 없음). 상태 기계 시험은 `IncidentRecoveryTest`, DB 왕복은 컨테이너 시험. 자세한 이유는 [ADR-016](decisions/ADR-016-multi-agent-pipeline.md) 3단계.
 
 ### A/B 실험 한 줄 실행 (로드맵 A1·F4)
 

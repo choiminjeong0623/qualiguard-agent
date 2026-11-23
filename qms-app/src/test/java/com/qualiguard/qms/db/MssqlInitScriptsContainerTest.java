@@ -35,6 +35,9 @@ import org.testcontainers.utility.MountableFile;
 
 import com.qualiguard.qms.agent.IncidentAnalyzer;
 import com.qualiguard.qms.agent.TokenBudget;
+import com.qualiguard.qms.agent.pipeline.AgentMetrics;
+import com.qualiguard.qms.agent.pipeline.Incident;
+import com.qualiguard.qms.agent.pipeline.IncidentStore;
 import com.qualiguard.qms.ncr.NcrReviewService;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -315,6 +318,54 @@ class MssqlInitScriptsContainerTest {
                     List.of(Map.of("shot_no", 300L)), List.of("a-2"), true, Map.of(),
                     "2026-11-23T12:30:00+09:00", 300L, null, null, null, null);
             assertThat(IncidentAnalyzer.affectedLots(jdbc, single)).isEqualTo("L261123-IMM-02-02");
+        }
+    }
+
+    @Test
+    void 재시작_뒤_끝나지_않은_사건을_기록에서_되살린다() throws Exception {
+        String checkpoint = """
+                {"v":1,"job":{"trigger":"ALARM","equipmentId":"IMM-01","seedAnomalyId":"a-r1",
+                 "seedTs":"2026-11-23T10:00:00+09:00","alarms":[{"shot_no":300,"rule_code":"XBAR"}],
+                 "anomalyIds":["a-r1"],"ownsAlarmStatus":true,"seedEvidence":{},"asOf":"2026-11-23T10:00:00+09:00",
+                 "asOfShot":300,"previousBefore":null,"parentId":null,"tag":null,"recheckInfo":null},
+                 "triage":{"severity":"HIGH","type":"QUALITY_IMPACT","alarms":1,"sensors":["barrelTemp"],"reason":"r"},
+                 "state":"VERIFYING","elapsedMs":4200,"attempts":1,"basePrompt":"p","prompt":"p",
+                 "result":{"decision":"NCR_DRAFT","causeCode":"HEATER_DEGRADATION","confidence":80,"title":"t",
+                   "phenomenon":"현상","suspectedCause":"추정","evidence":["온도 224.1"],"similarCases":[],
+                   "recommendedAction":"점검","reasoningSummary":"요약","watchItems":[],"candidateCauses":[]},
+                 "error":null,"verification":null,"verifiedAttempt":0,"written":null,"report":null,
+                 "lastAttemptTrace":["getSpcSummary(IMM-01) @1ms"],"observed":["224.1"],
+                 "trace":["getSpcSummary(IMM-01) @1ms"],
+                 "timeline":[{"atMs":0,"topic":"agent.incident.triaged","state":"TRIAGED"},
+                             {"atMs":10,"topic":"agent.incident.triaged","state":"ANALYZING"},
+                             {"atMs":4100,"topic":"agent.analysis.completed","state":"VERIFYING"}]}
+                """;
+        try (Connection c = connect(); Statement st = c.createStatement()) {
+            try (PreparedStatement ps = c.prepareStatement("INSERT INTO dbo.agent_incident "
+                    + "(incident_id, equipment_id, trigger_type, state, checkpoint_json) VALUES (?, 'IMM-01', 'ALARM', ?, ?)")) {
+                ps.setString(1, "it-resume-1");
+                ps.setString(2, "VERIFYING");
+                ps.setString(3, checkpoint);
+                ps.executeUpdate();
+                ps.setString(1, "it-resume-old");   // 이 기능 전의 사건: 기록 없음 → 실패로 닫힘
+                ps.setString(2, "ANALYZING");
+                ps.setString(3, null);
+                ps.executeUpdate();
+                ps.setString(1, "it-resume-done");  // 끝난 사건은 대상 아님
+                ps.setString(2, "AWAITING_APPROVAL");
+                ps.setString(3, checkpoint);
+                ps.executeUpdate();
+            }
+            var store = new IncidentStore(new JdbcTemplate(new SingleConnectionDataSource(c, true)),
+                    AgentMetrics.none(), JsonMapper.builder().build());
+            List<Incident> restored = store.restore();
+            assertThat(restored).extracting(Incident::id).containsExactly("it-resume-1");
+            assertThat(restored.get(0).state()).isEqualTo(Incident.State.VERIFYING);
+            assertThat(store.inFlight()).hasSize(1);
+            try (ResultSet rs = st.executeQuery("SELECT state FROM dbo.agent_incident WHERE incident_id = 'it-resume-old'")) {
+                rs.next();
+                assertThat(rs.getString(1)).isEqualTo("FAILED");
+            }
         }
     }
 

@@ -29,7 +29,15 @@ public class AnalysisAgent {
     void onRequested(AgentEvent e) {
         Incident i = store.get(e.incidentId()).orElse(null);
         if (i == null) {
-            return;   // 재시작 전 사건 등: 오케스트레이터가 모르는 사건은 무시
+            return;   // 되살리지 못한 사건 등: 오케스트레이터가 모르는 사건은 무시
+        }
+        if (i.state != Incident.State.ANALYZING || e.attempt() != i.attempts) {
+            return;   // 지난 시도의 요청이 다시 온 경우 (Kafka 재전달·재시작 뒤 재발행)
+        }
+        if (i.result != null || i.error != null) {
+            // 이 시도는 이미 분석했다 (결과를 기록한 뒤 완료 이벤트를 보내기 전에 앱이 멈춘 경우): LLM 을 다시 부르지 않고 알리기만
+            bus.publish(AgentTopics.ANALYSIS_COMPLETED, new AgentEvent(i.id, e.attempt(), Map.of("replayed", true)));
+            return;
         }
         List<String> attemptTrace = Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> data = new LinkedHashMap<>();
@@ -47,6 +55,7 @@ public class AnalysisAgent {
             i.trace.addAll(attemptTrace);   // 실패해도 어디까지 조사했는지 남긴다
         }
         data.put("toolCalls", attemptTrace.size());
+        store.checkpoint(i);   // 분석 결과를 먼저 남기고 알린다 (재시작해도 LLM 을 다시 부르지 않게)
         bus.publish(AgentTopics.ANALYSIS_COMPLETED, new AgentEvent(i.id, e.attempt(), data));
     }
 

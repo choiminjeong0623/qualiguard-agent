@@ -41,7 +41,9 @@ public class KafkaEventBus implements EventBus {
     }
 
     // 에이전트마다 소비자 그룹 하나. concurrency 1: 같은 에이전트는 한 번에 사건 하나 (LLM·메모리 상한)
-    // earliest: 그룹이 처음 생길 때 파티션 배정 전에 보낸 이벤트를 놓치지 않게. 재시작 전 사건의 이벤트는 모르는 사건이라 무시된다
+    // earliest: 그룹이 처음 생길 때 파티션 배정 전에 보낸 이벤트를 놓치지 않게.
+    // 재시작 전 사건의 이벤트: 되살리기 전에 오면 모르는 사건이라 무시되지만, 복구가 그 단계의 요청을 다시 보낸다 (로드맵 A2).
+    // 되살린 뒤에 다시 오면 각 에이전트가 상태·시도 번호로 중복을 걸러 낸다.
 
     @KafkaListener(id = "qg-agent-orchestrator", groupId = "qg-agent-orchestrator",
             topics = { AgentTopics.TRIAGED, AgentTopics.ANALYSIS_COMPLETED, AgentTopics.VERIFICATION_COMPLETED,

@@ -1,12 +1,15 @@
 package com.qualiguard.qms.agent.pipeline;
 
 import java.time.Duration;
+import java.util.List;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.beans.factory.ObjectProvider;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,9 +35,36 @@ import tools.jackson.databind.ObjectMapper;
 public class PipelineConfig {
 
     @Bean
-    IncidentStore incidentStore(JdbcTemplate jdbc, ObjectProvider<MeterRegistry> registry) {
+    IncidentStore incidentStore(JdbcTemplate jdbc, ObjectProvider<MeterRegistry> registry, ObjectMapper objectMapper) {
         // 단계별 시간·결과 지표 (로드맵 O2). 지표 저장소가 없으면(일부 시험) 기록하지 않는다
-        return new IncidentStore(jdbc, new AgentMetrics(registry.getIfAvailable()));
+        // objectMapper: 단계마다 사건 기록(checkpoint_json)을 남겨 재시작 뒤 이어 간다 (로드맵 A2)
+        return new IncidentStore(jdbc, new AgentMetrics(registry.getIfAvailable()), objectMapper);
+    }
+
+    /**
+     * 재시작 복구 (로드맵 A2): 앱이 켜지면 끝나지 않은 사건을 DB 기록에서 되살려 멈춘 단계부터 이어 간다.
+     * 이어 가는 일(LLM 호출 포함)이 시작을 막지 않도록 별도 스레드에서 한다.
+     * qg.agent.pipeline.recover=false 면 하지 않는다 (그 사건들은 진행 중으로 남는다).
+     */
+    @Bean
+    ApplicationRunner incidentRecovery(IncidentStore store, IncidentOrchestrator orchestrator,
+            @Value("${qg.agent.pipeline.recover:true}") boolean enabled,
+            @Value("${qg.agent.pipeline.recover-max-age-minutes:1440}") long maxAgeMinutes) {
+        return args -> {
+            if (!enabled) {
+                return;
+            }
+            Thread t = new Thread(() -> {
+                List<Incident> restored = store.restore();
+                if (!restored.isEmpty()) {
+                    int resumed = orchestrator.resume(restored, maxAgeMinutes);
+                    LoggerFactory.getLogger(PipelineConfig.class)
+                            .info("[재시작 복구] 끝나지 않은 사건 {}건 중 {}건을 이어 감", restored.size(), resumed);
+                }
+            }, "qg-incident-recovery");
+            t.setDaemon(true);
+            t.start();
+        };
     }
 
     @Bean
