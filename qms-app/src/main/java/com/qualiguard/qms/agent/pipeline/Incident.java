@@ -64,6 +64,19 @@ public final class Incident {
         return (System.nanoTime() - startNanos) / 1_000_000;
     }
 
+    /** 방금 끝난 단계(마지막에서 두 번째 기록)의 상태와 머문 시간. 기록이 2개 미만이면 null. */
+    Object[] lastStage() {
+        synchronized (timeline) {
+            int n = timeline.size();
+            if (n < 2) {
+                return null;
+            }
+            Map<String, Object> prev = timeline.get(n - 2);
+            Map<String, Object> last = timeline.get(n - 1);
+            return new Object[] {prev.get("state"), (Long) last.get("atMs") - (Long) prev.get("atMs")};
+        }
+    }
+
     void mark(String topic, State to, String detail) {
         state = to;
         Map<String, Object> m = new LinkedHashMap<>();

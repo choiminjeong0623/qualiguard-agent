@@ -189,7 +189,10 @@ uv run qg-simulator --interval 0.05      # 설비 2대 × 2,000 shot, 고장 시
 docker exec qg-kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 --topic quality.anomaly --from-beginning \
   --max-messages 3 --property print.key=true
-curl -s "localhost:8080/actuator/metrics/qg.bridge.messages?tag=result:published"
+TOKEN=$(grep QG_AGENT_API_TOKEN .env | cut -d= -f2)      # /actuator/metrics 는 토큰 필요 (Q2)
+curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.bridge.messages?tag=result:published"
+curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.agent.stage?tag=stage:ANALYZING"  # 단계별 시간 P50·P95 (O2)
+curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/actuator/metrics/qg.agent.result"                     # 사건 결과 수 (O2)
 ./scripts/sql.sh "EXEC dbo.usp_GetDefectSummary 'IMM-01', 2000, 200"
 
 # 5) 원인 분석 에이전트 평가 (사례마다 LLM 호출)
