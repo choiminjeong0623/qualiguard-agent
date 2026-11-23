@@ -19,6 +19,7 @@
     python3 scripts/evaluate_agent.py --runs 3                # 반복 안정성: 같은 사례를 3번
     python3 scripts/evaluate_agent.py --runs 3 --hide-matching-ncr
         # 지식저장소 제거 실험: 정답과 원인이 같은 승인·조치 완료 사례를 잠시 숨기고 실행 (끝나면 원래 상태로 복구)
+    python3 scripts/evaluate_agent.py --label prefetch          # 결과 폴더 이름에 실험 이름을 붙임 (A/B 비교: scripts/ab_eval.sh)
     python3 scripts/evaluate_agent.py --runs 5 --hide-matching-ncr --hide-maintenance
         # "처음 보는 고장" 실험: 과거 사례와 정비 이력(교체 주기·단서)까지 숨김 (끝나면 복구)
 
@@ -409,6 +410,8 @@ def main():
                     help="정답과 같은 원인의 과거 부적합 사례를 숨기고 실행 (끝나면 복구)")
     ap.add_argument("--hide-maintenance", action="store_true",
                     help="정비 이력까지 숨기고 실행 — '처음 보는 고장' 실험 (끝나면 복구)")
+    ap.add_argument("--label", default="",
+                    help="결과 폴더·파일 이름에 붙일 실험 이름 (예: prefetch, novector). scripts/ab_eval.sh 가 씀")
     args = ap.parse_args()
     if args.hide_matching_ncr and args.hide_maintenance:
         mode = "novel"
@@ -416,6 +419,10 @@ def main():
         mode = "nomaint"
     else:
         mode = "hidden" if args.hide_matching_ncr else "base"
+    if args.label:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", args.label):
+            sys.exit("--label 은 영문·숫자·-·_ 만 쓸 수 있습니다")
+        mode = f"{mode}-{args.label}"
 
     gt = load_ground_truth()
     cfg = http("GET", "/config")

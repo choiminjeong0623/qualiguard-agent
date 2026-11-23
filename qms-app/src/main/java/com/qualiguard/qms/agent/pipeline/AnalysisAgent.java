@@ -34,7 +34,7 @@ public class AnalysisAgent {
         List<String> attemptTrace = Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> data = new LinkedHashMap<>();
         try {
-            AnalysisResult r = analyzer.analyzeOnce(i.prompt, i.job.asOf(), i.startNanos, attemptTrace, i.observed);
+            AnalysisResult r = analyzer.analyzeOnce(i.job, i.prompt, i.startNanos, attemptTrace, i.observed);
             i.result = r;
             data.put("decision", r.decision());
             data.put("causeCode", r.causeCode());
