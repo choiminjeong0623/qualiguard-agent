@@ -63,5 +63,27 @@ grep -q "own2-$RUN" "$dsub" && r=bad || r=ok
 check "장비 계정은 구독 불가" $r
 rm -f "$out" "$dsub"
 
+# TLS (로드맵 Q5): scripts/mqtt_tls.sh 로 인증서를 만든 경우에만
+CA=infra/mosquitto/certs/ca.crt
+if [ -f "$CA" ]; then
+  echo "[TLS 8883] Q5"
+  TLS_PORT=${MQTT_TLS_PORT:-8883}
+  if command -v mosquitto_pub >/dev/null 2>&1; then
+    tpub() { mosquitto_pub -h localhost -p "$TLS_PORT" -V 5 "$@"; }
+    CA_ARG=$CA; SYS_CA=/etc/ssl/certs
+  else
+    tpub() { docker exec qg-mosquitto mosquitto_pub -h localhost -p 8883 -V 5 "$@"; }
+    CA_ARG=/mosquitto/certs/ca.crt; SYS_CA=/etc/ssl/certs
+  fi
+  tpub --cafile "$CA_ARG" -i "tls-d1-$RUN" -u "$D1" -P "$D1_PW" -t "$T1" -m "tls-$RUN" -q 1 >/dev/null 2>&1 && r=ok || r=bad
+  check "CA 를 믿는 장비는 TLS 로 발행 가능" $r
+  tpub --cafile "$CA_ARG" -i "tls-anon-$RUN" -t "$T1" -m x -q 1 >/dev/null 2>&1 && r=bad || r=ok
+  check "TLS 에서도 계정 없는 접속은 거부" $r
+  tpub --capath "$SYS_CA" -i "tls-noca-$RUN" -u "$D1" -P "$D1_PW" -t "$T1" -m x -q 1 >/dev/null 2>&1 && r=bad || r=ok
+  check "개발 CA 를 모르는 클라이언트는 인증서 검증에서 거부" $r
+else
+  echo "[TLS 8883] 건너뜀: 인증서 없음 (./scripts/mqtt_tls.sh)"
+fi
+
 [ $fail = 0 ] && echo "모두 통과" || echo "실패한 항목이 있습니다"
 exit $fail

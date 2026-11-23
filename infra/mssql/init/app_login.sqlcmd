@@ -1,0 +1,33 @@
+-- 앱 전용 DB 계정 (로드맵 Q5). sa 대신 이 계정으로 앱이 접속한다.
+--
+-- 번호 스크립트(*.sql)를 모두 실행한 뒤, .env 에 QG_DB_USERNAME(sa 아님)·QG_DB_PASSWORD 가 있을 때만 mssql-init 이 실행한다:
+--   sqlcmd ... -v QG_DB_APP_USER=<QG_DB_USERNAME> QG_DB_APP_PASSWORD=<QG_DB_PASSWORD> -i /init/app_login.sqlcmd
+-- 확장자가 .sql 이 아니라서 번호 순 반복에는 끼지 않는다.
+--
+-- 권한: 표 읽기·쓰기(db_datareader·db_datawriter) + dbo 프로시저 실행(EXECUTE).
+-- 표·프로시저를 만들거나 바꾸는 권한(DDL)은 없다. 스키마 변경은 지금처럼 sa 로 mssql-init 이 한다.
+-- 다시 실행하면 비밀번호만 .env 값으로 맞춘다 (비밀번호를 바꾼 뒤 docker compose up mssql-init).
+SET NOCOUNT ON;
+USE master;
+
+IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'$(QG_DB_APP_USER)')
+BEGIN
+    CREATE LOGIN [$(QG_DB_APP_USER)] WITH PASSWORD = N'$(QG_DB_APP_PASSWORD)',
+        DEFAULT_DATABASE = QUALIGUARD, CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+    PRINT N'로그인 생성: $(QG_DB_APP_USER)';
+END
+ELSE
+BEGIN
+    ALTER LOGIN [$(QG_DB_APP_USER)] WITH PASSWORD = N'$(QG_DB_APP_PASSWORD)';
+    PRINT N'로그인 비밀번호 갱신: $(QG_DB_APP_USER)';
+END
+GO
+
+USE QUALIGUARD;
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'$(QG_DB_APP_USER)')
+    CREATE USER [$(QG_DB_APP_USER)] FOR LOGIN [$(QG_DB_APP_USER)] WITH DEFAULT_SCHEMA = dbo;
+ALTER ROLE db_datareader ADD MEMBER [$(QG_DB_APP_USER)];
+ALTER ROLE db_datawriter ADD MEMBER [$(QG_DB_APP_USER)];
+GRANT EXECUTE ON SCHEMA::dbo TO [$(QG_DB_APP_USER)];
+PRINT N'권한: 읽기·쓰기·dbo 프로시저 실행 (DDL 없음)';
+GO

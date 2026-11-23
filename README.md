@@ -150,7 +150,7 @@ flowchart LR
 |---|---|
 | `simulator/` | 사출성형 라인 센서 시뮬레이터 (고장 시나리오 4종, 평가용 정답 기록) |
 | `qms-app/` | Spring Boot 4 애플리케이션 — `bridge/`(MQTT→Kafka), `quality/`(SPC 이상 탐지), `store/`(DB 적재), `agent/`(원인 분석·검증 에이전트, `pipeline/` 분류·오케스트레이터·작성·Kafka 연결), `ncr/`(QMS 검토 API), `integration/`(아웃박스 발행·가상 MES/ERP), `resources/static/qms/`(검토 화면) |
-| `scripts/` | `mqtt_users.sh`·`test_mqtt_acl.sh`(MQTT 계정·권한 시험), `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가), `fetch_secom.sh`(공개 데이터 SECOM 받기) |
+| `scripts/` | `mqtt_users.sh`·`mqtt_tls.sh`·`test_mqtt_acl.sh`(MQTT 계정·TLS·권한 시험), `sql.sh`(쿼리 실행), `check_gemini.sh`(LLM 연결 점검), `evaluate_agent.py`(에이전트 평가), `fetch_secom.sh`(공개 데이터 SECOM 받기) |
 | `infra/` | Mosquitto 설정, SQL Server 초기화 스크립트(스키마·기준 데이터·저장 프로시저) |
 | `docs/` | 문제 정의, 아키텍처, 의사결정 기록(ADR), 장애 분석, 평가 결과 |
 | `docker-compose.yml` | Mosquitto, Kafka(+토픽 생성), SQL Server(+DB 생성), Kafka UI(선택) |
@@ -166,8 +166,12 @@ flowchart LR
 cp .env.example .env                     # MSSQL_SA_PASSWORD, GEMINI_API_KEY, QMS 화면 계정(QG_REVIEWER_PASSWORD 등) 입력
 ./scripts/mqtt_users.sh                  # MQTT 장비·브리지 계정 만들기 (비밀번호는 .env 에 자동 생성, ADR-015)
 echo "QG_AGENT_API_TOKEN=$(openssl rand -hex 32)" >> .env   # 에이전트 API·MCP 토큰 (평가 스크립트가 .env 에서 읽음)
+# (선택, Q5) 앱 전용 DB 계정: sa 대신 읽기·쓰기·프로시저 실행만 되는 계정으로 앱이 접속 (mssql-init 이 만듦)
+printf 'QG_DB_USERNAME=qg_app\nQG_DB_PASSWORD=%s\n' "Qg-$(openssl rand -hex 12)!" >> .env
+# (선택, Q5) MQTT TLS 8883: 개발용 CA·인증서 생성 → 앱·시뮬레이터를 TLS 로
+./scripts/mqtt_tls.sh && printf 'QG_MQTT_URL=ssl://localhost:8883\nMQTT_TLS_CA=infra/mosquitto/certs/ca.crt\n' >> .env
 docker compose up -d                     # Mosquitto, Kafka, SQL Server
-./scripts/test_mqtt_acl.sh               # (선택) 익명 거부·토픽 권한 시험 6항목
+./scripts/test_mqtt_acl.sh               # (선택) 익명 거부·토픽 권한 시험 6항목 (+ 인증서가 있으면 TLS 3항목)
 docker compose ps -a                     # kafka-init, mssql-init 은 Exited (0) 이 정상
 
 # 2) 애플리케이션 (브리지 + 이상 탐지)

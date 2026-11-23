@@ -50,6 +50,19 @@ def load_dotenv(path: Path) -> dict:
     return out
 
 
+def tls_ca_path(env: dict) -> Path | None:
+    """MQTT TLS CA 인증서 (로드맵 Q5): .env 의 MQTT_TLS_CA. 상대 경로는 저장소 루트 기준. 없으면 평문(1883)."""
+    v = (env.get("MQTT_TLS_CA") or "").strip()
+    if not v:
+        return None
+    p = Path(v)
+    if not p.is_absolute():
+        p = Path(__file__).resolve().parent.parent.parent / p
+    if not p.is_file():
+        raise SystemExit(f"MQTT_TLS_CA 파일이 없습니다: {p} (./scripts/mqtt_tls.sh 로 만드세요)")
+    return p
+
+
 def device_password(env: dict, equipment_id: str) -> str | None:
     """장비 계정 비밀번호 (N-07): MQTT_DEVICE_PASSWORD_IMM_01 처럼 설비 ID 의 '-' 를 '_' 로."""
     return env.get("MQTT_DEVICE_PASSWORD_" + equipment_id.replace("-", "_")) or None
@@ -227,7 +240,12 @@ def main() -> None:
             c.on_connect = on_connect
             c.on_disconnect = on_disconnect
             c.reconnect_delay_set(min_delay=1, max_delay=30)
-            c.connect(mqtt_cfg.get("host", "localhost"), mqtt_cfg.get("port", 1883), keepalive=30)
+            port = mqtt_cfg.get("port", 1883)
+            ca = tls_ca_path(env)
+            if ca:   # TLS (로드맵 Q5): scripts/mqtt_tls.sh 가 만든 CA 만 믿고 8883 으로
+                c.tls_set(ca_certs=str(ca))
+                port = mqtt_cfg.get("tls_port", 8883)
+            c.connect(mqtt_cfg.get("host", "localhost"), port, keepalive=30)
             c.loop_start()
             clients[m.equipment_id] = c
 

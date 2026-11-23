@@ -2,6 +2,7 @@
 mqtt:
   host: localhost
   port: 1883
+  tls_port: 8883                          # .env 에 MQTT_TLS_CA 가 있으면 TLS 로 이 포트에 접속 (로드맵 Q5)
   qos: 1                                  # 최소 1회 전달 (중복 가능 → 수신 측에서 messageId로 멱등 처리)
   topic: "factory/{line}/{equipment}/telemetry"
   client_id: qg-simulator
