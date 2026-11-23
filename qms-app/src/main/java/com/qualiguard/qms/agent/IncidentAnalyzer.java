@@ -20,6 +20,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.google.genai.metadata.GoogleGenAiUsage;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -143,12 +144,23 @@ public class IncidentAnalyzer {
     private final ObjectProvider<ChatClient.Builder> chatClientBuilder;
     private final String model;
     private final NcrEmbeddingService embeddings;
+    private final LlmCallPolicy llm;
     private volatile ChatClient chatClient;
 
+    /** 시험용: LLM 호출 보호는 기본값(90초, 재시도 1회). */
+    public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
+            AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder, String model,
+            NcrEmbeddingService embeddings) {
+        this(jdbc, objectMapper, tx, props, chatClientBuilder, model, embeddings,
+                new LlmCallPolicy(LlmCallPolicy.Settings.defaults()));
+    }
+
+    @Autowired
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
             AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder,
             @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model,
-            NcrEmbeddingService embeddings) {
+            NcrEmbeddingService embeddings, LlmCallPolicy llm) {
+        this.llm = llm;
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.tx = tx;
@@ -489,23 +501,24 @@ public class IncidentAnalyzer {
             ToolObservations observed) {
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
-        ChatResponse response = chatClient().prompt()
+        // 시간 제한·일시 장애 재시도 (로드맵 O4). 재시도하면 조사(도구 호출)를 처음부터 다시 한다
+        ChatResponse response = llm.call("analysis", () -> chatClient().prompt()
                 .system(AgentPrompts.SYSTEM)
                 .user(userPrompt)
                 .tools(new QualityTools(jdbc, trace, asOf, t0, embeddings::queryVector, observed))
                 .call()
-                .chatResponse();
+                .chatResponse(), trace);
         trace.add(Tokens.of(response).traceLine());
         String text = allText(response);
         AnalysisResult parsed = parseResult(text);
         if (parsed == null) {
             // 형식만 다시 요청 (도구 없이 1회 — 조사를 반복하지 않으므로 비용이 적다)
             trace.add("repairJsonFormat()");
-            ChatResponse repairResponse = chatClient().prompt()
+            ChatResponse repairResponse = llm.call("repair", () -> chatClient().prompt()
                     .system(AgentPrompts.REPAIR)
                     .user(text)
                     .call()
-                    .chatResponse();
+                    .chatResponse(), trace);
             trace.add(Tokens.of(repairResponse).traceLine());
             String repaired = allText(repairResponse);
             parsed = parseResult(repaired);
