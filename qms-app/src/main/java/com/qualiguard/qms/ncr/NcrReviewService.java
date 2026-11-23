@@ -121,6 +121,9 @@ public class NcrReviewService {
                 JOIN dbo.integration_outbox AS o ON o.event_id = s.event_id
                 WHERE o.ncr_id = ? ORDER BY o.created_at, s.system_name
                 """, ncrId));
+        List<?> anomalies = (List<?>) out.get("anomalies");
+        // 필수 항목 충족 검사 (로드맵 P2)
+        out.put("completeness", NcrCompleteness.check(ncr, anomalies.size()).toMap());
         out.put("history", jdbc.queryForList("""
                 SELECT action, actor, from_status, to_status, changes_json, comment,
                        CONVERT(VARCHAR(33), created_at, 127) AS created_at
@@ -253,6 +256,28 @@ public class NcrReviewService {
         Integer pending = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM dbo.ncr WHERE created_by = 'AGENT' AND status = 'DRAFT'", Integer.class);
         return ReviewStats.compute(ncrs, pending == null ? 0 : pending, objectMapper);
+    }
+
+    /**
+     * 필수 항목 충족 현황 (로드맵 P2): AI 가 만든 보고서 전체를 항목별로 검사해 충족률을 낸다.
+     * 기준은 NcrCompleteness.ITEMS.
+     */
+    public Map<String, Object> completenessStats() {
+        Map<Object, Integer> anomalyCounts = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT x.ncr_id, COUNT(*) FROM dbo.ncr_anomaly AS x JOIN dbo.ncr AS n ON n.ncr_id = x.ncr_id
+                WHERE n.created_by = 'AGENT' GROUP BY x.ncr_id
+                """, rs -> {
+            anomalyCounts.put(rs.getInt(1), rs.getInt(2));
+        });
+        List<NcrCompleteness.Result> results = jdbc.queryForList("""
+                SELECT ncr_id, title, phenomenon, suspected_cause, root_cause, evidence, recommended_action,
+                       cause_code, defect_type, related_sensors
+                FROM dbo.ncr WHERE created_by = 'AGENT' ORDER BY ncr_id
+                """).stream()
+                .map(r -> NcrCompleteness.check(r, anomalyCounts.getOrDefault(r.get("ncr_id"), 0)))
+                .toList();
+        return NcrCompleteness.summarize(results);
     }
 
     // ── 보조 ─────────────────────────────────────────────────────────

@@ -74,6 +74,12 @@ public class NcrController {
         return service.reviewStats();
     }
 
+    /** 필수 항목 충족 현황: AI 보고서의 항목별 충족률 (로드맵 P2) */
+    @GetMapping("/ncrs/completeness")
+    public Map<String, Object> completeness() {
+        return service.completenessStats();
+    }
+
     @GetMapping("/ncrs/{ncrNo}")
     public Map<String, Object> detail(@PathVariable String ncrNo) {
         return service.detail(ncrNo);

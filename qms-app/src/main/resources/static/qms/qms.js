@@ -103,6 +103,11 @@
     if (d.confidence != null) { meta.push(['확신도', d.confidence]); }
     if (d.reviewed_by) { meta.push([(STATUS_LABEL[d.status] || '검토') + '자', d.reviewed_by + ' · ' + time(d.reviewed_at)]); }
     if (d.review_comment) { meta.push(['의견', d.review_comment]); }
+    // 필수 항목 충족 (로드맵 P2): 빠진 항목을 승인 전에 보여 준다
+    if (d.completeness) {
+      var c = d.completeness;
+      meta.push(['필수 항목', c.passed + '/' + c.total + (c.missing.length ? ' · 빠짐: ' + c.missing.join(', ') : ' · 모두 충족')]);
+    }
     $('#d-meta').html(meta.map(function (m) { return '<div><dt>' + esc(m[0]) + '</dt><dd>' + esc(m[1]) + '</dd></div>'; }).join(''));
 
     var $f = $('#edit-form');
@@ -318,6 +323,11 @@
         var pct = function (x) { return x == null ? '-' : Math.round(x * 100) + '%'; };
         $('#kb').text($('#kb').text() + ' · AI 초안 ' + s.decided + '건 중 그대로 승인 ' + pct(s.asIsRate)
           + ', 반려 ' + pct(s.rejectionRate));
+      });
+      // 필수 항목 충족 (로드맵 P2): AI 보고서 가운데 모든 항목을 채운 비율
+      $.getJSON(API + '/completeness').done(function (c) {
+        if (!c.count) { return; }
+        $('#kb').text($('#kb').text() + ' · 필수 항목 모두 충족 ' + Math.round(c.completeRate * 100) + '%');
       });
     });
   }

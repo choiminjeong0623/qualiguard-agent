@@ -222,6 +222,24 @@ class MssqlInitScriptsContainerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void 필수_항목_검사가_상세와_집계에_붙는다() throws Exception {
+        try (Connection c = connect()) {
+            var service = new NcrReviewService(new JdbcTemplate(new SingleConnectionDataSource(c, true)),
+                    JsonMapper.builder().build());
+            insertDraft(c, "IT-P2-01", null, "UNKNOWN");   // 원인·근거·조치·센서·불량유형·경보 없음
+            @SuppressWarnings("unchecked")
+            Map<String, Object> comp = (Map<String, Object>) service.detail("IT-P2-01").get("completeness");
+            assertThat(comp).containsEntry("total", 9);
+            assertThat((List<Object>) comp.get("missing")).contains("원인 코드", "근거", "영향 범위");
+
+            Map<String, Object> stats = service.completenessStats();
+            assertThat((int) stats.get("count")).isPositive();
+            assertThat(stats.get("items")).isInstanceOf(Map.class);
+        }
+    }
+
+    @Test
     void 운영_리포트_SQL_이_돌고_지연_P95_와_되돌림율을_낸다() throws Exception {
         String tag = "it-ops";
         try (Connection c = connect()) {
