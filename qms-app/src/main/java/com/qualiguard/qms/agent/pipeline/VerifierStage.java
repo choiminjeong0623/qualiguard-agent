@@ -28,18 +28,26 @@ public class VerifierStage {
 
     void onRequested(AgentEvent e) {
         Incident i = store.get(e.incidentId()).orElse(null);
-        if (i == null || i.result == null) {
+        if (i == null || i.result == null || i.state != Incident.State.VERIFYING || e.attempt() != i.attempts) {
+            return;   // 모르는 사건이거나 지난 시도의 요청이 다시 온 경우
+        }
+        if (i.verifiedAttempt == e.attempt() && i.verification != null) {
+            // 이미 검증했다 (재시작 뒤 다시 온 요청): 다시 알리기만
+            bus.publish(AgentTopics.VERIFICATION_COMPLETED, new AgentEvent(i.id, e.attempt(),
+                    Map.of("status", i.verification.status(), "replayed", true)));
             return;
         }
         VerifierAgent.Verification v = verifier.verify(
                 analyzer.verifyInput(i.job, i.result, i.lastAttemptTrace, i.observed));
         i.verification = v;
+        i.verifiedAttempt = e.attempt();
         i.trace.add("verify#" + e.attempt() + "(" + v.status() + ") @" + i.elapsedMs() + "ms");
         v.fails().forEach(f -> i.trace.add("  ↳ 지적: " + f));
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("status", v.status());
         data.put("fails", v.fails());
         data.put("warns", v.warns());
+        store.checkpoint(i);
         bus.publish(AgentTopics.VERIFICATION_COMPLETED, new AgentEvent(i.id, e.attempt(), data));
     }
 }

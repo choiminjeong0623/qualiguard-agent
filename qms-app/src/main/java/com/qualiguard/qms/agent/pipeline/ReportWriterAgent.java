@@ -73,7 +73,12 @@ public class ReportWriterAgent {
 
     void onRequested(AgentEvent e) {
         Incident i = store.get(e.incidentId()).orElse(null);
-        if (i == null || i.result == null) {
+        if (i == null || i.result == null || i.state != Incident.State.WRITING) {
+            return;   // 모르는 사건이거나 이미 작성 단계를 지난 사건
+        }
+        if (i.report != null) {
+            // 이미 작성했다 (재시작 뒤 다시 온 요청): 다시 알리기만
+            bus.publish(AgentTopics.REPORT_COMPLETED, new AgentEvent(i.id, e.attempt(), i.report));
             return;
         }
         long t0 = System.nanoTime();
@@ -120,6 +125,7 @@ public class ReportWriterAgent {
         i.written = written;
         i.report = report;
         i.trace.add("writeReport(" + used + ") @" + i.elapsedMs() + "ms");
+        store.checkpoint(i);
         bus.publish(AgentTopics.REPORT_COMPLETED, new AgentEvent(i.id, e.attempt(), report));
     }
 
