@@ -90,6 +90,15 @@ tasks.register('secomValidation', JavaExec) {
 	args = ['../data/secom']
 	jvmArgs = ['-Xmx384m']
 }
+tasks.register('secomT2', JavaExec) {
+	group = 'verification'
+	description = 'UCI SECOM 에 PCA 기반 Hotelling T²·SPE 를 적용해 data/secom/secom_t2_report.md 에 남긴다 (로드맵 A4)'
+	dependsOn 'testClasses'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.qualiguard.qms.quality.SecomT2'
+	args = ['../data/secom']
+	jvmArgs = ['-Xmx512m']
+}
 
 // 이상 탐지 평가 (로드맵 E2): 시뮬레이터로 seed 5개 파일을 만들고 같은 SPC 엔진으로 재생해 채점한다
 tasks.register('detectionData', Exec) {
