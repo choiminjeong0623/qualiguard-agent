@@ -41,6 +41,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.integration:spring-integration-test'
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'   // 컨테이너 통합 시험 (로드맵 Q3)
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -50,6 +51,20 @@ tasks.named('test') {
 		if (System.getenv('CI') == 'true') {
 			excludeTags 'integration'
 		}
+		// Docker 컨테이너를 띄우는 시험은 containerTest 로 따로 돌린다 (로드맵 Q3)
+		excludeTags 'container'
+	}
+}
+
+// 컨테이너 통합 시험 (로드맵 Q3): 실제 SQL Server 2025 컨테이너에 init 스크립트 전부 적용 → 승인 프로시저·아웃박스 확인
+tasks.register('containerTest', Test) {
+	group = 'verification'
+	description = 'Docker 로 SQL Server 를 띄워 DB 초기화 스크립트와 승인 프로시저를 확인한다'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	inputs.dir('../infra/mssql/init')   // 스크립트가 바뀌면 다시 돈다 (Gradle 이 '변화 없음' 으로 건너뛰지 않게)
+	useJUnitPlatform {
+		includeTags 'container'
 	}
 }
 

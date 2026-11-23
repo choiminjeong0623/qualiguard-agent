@@ -1,5 +1,6 @@
 # CI: 인프라(Docker·SQL Server·Kafka)와 Gemini 키 없이 도는 테스트만 실행한다.
 # 인프라가 필요한 테스트는 @Tag("integration") 으로 표시하고, CI 환경(CI=true)에서는 제외한다.
+# Docker 만 있으면 되는 시험(@Tag("container"), Testcontainers)은 container 작업에서 따로 돈다.
 name: CI
 
 on:
@@ -34,6 +35,29 @@ jobs:
         with:
           name: qms-app-test-results
           path: qms-app/build/reports/tests/test
+
+  container:
+    # 로드맵 Q3: 실제 SQL Server 2025 컨테이너에 DB 초기화 스크립트를 전부 적용하고 승인 프로시저·아웃박스를 확인
+    name: qms-app (SQL Server 컨테이너 통합 시험)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: qms-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 컨테이너 통합 시험
+        run: ./gradlew containerTest --no-daemon
+      - name: 테스트 결과 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qms-app-container-test-results
+          path: qms-app/build/reports/tests/containerTest
 
   simulator:
     name: simulator (Python 3.12 pytest)
