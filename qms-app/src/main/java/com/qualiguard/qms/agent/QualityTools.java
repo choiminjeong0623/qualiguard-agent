@@ -31,6 +31,8 @@ public class QualityTools {
     private final Function<String, String> vectorizer;
     /** 도구가 돌려준 수치를 검증 에이전트가 대조할 수 있게 모아 둔다. null 이면 모으지 않는다 (MCP 등). */
     private final ToolObservations observations;
+    /** 분석 1회 안의 도구 호출 수 상한 (SopTools 와 함께 셈). */
+    private ToolCallLimit limit = ToolCallLimit.NONE;
 
     public QualityTools(JdbcTemplate jdbc, List<String> trace, String asOf) {
         this(jdbc, trace, asOf, System.nanoTime());
@@ -54,6 +56,12 @@ public class QualityTools {
         this.startNanos = startNanos;
         this.vectorizer = vectorizer;
         this.observations = observations;
+    }
+
+    /** 도구 호출 수 상한을 건다 (IncidentAnalyzer 의 도구 호출 분석). */
+    public QualityTools withLimit(ToolCallLimit limit) {
+        this.limit = limit == null ? ToolCallLimit.NONE : limit;
+        return this;
     }
 
     @Tool(description = "설비 센서의 최근 추이를 구간별 평균·최소·최대·표준편차·불량 수와 검사 규격(lsl/target/usl)으로 조회한다. "
@@ -120,6 +128,10 @@ public class QualityTools {
     }
 
     private List<Map<String, Object>> callTraced(String traceLine, String sql, Object... args) {
+        if (!limit.tryAcquire()) {
+            trace.add(traceLine + " @" + (System.nanoTime() - startNanos) / 1_000_000 + "ms");
+            return limit.rejected(trace, traceLine.substring(0, Math.max(0, traceLine.indexOf('('))));
+        }
         trace.add(traceLine + " @" + (System.nanoTime() - startNanos) / 1_000_000 + "ms");
         try {
             List<Map<String, Object>> rows = jdbc.queryForList(sql, args);

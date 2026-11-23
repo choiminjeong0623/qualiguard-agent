@@ -155,6 +155,9 @@ public class IncidentAnalyzer {
     private volatile ChatClient chatClient;
     /** 현장 표준 절차 검색 (null 이면 도구를 주지 않음) */
     private volatile SopLibrary sop;
+    /** 분석 1회 안의 도구 호출 수 상한 (가드레일 G-03). 0 이하이면 상한 없음. */
+    private volatile int maxToolCalls = DEFAULT_MAX_TOOL_CALLS;
+    static final int DEFAULT_MAX_TOOL_CALLS = 15;
 
     /** 시험용: LLM 호출 보호는 기본값(90초, 재시도 1회). */
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
@@ -191,6 +194,12 @@ public class IncidentAnalyzer {
     @Autowired(required = false)
     public void setSopLibrary(SopLibrary library, @Value("${qg.knowledge.sop.enabled:true}") boolean enabled) {
         this.sop = enabled ? library : null;
+    }
+
+    /** 분석 1회 안의 도구 호출 수 상한 (qg.agent.max-tool-calls, 0 이면 끔). */
+    @Autowired(required = false)
+    public void setMaxToolCalls(@Value("${qg.agent.max-tool-calls:" + DEFAULT_MAX_TOOL_CALLS + "}") int max) {
+        this.maxToolCalls = max;
     }
 
     /** 가장 오래된 미처리 경보 (같은 경보로 2번 실패했으면 건너뛴다). */
@@ -667,12 +676,15 @@ public class IncidentAnalyzer {
     /** tools 가 null 이면 도구 없이 1회 호출한다 (prefetch). */
     private AnalysisResult analyzeWith(String userPrompt, List<String> trace, QualityTools tools, long t0) {
         SopLibrary library = sop;
+        ToolCallLimit limit = new ToolCallLimit(maxToolCalls);
         Object[] toolObjects = tools == null ? null
-                : library == null ? new Object[] {tools} : new Object[] {tools, new SopTools(library, trace, t0)};
+                : library == null ? new Object[] {tools.withLimit(limit)}
+                : new Object[] {tools.withLimit(limit), new SopTools(library, trace, t0).withLimit(limit)};
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
         // 시간 제한·일시 장애 재시도 (로드맵 O4). 재시도하면 조사(도구 호출)를 처음부터 다시 한다
         ChatResponse response = llm.call("analysis", () -> {
+            limit.reset();   // 재시도는 조사를 처음부터 다시 하므로 상한도 처음부터 센다
             var spec = chatClient().prompt().system(AgentPrompts.SYSTEM).user(userPrompt);
             return (toolObjects == null ? spec : spec.tools(toolObjects)).call().chatResponse();
         }, trace);
