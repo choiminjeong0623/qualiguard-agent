@@ -13,3 +13,4 @@
 | [07](07-qms-static-cache.md) | QMS 화면을 고쳤는데 브라우저에 새 기능이 보이지 않음 | 브라우저가 예전 JS를 캐시 → 정적 파일 no-cache | [ADR-009](../decisions/ADR-009-qms-review-screen.md) |
 | [08](08-local-dev-environment.md) | 로컬 개발 환경에서 평가·검증을 돌리며 겪은 문제들 | 포트 점유, `gradlew clean`으로 Streams 상태 삭제, 테스트의 소비자 그룹 간섭, 로컬·원격 불일치, 작업 중단 | [ADR-006](../decisions/ADR-006-kafka-streams-state.md) |
 | [09](09-cold-start-schema-order.md) | 빈 DB 에서 처음 띄우면 DB 초기화가 04 에서 멈춤 | `mssql-init` Exited (1), 05~19 미실행 → `02_schema.sql` 로 `cause_code` 를 옮겨 해결 | 로드맵 F1 |
+| [10](10-llm-timeout-retry.md) | LLM 이 응답하지 않으면 분석이 끝없이 기다림, 503 한 번에 바로 실패 | 90초 시간 제한 + 일시 장애만 재시도(지수 백오프) + 끝내 실패하면 FAILED·경보 복구 | 로드맵 O4 |
