@@ -3,6 +3,7 @@
 #
 #   ./scripts/ab_eval.sh prefetch [회차=1]   # A1: 도구 호출 에이전트(tools) vs 도구 5개 미리 조회 + LLM 1회(prefetch)
 #   ./scripts/ab_eval.sh vector   [회차=1]   # F4: 유사 사례 의미 검색 켬 vs 끔(키워드 검색만)
+#   ./scripts/ab_eval.sh closed   [회차=1]   # 폐쇄망: Gemini vs Ollama 로컬 모델(프로파일 closed, QG_LOCAL_MODEL 기본 qwen2.5:7b)
 #   그 뒤 인자는 evaluate_agent.py 에 그대로 넘어감. 예: ./scripts/ab_eval.sh vector 3 --hide-maintenance
 #
 # 하는 일: 설정만 바꿔 앱을 두 번 띄우고(./gradlew bootRun), 매번 evaluate_agent.py 를 돌린 뒤 앱을 끈다.
@@ -23,7 +24,15 @@ case "$EXP" in
   vector)   A_ENV="QG_KNOWLEDGE_VECTOR_ENABLED=true";  A_LABEL=vector;   A_CHECK='"vectorEnabled":true'
             B_ENV="QG_KNOWLEDGE_VECTOR_ENABLED=false"; B_LABEL=novector; B_CHECK='"vectorEnabled":false'
             TITLE="F4: 유사 사례 의미 검색 켬(A) vs 끔(B)" ;;
-  *) echo "사용법: $0 prefetch|vector [회차] [evaluate_agent.py 인자...]" >&2; exit 2 ;;
+  closed)   A_ENV="QG_CHAT_MODEL=google-genai";       A_LABEL=gemini;   A_CHECK='"chatProvider":"google-genai"'
+            B_ENV="SPRING_PROFILES_ACTIVE=closed";     B_LABEL=local;    B_CHECK='"chatProvider":"ollama"'
+            TITLE="폐쇄망: Gemini(A) vs 로컬 모델 ${QG_LOCAL_MODEL:-qwen2.5:7b}(B, 외부 API 없음)"
+            # 로컬 모델이 떠 있고 내려받아져 있는지 먼저 확인 (폐쇄망 프로파일은 실행 중에 내려받지 않음)
+            MODEL=${QG_LOCAL_MODEL:-qwen2.5:7b}
+            curl -s "${OLLAMA_URL:-http://localhost:11434}/api/tags" | grep -q "\"$MODEL\"" \
+              || { echo "Ollama 에 $MODEL 이 없습니다: ollama serve 후 ollama pull $MODEL" >&2; exit 1; }
+            export QG_EVAL_HTTP_TIMEOUT=${QG_EVAL_HTTP_TIMEOUT:-3600} ;;
+  *) echo "사용법: $0 prefetch|vector|closed [회차] [evaluate_agent.py 인자...]" >&2; exit 2 ;;
 esac
 
 TOKEN=${QG_AGENT_API_TOKEN:-$(grep -E '^QG_AGENT_API_TOKEN=' .env 2>/dev/null | cut -d= -f2- | tr -d '"'"'" || true)}

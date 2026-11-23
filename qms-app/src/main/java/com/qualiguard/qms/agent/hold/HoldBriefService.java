@@ -60,7 +60,7 @@ public class HoldBriefService {
     private volatile ChatClient chatClient;
 
     public HoldBriefService(JdbcTemplate jdbc, ObjectMapper objectMapper, ObjectProvider<ChatClient.Builder> chatClientBuilder,
-            @Value("${spring.ai.google.genai.chat.model:gemini-3.8-flash}") String model) {
+            @Value("${qg.agent.model-label:${spring.ai.google.genai.chat.model:gemini-3.8-flash}}") String model) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.chatClientBuilder = chatClientBuilder;

@@ -1,0 +1,30 @@
+# 폐쇄망 분석 모드 (SPRING_PROFILES_ACTIVE=closed). 외부 API(Gemini 채팅·임베딩)를 부르지 않는다.
+#
+#   - 원인 분석·보류 요약·JSON 고치기: Ollama 로컬 모델 (도구 호출을 지원하는 모델이어야 함: qwen2.5:7b, llama3.1:8b 등)
+#   - 유사 사례 검색: 키워드 검색만 (Gemini 임베딩 끔)
+#   - 보고서 문장: 로컬 작성 (qg.agent.writer.mode=local)
+#   - SOP 검색은 원래 앱 안에서 하므로 그대로
+#
+# 준비: ollama serve, ollama pull qwen2.5:7b  (맥 M1 8GB 는 qwen2.5:3b 권장, QG_LOCAL_MODEL 로 바꿈)
+spring:
+  ai:
+    model:
+      chat: ollama
+      embedding.text: none
+    ollama:
+      chat:
+        model: ${QG_LOCAL_MODEL:qwen2.5:7b}
+        temperature: 0.2
+        num-ctx: 16384                    # 도구 결과·프롬프트가 길다 (기본 2048 이면 앞부분이 잘림)
+      init:
+        pull-model-strategy: never        # 폐쇄망: 실행 중에 내려받지 않는다. 미리 ollama pull
+qg:
+  agent:
+    model-label: ollama/${QG_LOCAL_MODEL:qwen2.5:7b}
+    llm:
+      timeout: 300s                       # 로컬 모델은 느리다 (도구 조사 포함 호출 1회)
+    writer:
+      mode: local
+      model: ${QG_LOCAL_MODEL:qwen2.5:7b}
+  knowledge:
+    vector-enabled: false

@@ -108,8 +108,13 @@ public class AgentController {
         m.put("recheckShots", props.recheckShots());
         m.put("recheckMax", props.recheckMax());
         m.put("verifyMaxRetries", props.verifyMaxRetries());
-        m.put("model", env.getProperty("spring.ai.google.genai.chat.model", "gemini-3.8-flash"));
-        m.put("temperature", env.getProperty("spring.ai.google.genai.chat.temperature"));
+        // 폐쇄망 분석 모드(spring.ai.model.chat=ollama, 프로파일 closed)면 로컬 모델 이름과 설정이 기록된다
+        String provider = env.getProperty("spring.ai.model.chat", "google-genai");
+        m.put("chatProvider", provider);
+        m.put("model", env.getProperty("qg.agent.model-label",
+                env.getProperty("spring.ai.google.genai.chat.model", "gemini-3.8-flash")));
+        m.put("temperature", env.getProperty("ollama".equals(provider) ? "spring.ai.ollama.chat.temperature"
+                : "spring.ai.google.genai.chat.temperature"));
         m.put("transport", env.getProperty("qg.agent.pipeline.transport", "kafka"));
         m.put("promptVersion", AgentPrompts.VERSION);   // 로드맵 O1: 어떤 프롬프트로 잰 수치인지
         m.put("analysisMode", analyzer.analysisMode());   // 로드맵 A1: 실제 적용된 값
