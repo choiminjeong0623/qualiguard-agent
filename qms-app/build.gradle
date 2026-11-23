@@ -74,3 +74,21 @@ tasks.register('secomValidation', JavaExec) {
 	args = ['../data/secom']
 	jvmArgs = ['-Xmx384m']
 }
+
+// 이상 탐지 평가 (로드맵 E2): 시뮬레이터로 seed 5개 파일을 만들고 같은 SPC 엔진으로 재생해 채점한다
+tasks.register('detectionData', Exec) {
+	group = 'verification'
+	description = '시뮬레이터 파일 출력으로 eval/detection/runs/seed-1..5 를 만든다'
+	workingDir = rootDir
+	commandLine 'bash', '../scripts/detection_data.sh', '5'
+}
+
+tasks.register('detectionEval', JavaExec) {
+	group = 'verification'
+	description = '탐지 P/R/F1·FPR·FNR·탐지 지연을 eval/detection_report.md 에 남긴다'
+	dependsOn 'detectionData', 'testClasses'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.qualiguard.qms.quality.DetectionEval'
+	args = ['../eval/detection/runs', '../eval/detection_report.md']
+	jvmArgs = ['-Xmx384m']
+}

@@ -3,6 +3,8 @@
 예)
   uv run qg-simulator                       # scenarios.yaml 설정으로 Mosquitto에 발행
   uv run qg-simulator --dry-run --shots 5   # 브로커 없이 화면에 출력만 (정답 파일은 쓰지 않음)
+  uv run qg-simulator --out ../eval/detection/runs/seed-1 --seed 1
+                                            # 탐지 평가용 파일 출력 (MQTT·대기 없음, 로드맵 E2)
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ import signal
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -128,6 +130,9 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="MQTT로 보내지 않고 화면에 출력")
     ap.add_argument("--shots", type=int, help="설정의 shots 값을 덮어쓰기 (설비당 shot 수)")
     ap.add_argument("--interval", type=float, help="설정의 interval_sec 값을 덮어쓰기")
+    ap.add_argument("--seed", type=int, help="설정의 seed 값을 덮어쓰기 (탐지 평가에서 seed 여러 개로 반복)")
+    ap.add_argument("--out", help="MQTT 대신 이 폴더에 telemetry.jsonl(보낸 순서 그대로)과 ground_truth.csv 를 쓴다. "
+                                  "대기 없이 바로 끝나고, 시각·messageId 도 seed 로 정해져 다시 돌려도 같은 파일이 나온다 (로드맵 E2)")
     ap.add_argument("--env-file", default=str(Path(__file__).resolve().parent.parent.parent / ".env"),
                     help="장비 비밀번호를 읽을 .env (기본: 프로젝트 루트)")
     args = ap.parse_args()
@@ -137,10 +142,17 @@ def main() -> None:
     cfg = load_config(Path(args.config))
     mqtt_cfg = cfg.get("mqtt", {})
     sim = cfg["simulation"]
+    if args.seed is not None:
+        sim["seed"] = args.seed
+    out_dir = Path(args.out).resolve() if args.out else None
+    if out_dir and args.dry_run:
+        sys.exit("--out 과 --dry-run 은 함께 쓸 수 없습니다")
     # 2. 기본값 우선순위 적용
     #    args.shots가 있으면 그 값을 쓰고 없으면 sim["shots"]를 쓴다.
     shots = args.shots or sim["shots"]
     interval = args.interval if args.interval is not None else sim["interval_sec"]
+    if out_dir:
+        interval = 0
     rng = random.Random(sim.get("seed"))
     # 결측은 공정 모델과 다른 난수를 써서, 확률 0 이면 예전과 같은 공정 값이 나오게 한다
     missing = MissingConfig.from_dict(cfg.get("missing"))
@@ -162,13 +174,20 @@ def main() -> None:
     gt_path = Path(sim.get("ground_truth_csv", "../data/ground_truth.csv"))
     if not gt_path.is_absolute():
         gt_path = (Path(args.config).resolve().parent / gt_path).resolve()
+    telemetry_file = None
+    if out_dir:
+        # 파일 출력: 평가 폴더 안에 정답을 따로 둔다 (data/ground_truth.csv 를 건드리지 않음)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        gt_path = out_dir / "ground_truth.csv"
+        telemetry_file = (out_dir / "telemetry.jsonl").open("w", encoding="utf-8")
     if args.dry_run:
         # dry-run 은 화면 확인용이라 실제 발행 때 만든 정답 파일을 덮어쓰지 않는다
         gt_file = open(os.devnull, "w", newline="", encoding="utf-8")
     else:
         gt_path.parent.mkdir(parents=True, exist_ok=True)
         # 이전 정답 파일을 덮어쓰지 않고 보관한다 (평가 결과가 어떤 정답으로 채점됐는지 잃지 않게, 로드맵 E1)
-        archive_ground_truth(gt_path)
+        if not out_dir:   # 평가 폴더는 seed 로 다시 만들 수 있으니 덮어쓴다
+            archive_ground_truth(gt_path)
         write_ground_truth_meta(gt_path, args, sim, shots, faults)
         gt_file = gt_path.open("w", newline="", encoding="utf-8")
     gt = csv.writer(gt_file)
@@ -180,7 +199,7 @@ def main() -> None:
     clients: dict = {}      # 설비 ID → MQTT 클라이언트. 장비마다 자기 계정으로 따로 접속한다 (N-07, N-08)
     shutting_down = False   # 우리가 일부러 끊는 중인지 (정상 종료 메시지 구분용)
     pending = []            # 브로커 확인(PUBACK)을 아직 못 받은 QoS 1 메시지
-    if not args.dry_run:
+    if not args.dry_run and not out_dir:
         import paho.mqtt.client as mqtt
 
         def on_connect(c, userdata, flags, reason_code, properties):
@@ -230,10 +249,19 @@ def main() -> None:
                                      if v and k.endswith("_rate")), flush=True)
     missed = published = 0
 
+    # 파일 출력은 가상 시계(고정 시작 시각 + 30초 사이클)와 seed 로 만든 messageId 를 써서 재현 가능하게 한다
+    clock_start = datetime(2026, 1, 1, 8, 0, tzinfo=KST)
+    id_rng = random.Random(f'{sim.get("seed")}-ids')
+
+    def clock(step: int) -> datetime:
+        return clock_start + timedelta(seconds=30 * step) if out_dir else datetime.now(KST)
+
     def publish(equipment_id: str, body: str) -> None:
         nonlocal pending, published
         published += 1
-        if clients:
+        if telemetry_file:
+            telemetry_file.write(body + "\n")
+        elif clients:
             pending.append(clients[equipment_id].publish(
                 topic_tpl.format(line=sim["line_id"], equipment=equipment_id), body, qos=qos))
             if len(pending) > 1000:
@@ -257,8 +285,10 @@ def main() -> None:
                         scale[k] = scale.get(k, 1.0) * v
                     active.append(f.name)
             values, defect = m.next_shot(add, scale)
-            now = datetime.now(KST)
+            now = clock(step)
             payload = build_payload(m, values, defect, serial_for(serials[m.equipment_id], missing, miss_rng, now), now)
+            if out_dir:
+                payload["messageId"] = str(uuid.UUID(int=id_rng.getrandbits(128), version=4))
             apply_missing(payload, missing, miss_rng,
                           outages[m.equipment_id].step(list(SENSORS), missing, miss_rng))
             gaps = missing_fields(payload)
@@ -280,6 +310,8 @@ def main() -> None:
     for eq, body in delivery.due(None):       # 늦춰 둔 메시지를 마저 보낸다
         publish(eq, body)
     gt_file.close()
+    if telemetry_file:
+        telemetry_file.close()
     if clients:
         # 끊기 전에 아직 브로커 확인을 못 받은 메시지를 최대 10초까지 기다린다 (유실 방지)
         deadline = time.time() + 10
@@ -303,6 +335,8 @@ def main() -> None:
     print(f"      전송 {published}건 = shot {sent} - 통째 누락 {delivery.dropped} + 재전송 {delivery.resent}, "
           f"늦게 보냄 {delivery.delayed}건. "
           f"정답 기록: {'(dry-run 이라 쓰지 않음)' if args.dry_run else gt_path}", flush=True)
+    if out_dir:
+        print(f"      메시지 기록: {out_dir / 'telemetry.jsonl'}", flush=True)
 
 
 if __name__ == "__main__":
