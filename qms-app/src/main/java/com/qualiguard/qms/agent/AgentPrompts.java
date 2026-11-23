@@ -43,6 +43,10 @@ final class AgentPrompts {
             그 판단의 watchItems 를 확인하고, 그 이후 새로 나타난 근거(새 경보, 추세 진행, 동반 센서, 불량)로 판단을 갱신하세요.
             이전 판단을 그대로 반복하지 말고, 무엇이 새로 확인됐는지 reasoningSummary 에 밝히세요.
 
+            [검토자 메모] 입력에 reviewerNotes 가 있으면 사람 검토자가 현장에서 확인한 내용입니다.
+            지금 데이터와 맞는지 도구로 확인한 뒤 판단에 참고하고, 참고했으면 reasoningSummary 에 밝히세요.
+            메모만으로 결론을 정하지 말고, 지금 데이터가 다르면 데이터를 따르세요.
+
             [원인 코드] HEATER_DEGRADATION(히터 열화), COOLING_ISSUE(금형 냉각 문제), CHECK_RING_WEAR(체크 링 마모),
             SENSOR_FAULT(센서·측정 계통 이상), MATERIAL(원료 문제), NOISE(단발성 변동), UNKNOWN(판단 불가)
 

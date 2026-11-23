@@ -105,11 +105,34 @@
           + '<td>' + esc(DECISION_LABEL[r.decision] || r.decision) + '<div class="small text-secondary">' + esc(r.cause_code) + ' · 확신도 ' + esc(r.confidence) + '</div></td>'
           + '<td>' + badge(HOLD_REASON[r.hold_reason] || r.hold_reason, 'bg-red-lt') + '<div class="small">' + esc(r.hold_detail) + '</div></td>'
           + '<td><div class="small">' + esc(r.summary) + '</div>'
-          + (watch.length ? '<div class="small text-secondary">확인할 항목: ' + watch.map(esc).join(', ') + '</div>' : '') + '</td>'
+          + (watch.length ? '<div class="small text-secondary">확인할 항목: ' + watch.map(esc).join(', ') + '</div>' : '')
+          + briefHtml(r) + '</td>'
           + '<td style="min-width:16rem">' + button + '</td></tr>';
       }).join(''));
     }).fail(function (xhr) { $('#hold-rows').html('<tr><td colspan="6" class="text-danger">불러오기 실패 (' + xhr.status + ')</td></tr>'); });
   }
+
+  // 판단 보류 요약: 보류 여부는 규칙이 정하고, LLM 은 검토자가 빨리 읽도록 분석 흐름을 정리만 한다 (ADR-020)
+  function briefHtml(r) {
+    var b = null;
+    try { b = r.hold_brief ? JSON.parse(r.hold_brief) : null; } catch (e) { b = null; }
+    if (!b) {
+      return canWrite() ? '<button class="btn btn-sm btn-outline-secondary mt-1" data-brief="' + r.analysis_id + '">요약·현장 확인 항목 만들기</button>' : '';
+    }
+    var label = b.source === 'LLM' ? 'AI 요약' : '기록 요약 (LLM 없이)';
+    return '<div class="small mt-2 p-2 bg-azure-lt rounded"><b>' + label + '</b><ul class="mb-1 ps-3">'
+      + (b.summary || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
+      + ((b.checks || []).length ? '<b>현장 확인</b><ul class="mb-0 ps-3">' + b.checks.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '')
+      + '<div class="text-secondary">판단·처리는 검토자가 합니다.</div></div>';
+  }
+
+  $('#hold-rows').on('click', 'button[data-brief]', function () {
+    var id = $(this).attr('data-brief');
+    $(this).prop('disabled', true).text('요약 만드는 중…');
+    $.ajax({ method: 'POST', url: '/api/qms/holds/' + id + '/brief' })
+      .done(function () { loadHolds(); })
+      .fail(function (xhr) { $('#msg').text((xhr.responseJSON && xhr.responseJSON.error) || '요약 실패 (' + xhr.status + ')').attr('class', 'msg err'); loadHolds(); });
+  });
 
   $('#hold-rows').on('click', 'button[data-hold]', function () {
     var id = $(this).attr('data-hold');
