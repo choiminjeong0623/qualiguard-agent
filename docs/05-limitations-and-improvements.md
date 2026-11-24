@@ -87,7 +87,7 @@
 **현재 상태**
 - MQTT → Kafka는 앱 안의 `MqttTelemetrySubscriber` + `TelemetryBridgeHandler`가 맡습니다. 형식 검증 실패는 `quality.dlq` 토픽(사유를 헤더에)으로, 결측 항목은 지표로 셉니다.
 - ADR-004는 **Spring Integration MQTT 어댑터 대 Paho 직접 사용**을 비교한 기록입니다. 어댑터가 지속 세션 재접속 때 연결 완료 콜백 안에서 구독 완료를 기다려 교착 상태가 생겼고(장애 분석 02), 그래서 Paho를 직접 씁니다.
-- **Kafka Connect는 ADR에서 정식으로 비교하지 않았습니다.**
+- Kafka Connect MQTT 소스 커넥터는 [ADR-021](decisions/ADR-021-mqtt-field-kafka-internal.md)에 선택지 D로 적었지만, **실행해 비교하지는 않았습니다.**
 
 **한계**
 - "DLQ·검증 때문에 직접 만들었다"는 답은 약합니다. Kafka Connect도 SMT(단일 메시지 변환)와 `errors.tolerance=all` + `errors.deadletterqueue.topic.name`으로 DLQ를 지원합니다.
