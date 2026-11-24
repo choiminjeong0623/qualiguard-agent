@@ -1,0 +1,213 @@
+/* QMS 모바일 — KRDS(범정부 UI/UX 디자인 시스템) 디지털 취약계층 기준.
+   근거: KRDS 토큰(krds-uiux 1.1.0 krds_tokens.css·component.css)과 디지털 포용 지침(글자 크기 5단계, 선명하게 보기).
+   - 화면 폭 767px 이하(KRDS 모바일 구간)에만 적용. 다른 CSS 뒤에 읽는다.
+   - 본문 17px · 줄 간격 1.5 · 자간 0, 보조 글자는 15px 이상(아주 작은 메타만 13px)
+   - 누르는 곳 48px 이상: 버튼 48(주 동작·하단 바 56), 입력·선택 상자 56, 탭 48, 페이지 단추 48×48, 확인란 24(누르는 칸 48)
+   - 표는 가로 스크롤 대신 행마다 카드로 다시 흘린다(KWCAG 1.4.10 재배치). 칸 이름은 qg-common.js 가 data-label 로 붙인다
+   - 초점 표시: 2px 선 + 4px 바깥 그림자
+   글자 크기(0.9·1·1.1·1.3·1.5)와 선명하게 보기는 모든 폭에서 쓸 수 있다(머리 띠 "글자·화면" 단추). */
+
+/* ── 글자 크기·선명하게 보기 (모든 폭) ───────────────────── */
+:root[data-qg-contrast="high"] {
+  --text: #000; --text-2: #1B1E2B; --muted: #2B2F3A; --border: #6B7385; --divider: #8A93A6; --input: #1B1E2B;
+  --primary: #1F3FCC; --primary-hover: #1834A8; --sub: #FFFFFF;
+  --qg-color-text: #000; --qg-color-text-2: #1B1E2B; --qg-color-border: #6B7385; --qg-color-primary: #1F3FCC;
+}
+:root[data-qg-contrast="high"] .v-tbl td, :root[data-qg-contrast="high"] .v-tbl th { border-color: #6B7385; }
+:root[data-qg-contrast="high"] .v-hero { background: #0B1440; }
+:root[data-qg-contrast="high"] .v-nav a { color: #fff; }
+:root[data-qg-contrast="high"] a:not(.v-logo):not(.v-nav a) { text-decoration: underline; }
+
+.v-a11y { position: relative; }
+.v-hero > .v-topbar { z-index: 3; }
+.v-hero.v-a11y-open { overflow: visible; }
+.v-hero.v-a11y-open .v-hero-fx { display: none; }
+.v-a11y-btn { width: auto !important; padding: 0 12px; border-radius: 17px !important; gap: 6px; display: inline-flex !important; align-items: center; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.v-a11y-btn b { font-size: 15px; }
+.v-a11y-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; width: 300px; padding: 16px; border-radius: 6px; background: #fff; color: var(--text);
+  box-shadow: 0 8px 24px rgba(16,24,40,.24); border: 1px solid var(--border); }
+.v-a11y-pop[hidden] { display: none; }
+.v-a11y-pop fieldset { margin: 0 0 12px; padding: 0; border: 0; }
+.v-a11y-pop legend { float: none; margin: 0 0 8px; padding: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.v-a11y-sizes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.v-a11y-sizes label { margin: 0; position: relative; }
+.v-a11y-sizes input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.v-a11y-sizes span { display: grid; place-items: center; min-height: 48px; padding: 4px 2px; border: 1px solid var(--input); border-radius: 4px; text-align: center;
+  font-size: 13px; line-height: 1.3; color: var(--text); background: #fff; cursor: pointer; word-break: keep-all; }
+.v-a11y-sizes input:checked + span { border: 2px solid var(--primary); background: var(--primary-50); color: var(--primary); font-weight: 700; }
+.v-a11y-sizes input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.v-a11y-row { display: flex; align-items: center; gap: 10px; min-height: 48px; margin: 0; font-size: 15px; color: var(--text); cursor: pointer; }
+.v-a11y-row input { width: 24px; height: 24px; margin: 0; accent-color: var(--primary); }
+.v-a11y-pop .v-a11y-reset { width: 100%; height: 48px; margin-top: 4px; }
+
+/* ── 모바일 (767px 이하) ─────────────────────────────────── */
+@media (max-width: 767px) {
+  :root {
+    --qg-fs-xs: 15px; --qg-lh-xs: 22px; --qg-fs-sm: 17px; --qg-lh-sm: 26px; --qg-fs-md: 17px; --qg-lh-md: 26px;
+    --qg-fs-lg: 19px; --qg-lh-lg: 28px; --qg-fs-xl: 24px; --qg-lh-xl: 34px;
+    --qg-h-control-sm: 48px; --qg-h-control-md: 48px; --qg-h-control-lg: 56px; --qg-h-action-bar: 72px;
+    --qg-focus-ring: 0 0 0 2px #fff, 0 0 0 4px var(--qg-color-primary);
+    --tblr-body-font-size: 17px; --tblr-body-line-height: 1.5;
+  }
+  body { font-size: 17px; line-height: 1.5; letter-spacing: 0; -webkit-text-size-adjust: 100%; }
+  * { letter-spacing: 0 !important; }
+
+  /* 초점: 모든 누를 수 있는 것에 같은 표시 */
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--primary) !important; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(49, 90, 246, .25) !important; }
+  .v-hero :focus-visible { outline-color: #fff !important; }
+
+  /* 머리 띠 */
+  .v-topbar { gap: 8px; flex-wrap: wrap; }
+  .v-logo { font-size: 19px; display: inline-flex; align-items: center; min-height: 48px; }
+  #oldest-link, a.v-linkbtn { display: inline-flex; align-items: center; min-height: 48px; font-size: 17px; }
+  #oldest-link[hidden] { display: none; }
+  .v-iconbtn { width: 48px; height: 48px; }
+  .v-iconbtn svg { width: 22px; height: 22px; }
+  .v-menu-btn, #btn-logout { width: auto; min-width: 48px; padding: 0 12px; border-radius: 24px; gap: 6px; display: inline-flex; align-items: center; justify-content: center; }
+  /* 아이콘만 있던 단추에 글자를 보인다(숨겨 둔 이름을 그대로 드러냄) */
+  .v-menu-btn .visually-hidden, #btn-logout .visually-hidden { position: static !important; width: auto !important; height: auto !important; margin: 0 !important;
+    clip: auto !important; overflow: visible !important; white-space: nowrap !important; font-size: 15px; font-weight: 600; }
+  .v-menu-btn { display: inline-flex; }
+  .v-a11y-btn { height: 48px !important; border-radius: 24px !important; font-size: 15px; }
+  .v-a11y-btn b { font-size: 17px; }
+  .v-a11y-pop { position: fixed; left: 16px; right: 16px; top: 72px; width: auto; }
+  .v-a11y-sizes span { font-size: 15px; min-height: 56px; }
+  .v-a11y-row { font-size: 17px; }
+  .v-hero.v-nav-open .v-nav { top: 56px; }
+  .v-hero.v-nav-open .v-nav a { height: 56px; font-size: 19px; padding: 0 16px; }
+  .v-nav a .v-ni { width: 22px; height: 22px; }
+  .v-nav .v-n { min-width: 24px; height: 24px; font-size: 15px; border-radius: 12px; }
+  .v-hero h1, .v-hero .qg-h1 { font-size: 24px; line-height: 34px; }
+  .v-hero p, .v-crumb, .v-hero .qg-lead { font-size: 15px; line-height: 22px; }
+  .v-crumb a { display: inline-block; padding: 12px 0; }
+  .v-subhero h2, .v-dtitle { font-size: 22px; line-height: 32px; }
+  .v-subhero p { font-size: 15px; }
+  .v-hacts { flex-wrap: wrap; }
+  .v-hbtn { height: 48px; font-size: 17px; padding: 0 16px; }
+  .v-steps span { height: 32px; font-size: 15px; }
+
+  /* 단추·입력 */
+  .v-btn, .btn, .v-sbtn, .v-pillbtn, .v-pill, .v-linkbtn { min-height: 48px; height: auto; font-size: 17px; padding: 8px 16px; line-height: 1.4; }
+  .v-btn.v-pri, .btn-primary { min-height: 56px; font-size: 19px; }
+  .v-sbtn.v-sm, .v-ri .v-sbtn { min-height: 48px; height: auto; font-size: 15px; padding: 8px 12px; }
+  .v-sbtn svg, .v-btn svg, .v-hbtn svg { width: 20px; height: 20px; }
+  .v-input, .form-control, .form-select, select, input[type="text"], input[type="search"], input[type="date"], input[type="password"], input:not([type]) {
+    min-height: 56px; height: 56px; font-size: 17px !important; padding-left: 16px; padding-right: 16px; }
+  textarea.v-input, textarea.form-control { height: auto; min-height: 144px; padding: 12px 16px; line-height: 1.5; }
+  select.v-input, .form-select { padding-right: 40px; }
+  label, .form-label, .v-f label, .v-flab, .v-fl { font-size: 17px !important; font-weight: 600; color: var(--text); }
+  .qg-help, .form-hint, .v-sech p, .v-chead p, .v-note { font-size: 15px !important; line-height: 22px !important; color: var(--text-2); }
+  .v-ib { width: 48px; height: 48px; }
+  .v-ib svg { width: 22px; height: 22px; }
+  input[type="checkbox"], input[type="radio"], .form-check-input, .qg-radio-lg { width: 24px !important; height: 24px !important; }
+  .v-ck input { width: 24px; height: 24px; border-width: 2px; }
+  .v-ck { position: relative; }
+
+  /* 목록 위 걸러내기 */
+  .v-filters { grid-template-columns: 1fr; gap: 12px; }
+  .v-searchrow { flex-wrap: wrap; gap: 8px; }
+  .v-searchrow .v-input { height: 56px; font-size: 17px; flex: 1 1 100%; }
+  .v-searchrow .v-btn { height: 56px; flex: 1 1 100%; justify-content: center; font-size: 19px; }
+  .v-listmeta { flex-wrap: wrap; gap: 8px; }
+  .v-count, .v-selcount, .qg-count { font-size: 15px; }
+  .v-psize .v-input { height: 48px; min-height: 48px; font-size: 17px; }
+  .v-seg, .qg-seg, .qg-status-tabs { gap: 4px; }
+  .v-seg button, .v-seg.v-sm button, .qg-seg button, .qg-tile, .tab { min-height: 48px; height: auto; font-size: 17px !important; padding: 8px 14px; }
+  .v-seg button b { font-size: 17px; }
+
+  /* 탭 */
+  .v-dtabs button, .qg-tabs [role=tab] { height: 48px; min-height: 48px; font-size: 17px; padding: 0 16px; }
+  .v-dtabs em, .qg-tab-count:not(:empty) { height: 24px; min-width: 24px; font-size: 15px; line-height: 24px; }
+
+  /* 상태 표시·배지: KRDS 배지 32px / 17px */
+  .qg-state, .v-tag, .v-ai, .qg-ai-mark, .qg-auto-mark { height: auto; min-height: 32px; padding: 4px 10px; font-size: 15px; line-height: 22px; white-space: normal; }
+
+  /* 표 → 카드로 다시 흘리기 */
+  .table-responsive, .v-tbl-scroll { overflow: visible !important; max-height: none !important; }
+  .v-tbl { border: 0; background: transparent; box-shadow: none; }
+  table.qg-table-list, table.qg-table, .v-tbl table { display: block; width: 100%; border: 0; }
+  table.qg-table-list thead, table.qg-table thead, .v-tbl table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.qg-table-list tbody, table.qg-table tbody, .v-tbl table tbody { display: grid; gap: 12px; }
+  table.qg-table-list tr, table.qg-table tr, .v-tbl table tr { display: block; position: relative; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+  table.qg-table-list tr.pick, .v-tbl table tr.pick { cursor: pointer; }
+  table.qg-table-list tr.v-sel { border: 2px solid var(--primary); background: var(--primary-50); }
+  table.qg-table-list tr.qg-row-attn { border-left: 6px solid var(--qg-color-warning); padding-left: 14px; }
+  table.qg-table-list td, table.qg-table td, .v-tbl table td {
+    display: block; position: relative; height: auto; min-height: 40px; padding: 8px 0 8px 112px !important; border: 0 !important;
+    font-size: 17px !important; line-height: 1.5; white-space: normal !important; text-align: left !important;
+    width: auto !important; max-width: none !important; background: transparent !important; overflow-wrap: anywhere; }
+  table.qg-table-list td + td, table.qg-table td + td, .v-tbl table td + td { border-top: 1px solid var(--divider) !important; }
+  table.qg-table-list td::before, table.qg-table td::before, .v-tbl table td::before {
+    content: attr(data-label); position: absolute; left: 0; top: 10px; width: 100px; font-size: 15px; font-weight: 600; color: var(--text-2); line-height: 1.4; }
+  table td:empty { display: none; }
+  table td.text-nowrap.text-end { padding-left: 0 !important; }
+  table td.text-nowrap.text-end::before { content: none; }
+  table td[data-label=""]::before, table td:not([data-label])::before { content: none; }
+  table td[data-label=""], table td:not([data-label]) { padding-left: 0 !important; }
+  table td.qg-empty-cell { display: block; text-align: center !important; padding: 24px 8px !important; color: var(--text-2); }
+  table td.qg-mono, .v-tbl td.qg-mono { font-size: 17px !important; }
+  .v-tbl td .v-t1 { font-size: 19px; font-weight: 700; line-height: 1.4; }
+  .v-tbl td .v-t2, .muted, .v-muted { font-size: 15px; color: var(--text-2); }
+  /* 부적합 목록: 제목을 카드 머리로, 순번은 숨기고, 확인란은 오른쪽 위 48px 칸 */
+  table.qg-table-list td.v-tt { padding: 4px 56px 10px 0 !important; border-top: 0 !important; order: -1; }
+  table.qg-table-list td.v-tt::before { content: none; }
+  table.qg-table-list td.v-no, table.qg-table-holds td.v-no { display: none; }
+  table.qg-table-list td.v-ck { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 48px !important; height: 48px; min-height: 48px; padding: 0 !important; border: 0 !important; z-index: 1; }
+  table.qg-table-list td.v-ck::before { content: none; }
+  table.qg-table-list td.v-ck + td { border-top: 0 !important; }
+  table.qg-table-list tr:has(td.v-ck) { display: flex; flex-direction: column; }
+  /* 동작 칸(조치 승인 등): 단추를 줄 전체로 */
+  table td .btn, table td .v-btn, table td .v-sbtn { width: 100%; min-height: 48px; margin: 4px 0 0 !important; justify-content: center; }
+  table td .btn + .btn { margin-top: 8px !important; }
+  table td a { display: inline-block; padding: 8px 0; }
+
+  /* 페이지 단추 */
+  .v-pager { flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .v-pager button { min-width: 48px; height: 48px; font-size: 17px; }
+  .v-pager .v-pinfo { width: 100%; margin: 4px 0 0; text-align: center; font-size: 15px; }
+
+  /* 상세 */
+  .v-card, .qg-section { padding: 20px 16px; }
+  .v-chead h2, .v-sech h3, .qg-h2, .qg-section h2, .qg-section h3 { font-size: 19px !important; line-height: 28px !important; }
+  .v-info dt, .v-aimeta dt { width: 96px; font-size: 15px; color: var(--text-2); }
+  .v-info dd, .v-aimeta dd { font-size: 17px; }
+  .v-info dd small, .v-aimeta code, .v-fv code { font-size: 15px; }
+  .v-info > div, .v-info li { min-height: 40px; }
+  .v-airow p, .v-aibox p, .v-aisum-text { font-size: 17px; line-height: 1.6; }
+  .v-aisum-h { font-size: 17px; }
+  .v-aisum-state, .v-aisum-foot, .qg-section-meta { font-size: 15px; }
+  .v-fr { grid-template-columns: 1fr !important; }
+  .v-fl { padding: 12px 0 4px !important; background: transparent !important; }
+  .v-fv { padding: 0 0 12px !important; font-size: 17px; flex-wrap: wrap; }
+  .v-fv > input.v-input { max-width: none; }
+  .v-flow .v-lbl b { font-size: 17px; white-space: normal; }
+  .v-flow .v-lbl small, .v-flow em { font-size: 15px; white-space: normal; }
+  .v-flow .v-dot { width: 32px; height: 32px; font-size: 15px; }
+  .v-flow li:not(:last-child)::after { left: 15px; top: 34px; }
+  .v-subgrid .v-lab, .v-subgrid .v-foot, .v-subgrid .v-big small { font-size: 15px; }
+  .v-hist li { font-size: 17px; } .v-hist .v-t2, .v-hist .v-hw { font-size: 15px; }
+  .v-ri .v-t1 { font-size: 17px; } .v-ri a { font-size: 17px; }
+  .v-banner, .v-note, .qg-note { font-size: 17px; line-height: 1.5; }
+  .v-toast { font-size: 17px; left: 16px; right: 16px; }
+  .qg-facts dt { font-size: 15px; } .qg-facts dd { font-size: 17px; }
+
+  /* 하단 고정 동작 바 */
+  .v-actionbar, .qg-actionbar { gap: 8px; padding: 8px !important; }
+  .v-actionbar .v-btn, .qg-actionbar .btn { min-height: 56px; height: 56px; font-size: 19px; flex: 1 1 0; }
+  .v-actionbar .msg, .qg-actionbar .msg { font-size: 15px !important; flex-basis: 100%; }
+  .v-actionbar-group, .qg-actionbar-group { flex: 1 1 100%; flex-wrap: nowrap; }
+  #close-box { flex-basis: 100%; }
+  #close-box .v-input, #close-box input { min-width: 0; flex: 1 1 100%; }
+
+  /* 대화상자 */
+  dialog { width: calc(100% - 32px); max-width: none; font-size: 17px; }
+  dialog .btn, dialog .v-btn { min-height: 56px; flex: 1; }
+
+  /* 로그인·출하 같은 폼 화면 */
+  .qg-input-lg { height: 56px; font-size: 19px !important; }
+  .qg-inline-form { flex-wrap: wrap; gap: 8px; }
+  .qg-inline-form > .form-control { flex: 1 1 100%; min-width: 0; }
+  .qg-inline-form > .btn { flex: 1 1 100%; min-height: 56px; }
+  .qg-login .card, .qg-login-card { padding: 24px 16px; }
+}
