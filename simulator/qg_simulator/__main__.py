@@ -126,6 +126,34 @@ def archive_ground_truth(gt_path: Path) -> Path | None:
     return target
 
 
+def apply_suite_run(cfg: dict, suite: dict, run_id: str) -> dict:
+    """평가 묶음(scenarios_eval.yaml)의 실행 하나를 기본 설정에 덮어쓴다 (로드맵 E4).
+
+    실행마다 seed·세기(severity 이름 → 배율)·고장 목록(없으면 묶음의 default_faults)을 바꾸고,
+    정답 메타에 남도록 simulation.evalRun 에 id·split(dev/holdout) 을 적는다.
+    """
+    runs = {r["id"]: r for r in suite.get("runs", [])}
+    if run_id not in runs:
+        sys.exit(f"평가 묶음에 없는 실행: {run_id} (가능: {', '.join(runs)})")
+    run = runs[run_id]
+    levels = suite.get("severity_levels", {})
+    level = run.get("severity", "strong")
+    if level not in levels:
+        sys.exit(f"알 수 없는 세기: {level} (가능: {', '.join(levels)})")
+    k = float(levels[level])
+    faults = []
+    for f in run.get("faults") or suite.get("default_faults", []):
+        f = dict(f)
+        f["severity"] = float(f.get("severity", k))
+        faults.append(f)
+    out = dict(cfg)
+    out["simulation"] = dict(cfg["simulation"], seed=run["seed"],
+                             evalRun={"suite": suite.get("name"), "id": run_id, "split": run["split"],
+                                      "severityLevel": level, "ambiguous": sorted(run.get("ambiguous") or {})})
+    out["faults"] = faults
+    return out
+
+
 def meta_path(gt_path: Path) -> Path:
     return gt_path.with_name(gt_path.stem + ".meta.json")
 
@@ -138,6 +166,7 @@ def write_ground_truth_meta(gt_path: Path, args, sim: dict, shots: int, faults) 
         "config": str(Path(args.config).resolve().name),
         "configSha256": hashlib.sha256(config_bytes).hexdigest(),
         "seed": sim.get("seed"),
+        **({"evalRun": sim["evalRun"]} if sim.get("evalRun") else {}),
         "shotsPerEquipment": shots,
         "equipment": sim.get("equipment"),
         "faults": [{"name": f.name, "equipment": f.equipment_id, "startShot": f.start_shot, "duration": f.duration,
@@ -159,6 +188,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, help="설정의 seed 값을 덮어쓰기 (탐지 평가에서 seed 여러 개로 반복)")
     ap.add_argument("--out", help="MQTT 대신 이 폴더에 telemetry.jsonl(보낸 순서 그대로)과 ground_truth.csv 를 쓴다. "
                                   "대기 없이 바로 끝나고, 시각·messageId 도 seed 로 정해져 다시 돌려도 같은 파일이 나온다 (로드맵 E2)")
+    ap.add_argument("--suite", help="평가 묶음 파일 (예: scenarios_eval.yaml, 로드맵 E4). --run 과 함께 쓴다")
+    ap.add_argument("--run", help="--suite 안의 실행 id (seed·세기·고장을 그 실행 값으로 바꾼다)")
     ap.add_argument("--env-file", default=str(Path(__file__).resolve().parent.parent.parent / ".env"),
                     help="장비 비밀번호를 읽을 .env (기본: 프로젝트 루트)")
     args = ap.parse_args()
@@ -166,6 +197,11 @@ def main() -> None:
     # 1. 설정 파일 읽기
     #    scenarios.yaml 파일을 불러와서 딕셔너리 형태로 만든다.
     cfg = load_config(Path(args.config))
+    if args.suite or args.run:
+        if not (args.suite and args.run):
+            sys.exit("--suite 와 --run 은 함께 써야 합니다")
+        cfg = apply_suite_run(cfg, load_config(Path(args.suite)), args.run)
+        args.config = args.suite   # 정답 메타의 설정 해시는 평가 묶음 파일 기준
     mqtt_cfg = cfg.get("mqtt", {})
     sim = cfg["simulation"]
     if args.seed is not None:

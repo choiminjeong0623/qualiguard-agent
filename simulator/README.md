@@ -12,7 +12,11 @@ uv run qg-simulator --dry-run --shots 3   # 브로커 없이 출력만 확인
 uv run qg-simulator                       # Mosquitto(localhost:1883)로 발행
 uv run qg-simulator --out ../eval/detection/runs/seed-1 --seed 1
                                           # 탐지 평가용 파일 출력 (MQTT·대기 없음, 같은 seed 면 같은 파일)
+uv run qg-simulator --suite scenarios_eval.yaml --run dev-s7-weak --interval 0.05
+                                          # 에이전트 평가 묶음(로드맵 E4)의 실행 하나: seed·세기·고장만 바꿔 발행
 ```
+
+`scenarios_eval.yaml` 은 에이전트 평가 묶음입니다(28사례, 실행 7번). 개발셋(seed 7·2024, 센서 드리프트)은 고치는 데 쓰고, 홀드아웃(seed 777, 모호 사례 3)은 개발이 끝난 뒤 한 번만 돌립니다. 실행 id·split 은 정답 메타(`ground_truth.meta.json` 의 `evalRun`)에 남고, `scripts/evaluate_agent.py` 는 그 메타의 고장 목록으로 채점합니다.
 
 설비마다 따로 접속하며 **사용자명 = 설비 ID**, 비밀번호는 프로젝트 루트 `.env` 의 `MQTT_DEVICE_PASSWORD_IMM_01` 처럼 설비 ID 의 `-` 를 `_` 로 바꾼 키에서 읽습니다. 브로커는 장비 인증·토픽 권한을 켠 상태라 `./scripts/mqtt_users.sh` 를 먼저 실행해야 합니다 ([ADR-015](../docs/decisions/ADR-015-mqtt-device-auth.md)). 다른 `.env` 를 쓰려면 `--env-file`.
 

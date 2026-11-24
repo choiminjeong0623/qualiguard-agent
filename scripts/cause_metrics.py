@@ -39,11 +39,13 @@ def compute(results):
     real = sum(len(s.get("similarCasesReal") or []) for s in steps)
     holds = [(r, s) for r in results for s in r["stepDetails"] if s.get("holdStatus")]
     appropriate = sum(1 for r, s in holds if s.get("cause") != r["expectedCause"])
+    # 모호 사례(E4)는 정답 원인 코드가 없어 Top-3 에서 뺀다
+    scored = [r for r in results if r["expectedCause"] != "AMBIGUOUS"]
     return {
         "cases": len(results),
-        "top3First": ratio(sum(top3_hit(r, r["stepDetails"][0] if r["stepDetails"] else None) for r in results),
-                           len(results)),
-        "top3Final": ratio(sum(top3_hit(r, final_step(r)) for r in results), len(results)),
+        "top3First": ratio(sum(top3_hit(r, r["stepDetails"][0] if r["stepDetails"] else None) for r in scored),
+                           len(scored)),
+        "top3Final": ratio(sum(top3_hit(r, final_step(r)) for r in scored), len(scored)),
         "numberClaims": claims,
         "numberMatchRate": ratio(verified, claims),
         "citedCases": cited,

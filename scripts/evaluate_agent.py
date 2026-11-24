@@ -62,14 +62,56 @@ def api_token():
 TOKEN = api_token()
 MAX_STEPS = 5
 
-# simulator/scenarios.yaml 의 고장 시나리오와 기대 결과
-FAULTS = [
-    # 설비,    시나리오,                 시작, 끝(미포함), 기대 원인 코드,      기대 판단
-    ("IMM-01", "heater_degradation",     300,  800,  "HEATER_DEGRADATION", "NCR_DRAFT"),
-    ("IMM-02", "pressure_sensor_spike",  400,  600,  "SENSOR_FAULT",       "SENSOR_CHECK"),
-    ("IMM-02", "cooling_blockage",       900,  1400, "COOLING_ISSUE",      "NCR_DRAFT"),
-    ("IMM-01", "check_ring_wear",        1200, 1800, "CHECK_RING_WEAR",    "NCR_DRAFT"),
+# 시나리오 이름별 기대 결과 (기대 원인 코드, 기대 판단)
+EXPECTED = {
+    "heater_degradation":    ("HEATER_DEGRADATION", "NCR_DRAFT"),
+    "pressure_sensor_spike": ("SENSOR_FAULT",       "SENSOR_CHECK"),
+    "cooling_blockage":      ("COOLING_ISSUE",      "NCR_DRAFT"),
+    "check_ring_wear":       ("CHECK_RING_WEAR",    "NCR_DRAFT"),
+    "sensor_drift":          ("SENSOR_FAULT",       "SENSOR_CHECK"),   # E4 센서 드리프트
+}
+# 모호 사례 (E4 홀드아웃, simulator/scenarios_eval.yaml): 배운 적 없는 원인이라 '틀린 원인으로 단정하지 않기'가 정답.
+# 관찰·판단 보류, 또는 여기 적은 원인 코드의 초안만 맞음. 다른 원인 코드 초안·센서 점검은 오답.
+AMBIGUOUS_OK_CAUSES = {
+    "nozzle_clog": {"UNKNOWN"},
+    "material_moisture": {"UNKNOWN", "MATERIAL"},
+    "mold_wear": {"UNKNOWN"},
+}
+
+# simulator/scenarios.yaml 의 고장 시나리오 (정답 메타가 없을 때 쓰는 기본값)
+DEFAULT_FAULTS = [
+    # 설비,    시나리오,                 시작, 끝(미포함)
+    ("IMM-01", "heater_degradation",     300,  800),
+    ("IMM-02", "pressure_sensor_spike",  400,  600),
+    ("IMM-02", "cooling_blockage",       900,  1400),
+    ("IMM-01", "check_ring_wear",        1200, 1800),
 ]
+
+
+def load_faults(meta_file):
+    """시뮬레이터 정답 메타(ground_truth.meta.json)의 고장 목록 → (설비, 시나리오, 시작, 끝, 기대 원인, 기대 판단).
+
+    평가 묶음(--suite, 로드맵 E4)으로 seed·세기·고장을 바꿔 돌려도 그 실행의 고장으로 채점한다.
+    기대 판단 AMBIGUOUS 는 모호 사례 (AMBIGUOUS_OK_CAUSES).
+    """
+    faults = DEFAULT_FAULTS
+    if meta_file.exists():
+        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+        if meta.get("faults"):
+            faults = [(f["equipment"], f["name"], f["startShot"], f["startShot"] + f["duration"])
+                      for f in meta["faults"]]
+    out = []
+    for eq, name, start, end in faults:
+        if name in AMBIGUOUS_OK_CAUSES:
+            out.append((eq, name, start, end, "AMBIGUOUS", "AMBIGUOUS"))
+        elif name in EXPECTED:
+            out.append((eq, name, start, end) + EXPECTED[name])
+        else:
+            sys.exit(f"기대 결과가 정해지지 않은 고장입니다: {name} (EXPECTED 또는 AMBIGUOUS_OK_CAUSES 에 추가)")
+    return out
+
+
+FAULTS = load_faults(ROOT / "data" / "ground_truth.meta.json")
 MARGIN = 100  # 고장 구간 앞뒤 이 범위의 경보는 단발성 경보 사례에서 제외
 
 # 지식저장소 제거 실험에서 숨길 사례: 시뮬레이터 고장 4종과 원인 코드가 같은 승인·조치 완료 사례 전부
@@ -193,8 +235,12 @@ def build_cases():
     return cases
 
 
-def is_correct(c, out):
+def is_correct(c, out, hold=None):
     decision, cause = out.get("decision"), out.get("causeCode")
+    if c["expected_decision"] == "AMBIGUOUS":
+        # 관찰·판단 보류는 맞음, 초안은 허용한 원인 코드일 때만 맞음, 센서 점검·실패는 오답
+        return (decision == "OBSERVE" or hold is not None
+                or (decision == "NCR_DRAFT" and cause in AMBIGUOUS_OK_CAUSES.get(c["key"], set())))
     if c["expected_decision"] == "NCR_DRAFT":
         return decision == "NCR_DRAFT" and cause == c["expected_cause"]
     return decision == c["expected_decision"]
@@ -242,6 +288,8 @@ def run_case(c, run, stamp, gt, cfg):
     reset_case(c)
     tag = f"replay-{stamp}-r{run}-{c['key']}"[:60]
     noise = c["faultStart"] is None
+    ambiguous = c["expected_decision"] == "AMBIGUOUS"
+    keep_going = noise or ambiguous   # 첫 판단으로 채점하고, 이어지는 재확인까지 돌려 잘못 만든 초안이 없는지 본다
     steps = []
     diagnosed = None
     pending = None        # (관찰 분석 ID, 재확인 shot)
@@ -267,7 +315,8 @@ def run_case(c, run, stamp, gt, cfg):
             break
         trace = out.get("toolTrace") or []
         result = out.get("result") or {}
-        ok = is_correct(c, out)
+        hold = hold_status(out.get("analysisId"))
+        ok = is_correct(c, out, hold)
         times = tool_times(trace)
         s = {
             "step": len(steps) + 1, "trigger": label[0], "seedShot": label[1], "seedRule": label[2],
@@ -281,7 +330,7 @@ def run_case(c, run, stamp, gt, cfg):
             "candidateCauses": result.get("candidateCauses"),
             "numberClaims": (out.get("verification") or {}).get("numberClaims"),
             "numberVerified": (out.get("verification") or {}).get("numberVerified"),
-            "holdStatus": hold_status(out.get("analysisId")),
+            "holdStatus": hold,
             "writerMode": (out.get("report") or {}).get("mode"),
             "writerNumberClaims": (out.get("report") or {}).get("numberClaims"),
             "writerNumberUnsupported": (out.get("report") or {}).get("numberUnsupported"),
@@ -298,11 +347,13 @@ def run_case(c, run, stamp, gt, cfg):
         steps.append(s)
         print(f"      → {s['decision']} / {s['cause']} (확신도 {s['confidence']}, "
               f"{round((s['latencyMs'] or 0) / 1000)}초){' ✅' if ok else ''}", flush=True)
-        if ok and diagnosed is None:
+        if ok and diagnosed is None and (not keep_going or len(steps) == 1):
             diagnosed = s
-            if not noise:
+            if not keep_going:
                 break
         if noise and s["decision"] != "OBSERVE":
+            break
+        if ambiguous and not ok:
             break
         # 관찰 판단이면 다음 재확인 시점을 잡는다 (운영 스케줄러와 같은 규칙)
         depth = depth + 1 if label[0] == "RECHECK" else 0
@@ -310,8 +361,11 @@ def run_case(c, run, stamp, gt, cfg):
             pending = (out["analysisId"], s["asOfShot"] + cfg["recheckShots"])
         else:
             pending = None
-        if noise and pending is None and next_seed(c) is None:
+        if keep_going and pending is None and next_seed(c) is None:
             break
+
+    if ambiguous and any(not s["correct"] for s in steps):
+        diagnosed = None   # 모호 사례: 첫 판단이 맞아도 이어서 틀린 원인으로 단정하면 오답
 
     start = c["faultStart"]
     last_shot = (diagnosed or (steps[-1] if steps else {"asOfShot": None}))["asOfShot"]
@@ -392,7 +446,8 @@ def summarize(results, runs, mode):
                          f"| {fmt(xs[-1] if xs else None)} |")
     lines.append("")
     lines.append(f"- 정답 진단: **{sum(r['diagnosed'] for r in results)}/{n}** "
-                 f"(고장: NCR_DRAFT + 정답 원인, 센서 이상: SENSOR_CHECK, 단발성: OBSERVE)")
+                 f"(고장: NCR_DRAFT + 정답 원인, 센서 이상: SENSOR_CHECK, 단발성: OBSERVE, "
+                 f"모호 사례: 틀린 원인으로 단정하지 않기)")
     lines.append(f"- 잘못 만든 초안: {sum(r['wrongDrafts'] for r in results)}건, "
                  f"실패(FAILED): {sum(r['failed'] for r in results)}건, "
                  f"JSON 형식 재요청: {sum(s['jsonRepaired'] for r in results for s in r['stepDetails'])}회")
