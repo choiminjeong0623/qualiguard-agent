@@ -72,8 +72,13 @@ public class QualityTools {
             @ToolParam(description = "센서 키, 예: barrelTemp") String sensorKey,
             @ToolParam(description = "최근 몇 shot 을 볼지 (넓은 추이 300, 최근 변화 60)") Integer lastShots,
             @ToolParam(description = "몇 shot 씩 묶을지 (넓은 추이 20, 최근 변화 5)") Integer bucketSize) {
-        return call("getSensorTrend", "EXEC dbo.usp_GetSensorTrend ?, ?, ?, ?, ?",
-                equipmentId, sensorKey, orDefault(lastShots, 300), orDefault(bucketSize, 20), asOf);
+        int shots = Math.min(orDefault(lastShots, 300), MAX_TREND_SHOTS);
+        int bucket = orDefault(bucketSize, 20);
+        // 구간이 너무 잘게 나뉘면 행이 많아져 입력 토큰만 늘어난다: 최대 MAX_TREND_BUCKETS 구간이 되게 구간 크기를 키운다
+        bucket = Math.max(bucket, (shots + MAX_TREND_BUCKETS - 1) / MAX_TREND_BUCKETS);
+        Object[] args = {equipmentId, sensorKey, shots, bucket, asOf};
+        return callTraced("getSensorTrend" + argsText(args), QualityTools::compactTrend,
+                "EXEC dbo.usp_GetSensorTrend ?, ?, ?, ?, ?", args);
     }
 
     @Tool(description = "설비의 최근 N shot 에 대해 센서별 평균·표준편차·검사 규격·공정 능력 지수(Cpk)·규격 이탈 shot 수를 조회한다. "
@@ -110,7 +115,7 @@ public class QualityTools {
                 + (situation == null || situation.isBlank() ? "" : " situation=\"" + shorten(situation, 120) + "\"")
                 + (vector == null ? "" : " +의미검색");
         // 기준 시점까지 승인된 사례만: 지난 경보를 다시 분석할 때, 그 뒤에 승인된 사례(미래 지식)를 보지 않게
-        return callTraced(traceLine, "EXEC dbo.usp_FindSimilarNcr ?, ?, ?, ?, ?, ?",
+        return callTraced(traceLine, QualityTools::compactSimilar, "EXEC dbo.usp_FindSimilarNcr ?, ?, ?, ?, ?, ?",
                 equipmentId, sensorKeys, dt, 5, asOf, vector);
     }
 
@@ -128,6 +133,12 @@ public class QualityTools {
     }
 
     private List<Map<String, Object>> callTraced(String traceLine, String sql, Object... args) {
+        return callTraced(traceLine, rows -> rows, sql, args);
+    }
+
+    /** compact: 모델에게 주기 전에 결과를 줄이는 단계. 검증용 수치도 줄인 뒤의 값(모델이 받은 값)으로 모은다. */
+    private List<Map<String, Object>> callTraced(String traceLine,
+            Function<List<Map<String, Object>>, List<Map<String, Object>>> compact, String sql, Object... args) {
         if (!limit.tryAcquire()) {
             trace.add(traceLine + " @" + (System.nanoTime() - startNanos) / 1_000_000 + "ms");
             return limit.rejected(trace, traceLine.substring(0, Math.max(0, traceLine.indexOf('('))));
@@ -141,6 +152,7 @@ public class QualityTools {
                 row.forEach((k, v) -> clean.put(k, simplify(v)));
                 out.add(clean);
             }
+            out = compact.apply(out);
             if (observations != null) {
                 observations.addArgs(args);   // 조회 범위(300 shot 등)
                 observations.addRows(out);    // 모델이 받은 값과 똑같은 값 (simplify 뒤)
@@ -151,6 +163,52 @@ public class QualityTools {
             trace.add("  ↳ 오류: " + rootMessage(e));
             return List.of(Map.of("error", rootMessage(e)));
         }
+    }
+
+    // ── 결과 줄이기 (분석 시간 개선: 모델 왕복마다 다시 보내는 입력 토큰을 줄인다) ──────────
+
+    /** 추이 조회 최대 shot 수와 최대 구간 수. 300/20(15구간)·60/5(12구간) 같은 권장 인자는 그대로 둔다. */
+    static final int MAX_TREND_SHOTS = 500;
+    static final int MAX_TREND_BUCKETS = 15;
+    /** 유사 사례의 긴 글(현상·근거·조치)은 앞부분만 준다. */
+    static final int MAX_CASE_TEXT = 180;
+    private static final List<String> SPEC_KEYS = List.of("lsl", "target", "usl", "unit");
+    private static final List<String> CASE_TEXT_KEYS = List.of("phenomenon", "evidence", "action_taken");
+    private static final List<String> CASE_DROP_KEYS = List.of("sensor_match", "defect_match", "same_equipment");
+
+    /** 추이: 모든 행에 반복되는 규격(lsl/target/usl/unit)은 첫 행에만, 시작 시각(from_ts)은 첫 행·마지막 행에만 둔다. */
+    static List<Map<String, Object>> compactTrend(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        for (int i = 0; i < rows.size(); i++) {
+            Map<String, Object> row = new LinkedHashMap<>(rows.get(i));
+            if (i > 0) {
+                SPEC_KEYS.forEach(row::remove);
+            }
+            if (i > 0 && i < rows.size() - 1) {
+                row.remove("from_ts");
+            }
+            out.add(row);
+        }
+        return out;
+    }
+
+    /** 유사 사례: 점수 세부 항목(score 에 이미 합쳐짐)과 빈 의미 유사도는 빼고, 긴 글은 MAX_CASE_TEXT 자까지. */
+    static List<Map<String, Object>> compactSimilar(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            Map<String, Object> row = new LinkedHashMap<>(r);
+            CASE_DROP_KEYS.forEach(row::remove);
+            if (row.get("semantic_similarity") == null) {
+                row.remove("semantic_similarity");
+            }
+            for (String k : CASE_TEXT_KEYS) {
+                if (row.get(k) instanceof String text && text.length() > MAX_CASE_TEXT) {
+                    row.put(k, text.substring(0, MAX_CASE_TEXT) + "…");
+                }
+            }
+            out.add(row);
+        }
+        return out;
     }
 
     /** DB 고유 타입(날짜·오프셋 등)을 모델이 읽기 쉬운 기본 타입으로 바꾼다. */
