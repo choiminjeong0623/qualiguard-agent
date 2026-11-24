@@ -287,6 +287,8 @@
     state.current = null;
     detailTabs.select('tab-review');
     $('#d-no').text(no);
+    // 내용을 받기 전에는 입력·동작을 막는다: 먼저 적은 글이 늦게 온 응답(render)에 덮여 사라지지 않게
+    $('#root-cause, #f-causeCode, [data-field], #assign-form input, #btn-save, #btn-approve, #btn-reject').prop('disabled', true);
     return $.getJSON(API + '/' + encodeURIComponent(no)).done(function (d) { render(d); $('#d-title').trigger('focus'); })
       .fail(function (xhr) { $('#d-title-text').text(no); msg(errorText(xhr), 'err'); });
   }
