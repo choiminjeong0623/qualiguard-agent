@@ -278,7 +278,7 @@ Kafka 내구성, MQTT 유실 방지 범위, exactly-once 경계, 심각도 규�
 
 | 항목 | 상태 |
 |---|---|
-| 유사 사례 의미 검색 (SQL Server 2025 VECTOR + Gemini 임베딩) | main 에 머지(2026-11-21), E3 재평가(켬)에서 15/15. 켬·끔 비교(F4)는 아직 (`qg.knowledge.vector-enabled` 로 끌 수 있음) |
+| 유사 사례 의미 검색 (SQL Server 2025 VECTOR + Gemini 임베딩) | main 에 머지(2026-11-21), E3 재평가(켬)에서 15/15. 켬·끔 비교(F4, 5사례): 정답·근거 품질 같고 끄면 비용 12% 적음 → 정확도 효과는 확인 못 함 ([eval/ab_vector.md](eval/ab_vector.md), `qg.knowledge.vector-enabled` 로 끌 수 있음) |
 | 분석 1단계 1분 이내 (E3 평균 62초, P95 79.5초) | 분석마다 토큰 기록(`agent_analysis` 토큰 열) + 하루 토큰 예산을 넘으면 자동 분석 중지(`GET /api/agent/budget`, O5) |
 | 체크 링 마모 탐지 시점 앞당기기 | 병목은 탐지(첫 경보와 첫 불량 사이 4 shot) → EWMA·CUSUM 검토 |
 | 수백 개 센서 데이터(SECOM)용 다변량 관리도 | Hotelling T²·PCA 검토 |
