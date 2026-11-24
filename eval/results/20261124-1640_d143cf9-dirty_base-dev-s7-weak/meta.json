@@ -1,0 +1,81 @@
+{
+  "createdAt": "2026-11-24T16:40:06+09:00",
+  "mode": "base-dev-s7-weak",
+  "args": {
+    "runs": 1,
+    "hide_matching_ncr": false,
+    "hide_maintenance": false,
+    "label": "dev-s7-weak"
+  },
+  "gitCommit": "d143cf94adecb54870d312c58019cdafc748fa29",
+  "gitDirty": true,
+  "agentConfig": {
+    "recheckShots": 40,
+    "recheckMax": 3,
+    "verifyMaxRetries": 1,
+    "chatProvider": "google-genai",
+    "model": "gemini-3.8-flash",
+    "temperature": "0.2",
+    "transport": "kafka",
+    "promptVersion": "analysis-v1@d54b8a16",
+    "analysisMode": "tools",
+    "writerMode": "analysis-text",
+    "vectorEnabled": true,
+    "actionEnabled": false,
+    "dailyTokenBudget": 1000000
+  },
+  "groundTruth": {
+    "sha256": "0ccb2125776f1d256d9b66d46c735bbffdc718aabcc1828e4759762f8bdd4132",
+    "rows": 4000,
+    "simulatorMeta": {
+      "createdAt": "2026-11-24T16:16:36+09:00",
+      "config": "scenarios_eval.yaml",
+      "configSha256": "85b17eb9267a2b95174e465fc570b908ec514494242d611e738bbe599cda2b31",
+      "seed": 7,
+      "evalRun": {
+        "suite": "e4-2026-11-24",
+        "id": "dev-s7-weak",
+        "split": "dev",
+        "severityLevel": "weak",
+        "ambiguous": []
+      },
+      "shotsPerEquipment": 2000,
+      "equipment": [
+        "IMM-01",
+        "IMM-02"
+      ],
+      "faults": [
+        {
+          "name": "heater_degradation",
+          "equipment": "IMM-01",
+          "startShot": 300,
+          "duration": 500,
+          "severity": 0.6
+        },
+        {
+          "name": "pressure_sensor_spike",
+          "equipment": "IMM-02",
+          "startShot": 400,
+          "duration": 200,
+          "severity": 0.6
+        },
+        {
+          "name": "cooling_blockage",
+          "equipment": "IMM-02",
+          "startShot": 900,
+          "duration": 500,
+          "severity": 0.6
+        },
+        {
+          "name": "check_ring_wear",
+          "equipment": "IMM-01",
+          "startShot": 1200,
+          "duration": 600,
+          "severity": 0.6
+        }
+      ]
+    }
+  },
+  "cases": 6,
+  "runs": 1
+}
