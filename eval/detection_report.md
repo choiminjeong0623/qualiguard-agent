@@ -60,7 +60,7 @@
 ```json
 {
   "config": "scenarios.yaml",
-  "configSha256": "5b2d1f16e98c69d21cd487f9b09b535369cb1d1badfd72e693dc8cf807a7ad4c",
+  "configSha256": "dd4dc20b3c64a114a3698f534fe95c9e139efb1bdb685a596bee37074ef9ff87",
   "seed": 1,
   "shotsPerEquipment": 2000,
   "equipment": [
