@@ -99,9 +99,9 @@ public class ActionStore {
         String value = col == null ? "CAST(NULL AS FLOAT)" : "CAST(" + col + " AS FLOAT)";
         Map<String, Object> r = jdbc.queryForMap("""
                 WITH act AS (SELECT executed_at FROM dbo.agent_action WHERE action_id = ?),
-                aft AS (SELECT TOP (?) p.created_at, %1$s AS v FROM dbo.process_shot AS p CROSS JOIN act
+                aft AS (SELECT TOP (?) p.created_at, {VALUE} AS v FROM dbo.process_shot AS p CROSS JOIN act
                         WHERE p.equipment_id = ? AND p.created_at > act.executed_at ORDER BY p.shot_id),
-                bef AS (SELECT TOP (?) %1$s AS v FROM dbo.process_shot AS p CROSS JOIN act
+                bef AS (SELECT TOP (?) {VALUE} AS v FROM dbo.process_shot AS p CROSS JOIN act
                         WHERE p.equipment_id = ? AND p.created_at <= act.executed_at ORDER BY p.shot_id DESC)
                 SELECT (SELECT COUNT(*) FROM aft) AS shots_after,
                        (SELECT AVG(v) FROM bef) AS mean_before,
@@ -110,7 +110,7 @@ public class ActionStore {
                          WHERE e.equipment_id = ? AND e.created_at > act.executed_at
                            AND e.created_at <= (SELECT MAX(created_at) FROM aft)
                            AND (? = 1 OR e.rule_code <> 'INDIVIDUAL')) AS alarms
-                """.formatted(value), actionId, after, equipmentId, before, equipmentId, equipmentId,
+                """.replace("{VALUE}", value), actionId, after, equipmentId, before, equipmentId, equipmentId,
                 sensorKey == null ? 1 : 0);
         int shotsAfter = ((Number) r.get("shots_after")).intValue();
         int alarms = ((Number) r.get("alarms")).intValue();
