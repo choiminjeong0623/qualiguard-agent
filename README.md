@@ -25,9 +25,9 @@
 
 ### 데모 화면
 
-[![시연 영상 (76초) — 클릭하면 mp4](docs/demo/qualiguard-demo.gif)](docs/demo/qualiguard-demo.mp4)
+[![시연 영상 (3분 4초) — 클릭하면 mp4](docs/demo/qualiguard-demo.gif)](docs/demo/qualiguard-demo.mp4)
 
-[사용자용 영상 mp4 (76초)](docs/demo/qualiguard-demo.mp4): 품질 담당자 화면 — 로그인 → 검토 대기 목록 → AI 초안·연결된 경보·에이전트 분석 기록 → 승인된 건의 MES/ERP 연계 → 목록
+[사용자용 영상 mp4 (3분 4초, 자막 포함)](docs/demo/qualiguard-demo.mp4): 리디자인한 QMS 화면 — 데이터 흐름 → 로그인 → 검토 대기 목록·거르개 → AI 초안·근거·에이전트 분석 기록 → 확정 원인·조치 지정·승인 → MES/ERP 연계 → 판단 보류 검토 → 위험도 자동 조치·효과 검증 → 폐쇄망 모드. 화면 데이터는 시연용 예시이며, 자막은 1초에 7자 정도로 읽을 수 있게 맞췄습니다.
 
 [개발자용 영상 mp4 (2분 34초, 시스템 뒤 흐름)](docs/demo/qualiguard-dev-demo.mp4): 인프라(docker compose)·센서 시뮬레이터 → Kafka UI(sensor.raw · sensor.clean · quality.anomaly) → 경보 1건 실시간 분석(분류 → 원인 분석 → 검증 → 초안, agent.* 토픽 · 사건 이벤트) → QMS 화면의 새 초안과 분석 기록
 
@@ -40,7 +40,7 @@
 | [![검토 대기 목록](docs/ui-redesign/after/desktop-ncr-list.png)](docs/ui-redesign/after/desktop-ncr-list.png) | [![근거 탭](docs/ui-redesign/after/desktop-ncr-evidence.png)](docs/ui-redesign/after/desktop-ncr-evidence.png) |
 | 상태 탭·검토 지표, 거르개·정렬 | 처리 단계, 연결된 경보, 에이전트 분석 기록(검증·단계별 시간) |
 
-아래 영상과 사진은 리디자인 전 화면이며 실제 데이터로 찍었습니다.
+아래 사진은 리디자인 전 화면이며 실제 데이터로 찍었습니다.
 
 | 1. 로그인 | 2. 검토 대기 목록 |
 |:---:|:---:|
