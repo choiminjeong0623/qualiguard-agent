@@ -5,7 +5,7 @@
 | 그림 | 보여 주는 것 | 파일 |
 |---|---|---|
 | ① 전체 시스템 | 현장 수집 → SPC 탐지 → 멀티 에이전트 → 사람 승인 → MES/ERP | [PNG](architecture/qualiguard-architecture.png) · [SVG](architecture/qualiguard-architecture.svg) |
-| ② 에이전트 파이프라인 | 에이전트 4개와 오케스트레이터를 잇는 Kafka `agent.*` 7토픽 | [PNG](architecture/agent-pipeline.png) · [SVG](architecture/agent-pipeline.svg) · [Mermaid](architecture/agent-pipeline.mmd) |
+| ② 에이전트 파이프라인 | 에이전트 4개·ML 선판단과 오케스트레이터를 잇는 Kafka `agent.*` 7토픽, 모바일 알림 | [PNG](architecture/agent-pipeline.png) · [SVG](architecture/agent-pipeline.svg) · [Mermaid](architecture/agent-pipeline.mmd) |
 | ③ 사건 상태 | 오케스트레이터 상태 기계 (되돌림·종결·실패) | [PNG](architecture/incident-state.png) · [SVG](architecture/incident-state.svg) · [Mermaid](architecture/incident-state.mmd) |
 | ④ 승인·연계 순서 | 승인 + 아웃박스 한 트랜잭션 → MES/ERP 응답 | [PNG](architecture/approval-integration.png) · [SVG](architecture/approval-integration.svg) · [Mermaid](architecture/approval-integration.mmd) |
 
@@ -16,8 +16,8 @@
 세 줄(lane)로 읽습니다. 오른쪽 SQL Server 가 세 단계를 잇는 기준 저장소입니다.
 
 1. **현장 수집 · 실시간 이상 탐지** — Python 시뮬레이터가 shot마다 MQTT(QoS 1)로 발행 → Mosquitto(장비별 계정·토픽 ACL) → 브리지가 검증·중복 제거 후 `sensor.raw` (형식 오류는 `quality.dlq`) → Kafka Streams SPC 가 관리도 4종으로 판정해 `sensor.clean`·`quality.anomaly` → `QualityStoreWriter` 가 DB 적재.
-2. **멀티 에이전트 원인 분석** — 스케줄러(5초 폴링) 또는 분석 API 가 미처리 경보를 사건으로 넣으면, 분류(규칙) → 오케스트레이터 → 원인 분석(Gemini, 도구 = 저장 프로시저, 조회 시점 고정) → 검증(규칙, 약하면 최대 1회 되돌림) → 보고서 작성(로컬 Ollama, 실패 시 근거 표·클라우드 0회) 순서로 흐릅니다. 결과는 `agent_incident`·`agent_analysis`·부적합 초안(DRAFT)으로 저장됩니다.
-3. **사람 승인 · MES/ERP 연계** — 품질 담당자가 QMS 화면(jQuery + Tabler, Spring Security 로그인)에서 초안을 수정·승인·반려합니다. 승인과 `integration_outbox` 기록은 한 트랜잭션이고, `OutboxPublisher` 가 2초마다 `quality.ncr.approved` 로 발행 → 가상 MES/ERP 가 `integration.ncr.ack` 로 응답 → 연계 상태가 DB 에 반영됩니다.
+2. **멀티 에이전트 원인 분석** — 스케줄러(5초 폴링) 또는 분석 API 가 미처리 경보를 사건으로 넣으면, 분류(규칙) → 오케스트레이터 → 원인 분석(**ML 선판단** 먼저: 학습한 고장이 확실하면 LLM 생략, 애매하거나 처음 보는 패턴이면 Gemini + 도구 = 저장 프로시저, 조회 시점 고정) → 검증(규칙, 약하면 최대 1회 되돌림) → 보고서 작성(로컬 Ollama, 실패 시 근거 표·클라우드 0회) 순서로 흐릅니다. 결과는 `agent_incident`·`agent_analysis`·부적합 초안(DRAFT)으로 저장됩니다.
+3. **사람 승인 · MES/ERP 연계** — 새 부적합 초안이나 판단 보류가 생기면 `AlertNotifier` 가 저장 뒤 담당자 휴대폰으로 알립니다(ntfy 앱 푸시·Slack, 누르면 해당 QMS 화면). 품질 담당자가 QMS 화면(jQuery + Tabler, Spring Security 로그인)에서 초안을 수정·승인·반려합니다. 승인과 `integration_outbox` 기록은 한 트랜잭션이고, `OutboxPublisher` 가 2초마다 `quality.ncr.approved` 로 발행 → 가상 MES/ERP 가 `integration.ncr.ack` 로 응답 → 연계 상태가 DB 에 반영됩니다.
 
 같은 조회 도구는 MCP 서버(`/mcp`)로도 열려 있어 다른 AI 클라이언트가 쓸 수 있습니다.
 
@@ -38,7 +38,9 @@ flowchart LR
     A(["미처리 경보<br/>quality.anomaly → DB"]):::end_ --> TRI["분류 에이전트<br/>(규칙)"]:::rule
     TRI --> T1[("agent.incident.triaged")]:::topic --> ORC{{"오케스트레이터<br/>(상태 기계)"}}:::rule
 
-    ORC --> T2[("agent.analysis.requested")]:::topic --> ANA["원인 분석 에이전트<br/>(LLM · Gemini)"]:::ai
+    ORC --> T2[("agent.analysis.requested")]:::topic --> ML{"ML 선판단<br/>(랜덤 포레스트)"}:::rule
+    ML -- "애매 · 처음 보는 패턴<br/>단발성(NOISE)" --> ANA["원인 분석 에이전트<br/>(LLM · Gemini)"]:::ai
+    ML -- "확률 ≥ 0.9 · 학습 분포 안<br/>LLM 생략 (skip 모드)" --> T3
     ANA --> T3[("agent.analysis.completed")]:::topic --> ORC
     ORC --> T4[("agent.verification.requested")]:::topic --> VER["검증 에이전트<br/>(규칙)"]:::rule
     VER --> T5[("agent.verification.completed")]:::topic --> ORC
@@ -49,12 +51,15 @@ flowchart LR
     ORC -- "초안 작성 완료" --> H(["AWAITING_APPROVAL<br/>사람 승인 대기"]):::human
     ORC -- "관찰 · 센서 점검" --> C(["CLOSED"]):::end_
     ORC -- "분석 실패" --> F(["FAILED<br/>경보는 다시 분석 대상"]):::end_
+    H -. "새 초안 알림" .-> N(["담당자 휴대폰<br/>ntfy · Slack"]):::human
+    ORC -. "판단 보류 알림" .-> N
 ```
 
 | 에이전트 | 코드 | 방식 | 하는 일 |
 |---|---|---|---|
 | 분류 | `TriageAgent` | 규칙 | 심각도(P_CHART=HIGH, XBAR·S_CHART=MEDIUM, INDIVIDUAL=LOW)·유형 판정, 같은 설비 경보를 사건으로 묶음 |
 | 오케스트레이터 | `IncidentOrchestrator` | 상태 기계 | 다음 에이전트에게 넘기기, 되돌림 횟수 제한. 스스로 판단하지 않음 |
+| ML 선판단 | `AnalysisAgent` → `MlTriage`(`CauseForest`) | ML (랜덤 포레스트, 실험 기능) | 경보 시점 특징 66개로 원인 확률 계산. 확률 ≥ 0.9 이고 학습 분포 안이면 LLM 생략(skip), 애매·처음 보는 패턴·단발성(NOISE)은 LLM 으로. `qg.agent.ml-triage.mode=off/shadow/skip`, 판단은 `agent_ml_judgment` 에 기록, skip 중 10% 는 LLM 으로 감사 |
 | 원인 분석 | `AnalysisAgent` → `IncidentAnalyzer` | LLM (Spring AI + Gemini) | 도구 5개(`getSpcSummary`, `getSensorTrend`, `getDefectSummary`, `findSimilarNcr`, `getMaintenanceHistory`)로 근거 수집 후 판단 |
 | 검증 | `VerifierStage` → `VerifierAgent` | 규칙 | 조사 충분성·근거 수치·판단 정합·사례 실재·데이터 대조 5종 |
 | 보고서 작성 | `ReportWriterAgent` | 로컬 LLM / 근거 표 | 판단은 바꾸지 않고 문장만 작성. 기밀 데이터는 로컬 모델에만 |

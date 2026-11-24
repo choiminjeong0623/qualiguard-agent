@@ -30,6 +30,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.qualiguard.qms.agent.hold.JudgementHoldPolicy;
 import com.qualiguard.qms.knowledge.NcrEmbeddingService;
 import com.qualiguard.qms.knowledge.SopLibrary;
+import com.qualiguard.qms.notify.AlertNotice;
+import com.qualiguard.qms.notify.AlertNotifier;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -160,6 +162,8 @@ public class IncidentAnalyzer {
     static final int DEFAULT_MAX_TOOL_CALLS = 15;
 
     /** 시험용: LLM 호출 보호는 기본값(90초, 재시도 1회). */
+    private AlertNotifier notifier;
+
     public IncidentAnalyzer(JdbcTemplate jdbc, ObjectMapper objectMapper, TransactionTemplate tx,
             AgentProperties props, ObjectProvider<ChatClient.Builder> chatClientBuilder, String model,
             NcrEmbeddingService embeddings) {
@@ -188,6 +192,12 @@ public class IncidentAnalyzer {
         this.chatClientBuilder = chatClientBuilder;
         this.model = model;
         this.embeddings = embeddings;
+    }
+
+    /** 담당자 모바일 알림 (없으면 보내지 않음). 시험용 생성자를 그대로 두려고 setter 로 받는다. */
+    @Autowired(required = false)
+    public void setNotifier(AlertNotifier notifier) {
+        this.notifier = notifier;
     }
 
     /** SOP 검색 도구를 붙인다 (qg.knowledge.sop.enabled=false 면 붙이지 않음). */
@@ -455,6 +465,7 @@ public class IncidentAnalyzer {
         int confidence = result.confidence() == null ? 0 : Math.max(0, Math.min(100, result.confidence()));
         String resultJson = objectMapper.writeValueAsString(result);
 
+        final JudgementHoldPolicy.Hold[] holdSeen = new JudgementHoldPolicy.Hold[1];
         Outcome outcome = tx.execute(status -> {
             String ncrNo = null;
             boolean merged = false;
@@ -516,7 +527,7 @@ public class IncidentAnalyzer {
             }
             Integer analysisId = insertAnalysis(job, decision, causeCode, confidence, resultJson, trace, ms, ncrId,
                     null, attemptCount, verified, incidentId, pipelineJson);
-            markHoldIfNeeded(analysisId, job, decision, verified);
+            holdSeen[0] = markHoldIfNeeded(analysisId, job, decision, verified).orElse(null);
             return new Outcome(analysisId, equipmentId, job.trigger(), job.asOfShot(), job.parentId(), decision,
                     causeCode, confidence, ncrNo, merged, anomalyIds, ms, trace, result, null, attemptCount, verified,
                     null, null, null, null, Tokens.fromTrace(trace));
@@ -527,7 +538,26 @@ public class IncidentAnalyzer {
                 outcome.ncrNo() == null ? "" : outcome.ncrNo(),
                 outcome.mergedIntoExistingNcr() ? "(기존 초안에 연결)" : "", attemptCount,
                 verified == null ? "-" : verified.status(), trace.size(), ms);
+        notifyReviewer(job, outcome, text, holdSeen[0]);
         return outcome;
+    }
+
+    /**
+     * 담당자 모바일 알림: 저장(커밋)이 끝난 뒤에만 보낸다. 평가 재생(run_tag)은 보내지 않는다.
+     * 새 부적합 초안 1건 → 초안 알림, 판단 보류 → 보류 알림. 기존 초안에 연결된 경보는 다시 알리지 않는다.
+     */
+    private void notifyReviewer(Job job, Outcome outcome, AnalysisResult text, JudgementHoldPolicy.Hold hold) {
+        if (notifier == null || job.tag() != null || outcome == null) {
+            return;
+        }
+        if (outcome.ncrNo() != null && !outcome.mergedIntoExistingNcr()) {
+            notifier.notifyAsync(AlertNotice.draft(outcome.equipmentId(), outcome.ncrNo(), text.title(),
+                    outcome.confidence()));
+        }
+        if (hold != null) {
+            notifier.notifyAsync(AlertNotice.hold(outcome.equipmentId(), outcome.analysisId(), hold.reason(),
+                    hold.detail()));
+        }
     }
 
     /** 분석 에이전트 1회: 도구로 조사 → JSON 결과. 형식이 깨지면 형식만 1회 고쳐 달라고 한다. */
@@ -880,11 +910,13 @@ public class IncidentAnalyzer {
     }
 
     /** 판단 보류 규칙(JudgementHoldPolicy)에 걸리면 사람 검토 대기로 표시한다 (로드맵 F2). */
-    private void markHoldIfNeeded(Integer analysisId, Job job, String decision, VerifierAgent.Verification verified) {
+    private Optional<JudgementHoldPolicy.Hold> markHoldIfNeeded(Integer analysisId, Job job, String decision,
+            VerifierAgent.Verification verified) {
         Object count = job.recheckInfo() == null ? null : job.recheckInfo().get("recheckCount");
         int recheckCount = count instanceof Number n ? n.intValue() : 0;
-        JudgementHoldPolicy.evaluate(job.trigger(), decision, recheckCount, props.recheckMax(),
-                verified == null ? null : verified.status()).ifPresent(hold -> {
+        Optional<JudgementHoldPolicy.Hold> found = JudgementHoldPolicy.evaluate(job.trigger(), decision, recheckCount,
+                props.recheckMax(), verified == null ? null : verified.status());
+        found.ifPresent(hold -> {
                     jdbc.update("""
                             UPDATE dbo.agent_analysis
                             SET hold_status = 'PENDING', hold_reason = ?, hold_detail = ?
@@ -893,6 +925,7 @@ public class IncidentAnalyzer {
                     log.warn("[에이전트] {} 분석 {} 판단 보류 → 사람 검토 ({}): {}", job.equipmentId(), analysisId,
                             hold.reason(), hold.detail());
                 });
+        return found;
     }
 
     private Integer insertAnalysis(Job job, String decision, String causeCode, Integer confidence,

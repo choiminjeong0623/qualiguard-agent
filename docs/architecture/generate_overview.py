@@ -94,7 +94,7 @@ o.append(f'<text x="{cx}" y="{cy+26}" text-anchor="middle" font-size="11.8" fill
 arrow('M210 502 H243'); arrow('M415 502 H463')
 label(439,494,'triaged',size=10,mono=True,bg=False,color='#0e7490')
 AX=820
-node(AX,388,215,68,'llm','원인 분석 에이전트',['Spring AI + Gemini','도구 5개 = 저장 프로시저'],badge='LLM')
+node(AX,388,215,68,'llm','원인 분석 에이전트',['ML 먼저 · 확실하면 LLM 생략','애매하면 Gemini + 도구 5개'],badge='ML → LLM')
 node(AX,468,215,68,'rule','검증 에이전트',['규칙 5종 · 근거/모순 점검','약하면 되돌림 (최대 1회)'],badge='Rule')
 node(AX,548,215,68,'llm','보고서 작성 에이전트',['로컬 Ollama qwen2.5 1.5B','실패 시 근거 표 · 클라우드 0회'],badge='Local LLM')
 arrow('M632 480 C700 470 740 424 818 422',both=True,color='#7c3aed')
@@ -134,6 +134,14 @@ arrow(f'M1478 885 H725 V{Y3+78}',color='#16a34a')
 label(1000,889,'미발행 아웃박스 조회',size=11,color='#15803d')
 arrow(f'M800 {Y3+38} H828'); arrow(f'M1010 {Y3+38} H1038'); arrow(f'M1205 {Y3+38} H1233')
 arrow(f'M1415 {Y3+38} H1478',color='#16a34a')
+
+# 모바일 경보 알림
+node(290,862,220,46,'app','AlertNotifier',['저장 뒤 웹훅 · 실패해도 분석 무관'])
+node(40,862,190,46,'human','담당자 휴대폰',['ntfy·Slack · 누르면 QMS 화면'],rx=23)
+arrow('M560 600 H395 V860',dashed=True,color='#db2777')
+label(470,620,'새 초안 · 판단 보류 알림',size=10.8,color='#be185d')
+arrow('M290 885 H232',color='#db2777')
+arrow('M130 862 V848',dashed=True,color='#db2777')
 
 # DB column
 f,s,t=C['db']
