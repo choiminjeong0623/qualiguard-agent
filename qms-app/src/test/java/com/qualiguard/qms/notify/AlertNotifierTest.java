@@ -43,6 +43,11 @@ class AlertNotifierTest {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/";
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> json(String text) {
+        return om.readValue(text, Map.class);
+    }
+
     private AlertNotifier notifier(String mode, String url) {
         return new AlertNotifier(mode, url, "qg-alerts", "", "https://qms.example/", om);
     }
@@ -68,7 +73,7 @@ class AlertNotifierTest {
     void ntfy_로_JSON_을_보낸다() throws Exception {
         var nt = notifier("ntfy", startServer());
         assertThat(nt.send(AlertNotice.draft("IMM-01", "AI-2026-0118", "히터 열화 의심", 88))).isTrue();
-        Map<?, ?> body = om.readValue(bodies.get(0), Map.class);
+        Map<String, Object> body = json(bodies.get(0));
         assertThat(body.get("topic")).isEqualTo("qg-alerts");
         assertThat(body.get("title")).isEqualTo("[QualiGuard] IMM-01 부적합 초안 검토 대기");
         assertThat(body.get("click")).isEqualTo("https://qms.example/qms/index.html#AI-2026-0118");
@@ -81,8 +86,8 @@ class AlertNotifierTest {
     void slack_은_text_한_줄_형식() throws Exception {
         var nt = notifier("slack", startServer());
         nt.send(AlertNotice.hold("IMM-02", 7, "VERIFY_WEAK", "근거 부족"));
-        Map<?, ?> body = om.readValue(bodies.get(0), Map.class);
-        assertThat(body).hasSize(1).containsKey("text");
+        Map<String, Object> body = json(bodies.get(0));
+        assertThat(body).containsOnlyKeys("text");
         assertThat((String) body.get("text")).contains("판단 보류").contains("<https://qms.example/qms/actions.html#hold/7|QMS 에서 열기>");
     }
 
