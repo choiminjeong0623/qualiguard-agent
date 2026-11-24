@@ -116,7 +116,7 @@ public class AgentController {
         m.put("temperature", env.getProperty("ollama".equals(provider) ? "spring.ai.ollama.chat.temperature"
                 : "spring.ai.google.genai.chat.temperature"));
         m.put("transport", env.getProperty("qg.agent.pipeline.transport", "kafka"));
-        m.put("promptVersion", AgentPrompts.VERSION);   // 로드맵 O1: 어떤 프롬프트로 잰 수치인지
+        m.put("promptVersion", analyzer.promptVersion());   // 로드맵 O1: 어떤 프롬프트로 잰 수치인지
         m.put("analysisMode", analyzer.analysisMode());   // 로드맵 A1: 실제 적용된 값
         m.put("writerMode", env.getProperty("qg.agent.writer.mode", "analysis-text"));
         m.put("vectorEnabled", env.getProperty("qg.knowledge.vector-enabled", Boolean.class, false));
