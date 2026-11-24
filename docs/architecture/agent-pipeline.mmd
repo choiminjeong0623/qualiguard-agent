@@ -8,7 +8,9 @@ flowchart LR
     A(["미처리 경보<br/>quality.anomaly → DB"]):::end_ --> TRI["분류 에이전트<br/>(규칙)"]:::rule
     TRI --> T1[("agent.incident.triaged")]:::topic --> ORC{{"오케스트레이터<br/>(상태 기계)"}}:::rule
 
-    ORC --> T2[("agent.analysis.requested")]:::topic --> ANA["원인 분석 에이전트<br/>(LLM · Gemini)"]:::ai
+    ORC --> T2[("agent.analysis.requested")]:::topic --> ML{"ML 선판단<br/>(랜덤 포레스트)"}:::rule
+    ML -- "애매 · 처음 보는 패턴<br/>단발성(NOISE)" --> ANA["원인 분석 에이전트<br/>(LLM · Gemini)"]:::ai
+    ML -- "확률 ≥ 0.9 · 학습 분포 안<br/>LLM 생략 (skip 모드)" --> T3
     ANA --> T3[("agent.analysis.completed")]:::topic --> ORC
     ORC --> T4[("agent.verification.requested")]:::topic --> VER["검증 에이전트<br/>(규칙)"]:::rule
     VER --> T5[("agent.verification.completed")]:::topic --> ORC
@@ -19,3 +21,5 @@ flowchart LR
     ORC -- "초안 작성 완료" --> H(["AWAITING_APPROVAL<br/>사람 승인 대기"]):::human
     ORC -- "관찰 · 센서 점검" --> C(["CLOSED"]):::end_
     ORC -- "분석 실패" --> F(["FAILED<br/>경보는 다시 분석 대상"]):::end_
+    H -. "새 초안 알림" .-> N(["담당자 휴대폰<br/>ntfy · Slack"]):::human
+    ORC -. "판단 보류 알림" .-> N

@@ -97,8 +97,9 @@ flowchart LR
     SPC --> ANO[("quality.anomaly")]
     CLEAN --> DB[("SQL Server<br/>공정 · 이상 · 규격 · 정비 · 부적합")]
     ANO --> DB
-    DB -- "미처리 경보" --> AG["에이전트 파이프라인 (Kafka agent.*)<br/>분류 → 원인 분석(Gemini, 도구=저장 프로시저)<br/>⇄ 검증(규칙) → 초안 작성(기본: 분석 문장, 실험: 로컬 모델)"]
+    DB -- "미처리 경보" --> AG["에이전트 파이프라인 (Kafka agent.*)<br/>분류 → ML 선판단(확실하면 LLM 생략)<br/>→ 원인 분석(Gemini, 도구=저장 프로시저)<br/>⇄ 검증(규칙) → 초안 작성(기본: 분석 문장, 실험: 로컬 모델)"]
     AG -- "부적합 초안 · 분석 기록" --> DB
+    AG -. "새 초안 · 판단 보류" .-> PH["담당자 휴대폰 알림<br/>(ntfy 앱 푸시 · Slack)"] -. "누르면 해당 화면" .-> QMS
     DB --> QMS["QMS 검토 화면<br/>담당자 수정 · 승인 · 반려"]
     QMS -- "승인 + 이벤트 (같은 트랜잭션, 아웃박스)" --> APR[("quality.ncr.approved")] --> MES["가상 MES/ERP<br/>점검 지시 · 비용 전표 (중복 제거)"]
     MES -- "수신 확인 · 처리 완료(번호) · 실패" --> ACK[("integration.ncr.ack")] --> QMS
