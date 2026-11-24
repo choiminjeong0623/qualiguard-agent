@@ -1,0 +1,2394 @@
+[
+  {
+    "run": 1,
+    "case": "heater_degradation",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r1-heater_degradation",
+    "expectedCause": "HEATER_DEGRADATION",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 300,
+    "firstDefectShot": 368,
+    "diagnosed": true,
+    "diagnosisShot": 347,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 47,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 347,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 20,
+    "failed": 0,
+    "latencyMs": 105583,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 346,
+        "seedRule": "INDIVIDUAL barrelTemp",
+        "seedSensor": "",
+        "asOfShot": 346,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "HEATER_DEGRADATION",
+        "confidence": 70,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "실린더 온도 최근 5 shot 평균이 227℃ 이하로 지속 하락하거나 XBAR 관리 한계를 이탈하는지",
+          "사출 압력 최근 5 shot 평균이 1210 bar를 초과하여 추가 상승하는지",
+          "미성형(SHORT_SHOT) 등 외관 및 치수 불량이 발생하는지"
+        ],
+        "reasoningSummary": "개별값 관리 한계 이탈(INDIVIDUAL) 1회 경보이며 현재 제품 불량 및 규격 이탈은 없으나, 실린더 온도 하락과 함께 사출 압력 및 모터 전류가 물리적 메커니즘에 맞게 동반 상승하고 과거 히터 밴드 점검 권장 주기를 초과한 점을 감안하여 유력 원인을 HEATER_DEGRADATION으로 설정하고 공정 추이를 집중 관찰함",
+        "similarCases": [
+          "NCR-2025-0012"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0012"
+        ],
+        "candidateCauses": [
+          "HEATER_DEGRADATION",
+          "SENSOR_FAULT",
+          "MATERIAL"
+        ],
+        "numberClaims": 32,
+        "numberVerified": 30,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          8629,
+          8710,
+          8734,
+          8742,
+          8751,
+          13492,
+          13548,
+          13561,
+          18133,
+          18228
+        ],
+        "tokens": {
+          "prompt": 42146,
+          "output": 1228,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:25:59.438Z) @8629ms",
+          "getSensorTrend(IMM-01, barrelTemp, 300, 20, 2026-11-24T18:25:59.438Z) @8710ms",
+          "getSensorTrend(IMM-01, barrelTemp, 60, 5, 2026-11-24T18:25:59.438Z) @8734ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:25:59.438Z) @8742ms",
+          "getMaintenanceHistory(IMM-01, 10) @8751ms",
+          "getSensorTrend(IMM-01, injectionPressure, 300, 20, 2026-11-24T18:25:59.438Z) @13492ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:25:59.438Z) @13548ms",
+          "getSensorTrend(IMM-01, motorCurrent, 60, 5, 2026-11-24T18:25:59.438Z) @13561ms",
+          "findSimilarNcr(IMM-01, barrelTemp,injectionPressure,motorCurrent, null, 5, 2026-11-24T18:25:59.438Z) situation=\"실린더 온도가 225.28℃까지 하락하여 관리 한계를 이탈하고, 사출 압력과 모터 전류가 상승 경향을 보임. 히터 밴드 열화 의심\" +의미검색 @18133ms",
+          "searchSop(\"실린더 온도 barrelTemp 하락 사출 압력 상승 모터 전류 히터 밴드 열화 점검\") → [SOP-INJ-010, SOP-INJ-021, SOP-QC-041] @18228ms",
+          "  ↳ 토큰: 입력 42146, 출력 1228, 생각 -",
+          "verify#1(PASS) @57898ms"
+        ],
+        "latencyMs": 57923,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 347,
+        "seedRule": "XBAR barrelTemp",
+        "seedSensor": "",
+        "asOfShot": 347,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "HEATER_DEGRADATION",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0138",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "히터 밴드 점검/교체 후 실린더 온도가 설정치(230℃)로 회복되는지",
+          "사출 압력(기준 1200 bar) 및 모터 전류(기준 45 A)가 안정화되는지",
+          "온도 하락 구간(shot 328~347) 생산품에서 미성형(SHORT_SHOT) 불량이 발생하는지"
+        ],
+        "reasoningSummary": "직전 판정(shotNo 346)에서 HEATER_DEGRADATION 후보로 관찰을 결정한 이후 실린더 온도가 227.02℃까지 추가 하락하며 XBAR 관리 한계를 이탈함. 수지 점도 증가에 따른 사출 압력(1208.32 bar) 및 모터 전류(45.22 A)의 동반 상승이 확인되고 정비 권장 주기를 82일 초과한 점, 과거 NCR-2025-0012와 일치하는 점을 근거로 미성형 불량 발생 전 예방 조치를 위한 NCR_DRAFT로 상향 판정함",
+        "similarCases": [
+          "NCR-2025-0012"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0012"
+        ],
+        "candidateCauses": [
+          "HEATER_DEGRADATION",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 24,
+        "numberVerified": 22,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          10841,
+          10892,
+          10905,
+          10914,
+          10922,
+          10929,
+          15647,
+          16042,
+          16110,
+          47597
+        ],
+        "tokens": {
+          "prompt": 29650,
+          "output": 1317,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:25:59.499Z) @10841ms",
+          "getSensorTrend(IMM-01, barrelTemp, 300, 20, 2026-11-24T18:25:59.499Z) @10892ms",
+          "getSensorTrend(IMM-01, barrelTemp, 60, 5, 2026-11-24T18:25:59.499Z) @10905ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:25:59.499Z) @10914ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:25:59.499Z) @10922ms",
+          "getMaintenanceHistory(IMM-01, 10) @10929ms",
+          "getSensorTrend(IMM-01, motorCurrent, 60, 5, 2026-11-24T18:25:59.499Z) @15647ms",
+          "findSimilarNcr(IMM-01, barrelTemp,injectionPressure,motorCurrent, null, 5, 2026-11-24T18:25:59.499Z) situation=\"실린더 온도가 지속적으로 하락하며 사출 압력과 모터 전류가 동반 상승하고 있음\" +의미검색 @16042ms",
+          "searchSop(\"barrelTemp 하락 실린더 히터 밴드 사출 압력 상승 점검\") → [SOP-INJ-010, SOP-INJ-021, SOP-QC-041] @16110ms",
+          "  ↳ 토큰: 입력 29650, 출력 1317, 생각 -",
+          "verify#1(PASS) @47513ms",
+          "writeReport(ANALYSIS_TEXT) @47597ms"
+        ],
+        "latencyMs": 47660,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 1,
+    "case": "pressure_sensor_spike",
+    "equipment": "IMM-02",
+    "runTag": "replay-1125034142-r1-pressure_sensor_spike",
+    "expectedCause": "SENSOR_FAULT",
+    "expectedDecision": "SENSOR_CHECK",
+    "faultStart": 400,
+    "firstDefectShot": null,
+    "diagnosed": true,
+    "diagnosisShot": 407,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 7,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 407,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 1,
+    "rechecks": 0,
+    "llmCalls": 1,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 8,
+    "failed": 0,
+    "latencyMs": 44097,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 407,
+        "seedRule": "INDIVIDUAL injectionPressure",
+        "seedSensor": "",
+        "asOfShot": 407,
+        "alarmsInIncident": 1,
+        "decision": "SENSOR_CHECK",
+        "cause": "SENSOR_FAULT",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "사출 압력 측정값의 간헐적 스파이크 재발 여부",
+          "사출 압력 급변 시 모터 전류 및 쿠션량의 동반 변화 여부"
+        ],
+        "reasoningSummary": "shot 407에서 사출 압력만 1401.15 bar로 단발성 튐이 발생했으나 모터 전류(44.92A)를 비롯한 타 센서는 정상이고 불량도 0건입니다. 과거 IMM-02 동일 현상(NCR-2026-0004)과 정비 이력에 비추어 센서 커넥터 접촉 불량으로 판단되어 SENSOR_CHECK를 결정합니다.",
+        "similarCases": [
+          "NCR-2026-0004"
+        ],
+        "similarCasesReal": [
+          "NCR-2026-0004"
+        ],
+        "candidateCauses": [
+          "SENSOR_FAULT",
+          "NOISE",
+          "UNKNOWN"
+        ],
+        "numberClaims": 25,
+        "numberVerified": 24,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7845,
+          7896,
+          7909,
+          7915,
+          7924,
+          15731,
+          16145,
+          22507
+        ],
+        "tokens": {
+          "prompt": 39526,
+          "output": 1174,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:02.873Z) @7845ms",
+          "getSensorTrend(IMM-02, injectionPressure, 300, 20, 2026-11-24T18:26:02.873Z) @7896ms",
+          "getSensorTrend(IMM-02, injectionPressure, 60, 5, 2026-11-24T18:26:02.873Z) @7909ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:02.873Z) @7915ms",
+          "getMaintenanceHistory(IMM-02, 10) @7924ms",
+          "getSensorTrend(IMM-02, motorCurrent, 60, 5, 2026-11-24T18:26:02.873Z) @15731ms",
+          "findSimilarNcr(IMM-02, injectionPressure, null, 5, 2026-11-24T18:26:02.873Z) situation=\"사출 압력이 단발적으로 1401 bar로 급상승했으나 다른 센서는 정상이고 불량도 없음\" +의미검색 @16145ms",
+          "searchSop(\"사출 압력 센서 커넥터 체결 센서 이상 점검\") → [SOP-INJ-013, SOP-INJ-010, SOP-INJ-011] @22507ms",
+          "  ↳ 토큰: 입력 39526, 출력 1174, 생각 -",
+          "verify#1(PASS) @44056ms"
+        ],
+        "latencyMs": 44097,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 1,
+    "case": "cooling_blockage",
+    "equipment": "IMM-02",
+    "runTag": "replay-1125034142-r1-cooling_blockage",
+    "expectedCause": "COOLING_ISSUE",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 900,
+    "firstDefectShot": 1016,
+    "diagnosed": true,
+    "diagnosisShot": 957,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 57,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 957,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 18,
+    "failed": 0,
+    "latencyMs": 99906,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 941,
+        "seedRule": "XBAR moldTemp",
+        "seedSensor": "",
+        "asOfShot": 941,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "COOLING_ISSUE",
+        "confidence": 70,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "금형 온도(moldTemp) 5 shot 평균의 61.5℃ 초과 상승 지속 여부",
+          "사이클 타임(cycleTime)의 추가 연장 추세 및 30.5초 초과 여부",
+          "성형품 치수(DIMENSION) 공차 이탈 및 휨(WARPAGE) 불량 발생 여부"
+        ],
+        "reasoningSummary": "금형 온도가 관리 한계를 벗어나 지속 상승 중이고 사이클 타임도 동반 증가 추세를 보여 냉각 계통 이상 가능성이 높습니다. 과거 미실시된 냉각 채널 세척 이력 및 유사 NCR과 일치하지만, 현재 제품 규격 내(Cpk 2.33)에 있고 불량이 아직 발생하지 않은 초기 단계이므로 즉각적인 부적합 처리 대신 냉각 계통 점검과 함께 공정 추이를 관찰합니다.",
+        "similarCases": [
+          "NCR-2025-0021"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0021"
+        ],
+        "candidateCauses": [
+          "COOLING_ISSUE",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 25,
+        "numberVerified": 24,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          6140,
+          6193,
+          6204,
+          6212,
+          6218,
+          14084,
+          14590,
+          19719
+        ],
+        "tokens": {
+          "prompt": 36389,
+          "output": 1139,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:32.903Z) @6140ms",
+          "getSensorTrend(IMM-02, moldTemp, 300, 20, 2026-11-24T18:26:32.903Z) @6193ms",
+          "getSensorTrend(IMM-02, moldTemp, 60, 5, 2026-11-24T18:26:32.903Z) @6204ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:32.903Z) @6212ms",
+          "getMaintenanceHistory(IMM-02, 10) @6218ms",
+          "getSensorTrend(IMM-02, cycleTime, 300, 20, 2026-11-24T18:26:32.903Z) @14084ms",
+          "findSimilarNcr(IMM-02, moldTemp, null, 5, 2026-11-24T18:26:32.903Z) situation=\"금형 온도가 60도 기준에서 61도 이상으로 서서히 상승 중, Xbar 관리 한계 이탈 경보 발생\" +의미검색 @14590ms",
+          "searchSop(\"moldTemp 상승 cycleTime 금형 냉각 채널 스케일 치수 불량 COOLING_ISSUE\") → [SOP-INJ-011, SOP-QC-041, SOP-INJ-001] @19719ms",
+          "  ↳ 토큰: 입력 36389, 출력 1139, 생각 -",
+          "verify#1(PASS) @51052ms"
+        ],
+        "latencyMs": 51072,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 957,
+        "seedRule": "XBAR cycleTime",
+        "seedSensor": "",
+        "asOfShot": 957,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "COOLING_ISSUE",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0139",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "금형 회로별 냉각수 유량 및 입출구 온도차 측정 결과",
+          "금형 온도 61.5℃ 초과 지속 여부 및 사이클 타임 30.3s 초과 여부",
+          "성형품 치수(DIMENSION) 공차 이탈 및 휨(WARPAGE) 불량 발생 여부"
+        ],
+        "reasoningSummary": "직전 shot 941에서 냉각 계통 이상(COOLING_ISSUE)으로 관찰(OBSERVE) 판정한 이후, watchItems로 지정했던 사이클 타임 연장 추세가 지속되어 shot 957에서 관리 한계 이탈 경보(30.19s)가 발생했습니다. 금형 온도(최근 20 shot 평균 61.114℃)와 사이클 타임(최근 20 shot 평균 30.135s)이 뚜렷한 상관관계를 보이며 동반 상승 중이며, 과거 냉각 채널 세척 미실시 이력 및 유사 NCR(NCR-2025-0021)과 일치합니다. 동일 원인이 2회 연속 확인되었고 공정 변화가 뚜렷하므로 실제 치수 불량 발생 전 예방 조치를 위해 NCR 초안을 발행합니다.",
+        "similarCases": [
+          "NCR-2025-0021"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0021"
+        ],
+        "candidateCauses": [
+          "COOLING_ISSUE",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 25,
+        "numberVerified": 22,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          8524,
+          8583,
+          8600,
+          8612,
+          8624,
+          8632,
+          8639,
+          16696,
+          16737,
+          48812
+        ],
+        "tokens": {
+          "prompt": 29822,
+          "output": 1344,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:33.802Z) @8524ms",
+          "getSensorTrend(IMM-02, cycleTime, 300, 20, 2026-11-24T18:26:33.802Z) @8583ms",
+          "getSensorTrend(IMM-02, cycleTime, 60, 5, 2026-11-24T18:26:33.802Z) @8600ms",
+          "getSensorTrend(IMM-02, moldTemp, 300, 20, 2026-11-24T18:26:33.802Z) @8612ms",
+          "getSensorTrend(IMM-02, moldTemp, 60, 5, 2026-11-24T18:26:33.802Z) @8624ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:33.802Z) @8632ms",
+          "getMaintenanceHistory(IMM-02, 10) @8639ms",
+          "findSimilarNcr(IMM-02, cycleTime,moldTemp, null, 5, 2026-11-24T18:26:33.802Z) situation=\"금형 온도가 61도 이상으로 지속 상승하며 사이클 타임이 30.1초 이상으로 동반 증가하여 관리 한계 이탈 발생\" +의미검색 @16696ms",
+          "searchSop(\"금형 온도 상승 사이클 타임 증가 냉각 냉각수 점검 절차\") → [SOP-INJ-011, SOP-INJ-001, SOP-INJ-021] @16737ms",
+          "  ↳ 토큰: 입력 29822, 출력 1344, 생각 -",
+          "verify#1(PASS) @48746ms",
+          "writeReport(ANALYSIS_TEXT) @48812ms"
+        ],
+        "latencyMs": 48834,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 1,
+    "case": "check_ring_wear",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r1-check_ring_wear",
+    "expectedCause": "CHECK_RING_WEAR",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 1200,
+    "firstDefectShot": 1239,
+    "diagnosed": true,
+    "diagnosisShot": 1239,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 39,
+    "defectsUntilDiagnosis": 1,
+    "lastAnalyzedShot": 1239,
+    "defectsUntilLastStep": 1,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 18,
+    "failed": 0,
+    "latencyMs": 103584,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 1236,
+        "seedRule": "XBAR cushion",
+        "seedSensor": "",
+        "asOfShot": 1236,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "CHECK_RING_WEAR",
+        "confidence": 65,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 5 shot 평균이 4.5 mm 이하로 추가 하락하는지 여부",
+          "사출 압력 구간 표준편차가 15 bar 이상으로 확대되는지 여부",
+          "미성형(SHORT_SHOT) 불량 발생 여부"
+        ],
+        "reasoningSummary": "쿠션량 5 shot 평균이 연속으로 관리 한계를 이탈하여 하향 이동하였고 체크 링 권장 교체 주기 24개월이 경과하여 체크 링 마모가 가장 유력한 후보이나, 사출 압력 산포 확대나 미성형 불량 등 동반 신호가 아직 없고 규격 하한(3.5 mm) 대비 Cpk 4.36으로 공정 여유가 있어 NCR 발행 대신 관찰(OBSERVE)로 분류함.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 24,
+        "numberVerified": 23,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7084,
+          7148,
+          7165,
+          7170,
+          7175,
+          15146,
+          15215,
+          15653,
+          22239
+        ],
+        "tokens": {
+          "prompt": 40267,
+          "output": 1182,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:26:49.598Z) @7084ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:26:49.598Z) @7148ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:26:49.598Z) @7165ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:26:49.598Z) @7170ms",
+          "getMaintenanceHistory(IMM-01, 10) @7175ms",
+          "getSensorTrend(IMM-01, injectionPressure, 300, 20, 2026-11-24T18:26:49.598Z) @15146ms",
+          "getSensorTrend(IMM-01, holdingPressure, 300, 20, 2026-11-24T18:26:49.598Z) @15215ms",
+          "findSimilarNcr(IMM-01, cushion, null, 5, 2026-11-24T18:26:49.598Z) situation=\"쿠션량 5 shot 평균이 4.78mm로 관리한계 이탈하며 하락 추세 보임. 체크링 교체 주기 24개월 도래.\" +의미검색 @15653ms",
+          "searchSop(\"체크 링 마모 쿠션량 사출 압력 미성형 점검\") → [SOP-INJ-012, SOP-INJ-021, SOP-QC-041] @22239ms",
+          "  ↳ 토큰: 입력 40267, 출력 1182, 생각 -",
+          "verify#1(PASS) @54652ms"
+        ],
+        "latencyMs": 54693,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 1239,
+        "seedRule": "INDIVIDUAL cushion",
+        "seedSensor": "",
+        "asOfShot": 1239,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "CHECK_RING_WEAR",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0140",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "체크 링 분해 점검 시 마모 측정값 및 교체 여부",
+          "정비 후 쿠션량 최근 5 shot 평균의 기준치(5.0 mm) 회복 여부",
+          "미성형(SHORT_SHOT) 불량 재발 여부"
+        ],
+        "reasoningSummary": "직전 1236 shot 판단에서 체크 링 마모를 1차 후보로 두고 관찰(OBSERVE)하였으나, 이후 쿠션량 하락 추세가 이어지며 관리 하한을 이탈(4.63 mm)하였고, 감시 항목이었던 미성형(SHORT_SHOT) 불량이 실제로 확인됨. 부품 교체 주기가 경과한 상태에서 품질 영향이 가시화되었으므로 NCR_DRAFT로 상향하여 조치를 권고함.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "CHECK_RING_WEAR",
+          "MATERIAL",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 12,
+        "numberVerified": 11,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          10448,
+          10482,
+          10494,
+          10499,
+          10504,
+          16804,
+          17313,
+          22226,
+          48870
+        ],
+        "tokens": {
+          "prompt": 39514,
+          "output": 1027,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:26:49.770Z) @10448ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:26:49.770Z) @10482ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:26:49.770Z) @10494ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:26:49.770Z) @10499ms",
+          "getMaintenanceHistory(IMM-01, 10) @10504ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:26:49.770Z) @16804ms",
+          "findSimilarNcr(IMM-01, cushion,injectionPressure, SHORT_SHOT, 5, 2026-11-24T18:26:49.770Z) situation=\"쿠션량이 지속적으로 하락하며 개별 관리 한계를 이탈하고 미성형(SHORT_SHOT) 불량이 1건 발생함. 체크 링 교체 주기 24개월 초과.\" +의미검색 @17313ms",
+          "searchSop(\"체크 링 마모 쿠션량 미성형 점검 조치\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-021] @22226ms",
+          "  ↳ 토큰: 입력 39514, 출력 1027, 생각 -",
+          "verify#1(PASS) @48811ms",
+          "writeReport(ANALYSIS_TEXT) @48870ms"
+        ],
+        "latencyMs": 48891,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 1,
+    "case": "단발성 경보 (shot 1934 쿠션량)",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r1-noise-IMM-01-1934",
+    "expectedCause": "NOISE",
+    "expectedDecision": "OBSERVE",
+    "faultStart": null,
+    "firstDefectShot": null,
+    "diagnosed": true,
+    "diagnosisShot": 1934,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": null,
+    "defectsUntilDiagnosis": null,
+    "lastAnalyzedShot": 1934,
+    "defectsUntilLastStep": null,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 1,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 15,
+    "failed": 0,
+    "latencyMs": 93500,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 1934,
+        "seedRule": "INDIVIDUAL cushion",
+        "seedSensor": "",
+        "asOfShot": 1934,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "NOISE",
+        "confidence": 75,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 최근 5 shot 평균이 4.70 mm 이하로 하향 추세를 보이는지",
+          "사출 압력의 표준편차가 10 bar 이상으로 확대되는지",
+          "미성형(SHORT_SHOT) 불량이 추가 발생하는지"
+        ],
+        "reasoningSummary": "단 1회의 개별값 이탈(INDIVIDUAL)로 직전 데이터 및 사출 압력 등 관련 센서의 Cpk가 모두 2.2 이상으로 극히 안정적이어서 단발성 변동(NOISE)으로 판단하고 OBSERVE를 결정했습니다. 체크 링 교체 주기가 도래했음을 고려해 후속 추이를 감시합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "NOISE",
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 14,
+        "numberVerified": 13,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 7,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          6850,
+          6887,
+          6897,
+          6903,
+          6907,
+          19610,
+          19678
+        ],
+        "tokens": {
+          "prompt": 24512,
+          "output": 966,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:27:29.079Z) @6850ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:27:29.079Z) @6887ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:27:29.079Z) @6897ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:27:29.079Z) @6903ms",
+          "getMaintenanceHistory(IMM-01, 10) @6907ms",
+          "findSimilarNcr(IMM-01, cushion, SHORT_SHOT, 5, 2026-11-24T18:27:29.079Z) situation=\"쿠션량이 4.64mm로 개별값 관리한계를 벗어났으나 평균은 4.94mm로 안정적이며 타 센서 변화 없음\" +의미검색 @19610ms",
+          "searchSop(\"쿠션량 변동 단발성 이탈 체크 링 노이즈\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-013] @19678ms",
+          "  ↳ 토큰: 입력 24512, 출력 966, 생각 -",
+          "verify#1(PASS) @48512ms"
+        ],
+        "latencyMs": 48542,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "RECHECK",
+        "seedShot": 1974,
+        "seedRule": "-",
+        "seedSensor": "",
+        "asOfShot": 1974,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "NOISE",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "체크 링 교체 주기 도래에 따른 쿠션량 5 shot 평균 하향 추세(4.70 mm 이하) 모니터링",
+          "사출 압력 5 shot 표준편차 10 bar 초과 여부 지속 확인"
+        ],
+        "reasoningSummary": "shot 1934 관찰(OBSERVE) 판단 시 설정했던 감시 항목(쿠션량 4.70 mm 이하 하향 추세, 사출 압력 표준편차 10 bar 이상 확대, 미성형 발생)을 재확인한 결과, 쿠션량이 4.96 mm로 즉시 안정화되었고 불량 0건 및 사출 압력 Cpk 2.22로 양호하여 단발성 변동(NOISE)임이 검증되었습니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "NOISE",
+          "CHECK_RING_WEAR",
+          "UNKNOWN"
+        ],
+        "numberClaims": 22,
+        "numberVerified": 22,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7355,
+          7415,
+          7427,
+          7433,
+          7438,
+          17056,
+          17494,
+          17534
+        ],
+        "tokens": {
+          "prompt": 26170,
+          "output": 999,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:27:31.357Z) @7355ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:27:31.357Z) @7415ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:27:31.357Z) @7427ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:27:31.357Z) @7433ms",
+          "getMaintenanceHistory(IMM-01, 10) @7438ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:27:31.357Z) @17056ms",
+          "findSimilarNcr(IMM-01, cushion,injectionPressure, null, 5, 2026-11-24T18:27:31.357Z) situation=\"쿠션량 1회 일시적 저하 후 정상 복귀, 사출 압력 안정, 불량 0건\" +의미검색 @17494ms",
+          "searchSop(\"쿠션량 일시적 변동 노이즈 점검 기준\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-021] @17534ms",
+          "  ↳ 토큰: 입력 26170, 출력 999, 생각 -",
+          "verify#1(PASS) @44936ms"
+        ],
+        "latencyMs": 44958,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 2,
+    "case": "heater_degradation",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r2-heater_degradation",
+    "expectedCause": "HEATER_DEGRADATION",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 300,
+    "firstDefectShot": 368,
+    "diagnosed": true,
+    "diagnosisShot": 347,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 47,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 347,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 19,
+    "failed": 0,
+    "latencyMs": 111843,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 346,
+        "seedRule": "INDIVIDUAL barrelTemp",
+        "seedSensor": "",
+        "asOfShot": 346,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "HEATER_DEGRADATION",
+        "confidence": 70,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "실린더 온도 최근 5 shot 평균이 227.0℃ 이하로 추가 하락하거나 XBAR 경보가 발생하는지 확인",
+          "사출 압력과 모터 전류의 지속적인 상승세 및 미성형(SHORT_SHOT) 불량 발생 여부 감시"
+        ],
+        "reasoningSummary": "개별값 1회 관리 한계 이탈 경보이며 제품 불량은 없으나, 실린더 온도 하락 추세와 함께 사출 압력 및 모터 전류가 동반 상승하는 명확한 물리적 상관관계가 관찰됨. 정비 이력상 히터 밴드 권장 점검 주기를 초과한 점과 과거 사례(NCR-2025-0012)가 일치하여 히터 열화 가능성이 높음. 첫 경보 사건이고 제품 규격 여유가 있으므로 OBSERVE로 지정하여 현장 점검과 추이를 관찰함.",
+        "similarCases": [
+          "NCR-2025-0012"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0012"
+        ],
+        "candidateCauses": [
+          "HEATER_DEGRADATION",
+          "SENSOR_FAULT",
+          "MATERIAL"
+        ],
+        "numberClaims": 17,
+        "numberVerified": 16,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          17955,
+          18008,
+          18022,
+          18031,
+          24424,
+          24442,
+          24448,
+          24831,
+          29045
+        ],
+        "tokens": {
+          "prompt": 39542,
+          "output": 1194,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:25:59.438Z) @17955ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:25:59.438Z) @18008ms",
+          "getMaintenanceHistory(IMM-01, 10) @18022ms",
+          "getSensorTrend(IMM-01, barrelTemp, 300, 20, 2026-11-24T18:25:59.438Z) @18031ms",
+          "getSensorTrend(IMM-01, barrelTemp, 60, 5, 2026-11-24T18:25:59.438Z) @24424ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:25:59.438Z) @24442ms",
+          "getSensorTrend(IMM-01, motorCurrent, 60, 5, 2026-11-24T18:25:59.438Z) @24448ms",
+          "findSimilarNcr(IMM-01, barrelTemp,injectionPressure,motorCurrent, null, 5, 2026-11-24T18:25:59.438Z) situation=\"실린더 온도가 하락하면서 사출 압력과 모터 전류가 동반 상승하는 경향\" +의미검색 @24831ms",
+          "searchSop(\"실린더 온도 하락 사출 압력 상승 히터 밴드 점검 절차\") → [SOP-INJ-010, SOP-INJ-021, SOP-QC-041] @29045ms",
+          "  ↳ 토큰: 입력 39542, 출력 1194, 생각 -",
+          "verify#1(PASS) @65614ms"
+        ],
+        "latencyMs": 65637,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 347,
+        "seedRule": "XBAR barrelTemp",
+        "seedSensor": "",
+        "asOfShot": 347,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "HEATER_DEGRADATION",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0141",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "히터 밴드 점검 전까지 실린더 온도의 225℃ 이하 추가 하락 여부",
+          "미성형(SHORT_SHOT) 불량 발생 여부 및 사출 압력 1220 bar 초과 여부"
+        ],
+        "reasoningSummary": "직전 346 shot 판단에서 히터 열화(HEATER_DEGRADATION)를 첫째 후보로 두고 관찰을 권고했으나, 이후 347 shot에서 5 shot 평균 227.020℃로 추가 하락하며 XBAR 관리 한계 이탈 경보가 확정되었음. 사출 압력(1208.322 bar) 및 모터 전류(45.220 A)의 동반 상승이라는 명확한 반대 근거 부재/물리적 동반 변화가 확인되고 정비 이력 및 과거 사례(NCR-2025-0012)와 완벽히 부합함. 현재 불량은 없으나 추가 방치 시 미성형 불량 발생이 확실시되므로 예방 조치 차원에서 NCR 초안으로 상향 전환함",
+        "similarCases": [
+          "NCR-2025-0012"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0012"
+        ],
+        "candidateCauses": [
+          "HEATER_DEGRADATION",
+          "SENSOR_FAULT",
+          "MATERIAL"
+        ],
+        "numberClaims": 21,
+        "numberVerified": 20,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          8680,
+          8719,
+          8727,
+          13302,
+          13331,
+          13338,
+          13343,
+          21047,
+          21106,
+          46183
+        ],
+        "tokens": {
+          "prompt": 38516,
+          "output": 1281,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:25:59.499Z) @8680ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:25:59.499Z) @8719ms",
+          "getMaintenanceHistory(IMM-01, 10) @8727ms",
+          "getSensorTrend(IMM-01, barrelTemp, 300, 20, 2026-11-24T18:25:59.499Z) @13302ms",
+          "getSensorTrend(IMM-01, barrelTemp, 60, 5, 2026-11-24T18:25:59.499Z) @13331ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:25:59.499Z) @13338ms",
+          "getSensorTrend(IMM-01, motorCurrent, 60, 5, 2026-11-24T18:25:59.499Z) @13343ms",
+          "findSimilarNcr(IMM-01, barrelTemp,injectionPressure,motorCurrent, null, 5, 2026-11-24T18:25:59.499Z) situation=\"실린더 온도가 지속 하락하여 227.02도에 도달하고 XBAR 관리 한계를 이탈함. 사출 압력과 모터 전류가 동반 상승 추세를 보임.\" +의미검색 @21047ms",
+          "searchSop(\"barrelTemp 하락 사출 압력 모터 전류 상승 실린더 히터 밴드 점검 절차\") → [SOP-INJ-010, SOP-INJ-021, SOP-QC-041] @21106ms",
+          "  ↳ 토큰: 입력 38516, 출력 1281, 생각 -",
+          "verify#1(PASS) @46114ms",
+          "writeReport(ANALYSIS_TEXT) @46183ms"
+        ],
+        "latencyMs": 46206,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 2,
+    "case": "pressure_sensor_spike",
+    "equipment": "IMM-02",
+    "runTag": "replay-1125034142-r2-pressure_sensor_spike",
+    "expectedCause": "SENSOR_FAULT",
+    "expectedDecision": "SENSOR_CHECK",
+    "faultStart": 400,
+    "firstDefectShot": null,
+    "diagnosed": true,
+    "diagnosisShot": 407,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 7,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 407,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 1,
+    "rechecks": 0,
+    "llmCalls": 1,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 7,
+    "failed": 0,
+    "latencyMs": 51676,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 407,
+        "seedRule": "INDIVIDUAL injectionPressure",
+        "seedSensor": "",
+        "asOfShot": 407,
+        "alarmsInIncident": 1,
+        "decision": "SENSOR_CHECK",
+        "cause": "SENSOR_FAULT",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "사출 압력 단발성 스파이크 재발 여부",
+          "사출 압력 센서 커넥터 점검 후 5 shot 평균(기준 1200 bar) 및 산포 안정성 유지 여부"
+        ],
+        "reasoningSummary": "사출 압력이 1401.15 bar로 단 1 shot만 튀었으나 실린더 온도·모터 전류·쿠션량 등 연동 센서가 모두 정상이고 불량이 0건임. 과거 동일 설비 사례(NCR-2026-0004) 및 SOP-INJ-013 기준에 따라 공정 이상이 아닌 측정 계통 문제(SENSOR_FAULT)로 판단되어 SENSOR_CHECK를 제안함",
+        "similarCases": [
+          "NCR-2026-0004"
+        ],
+        "similarCasesReal": [
+          "NCR-2026-0004"
+        ],
+        "candidateCauses": [
+          "SENSOR_FAULT",
+          "NOISE"
+        ],
+        "numberClaims": 23,
+        "numberVerified": 22,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 7,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7966,
+          8010,
+          8020,
+          8027,
+          8034,
+          20726,
+          20782
+        ],
+        "tokens": {
+          "prompt": 25717,
+          "output": 1062,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:02.873Z) @7966ms",
+          "getSensorTrend(IMM-02, injectionPressure, 300, 20, 2026-11-24T18:26:02.873Z) @8010ms",
+          "getSensorTrend(IMM-02, injectionPressure, 60, 5, 2026-11-24T18:26:02.873Z) @8020ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:02.873Z) @8027ms",
+          "getMaintenanceHistory(IMM-02, 10) @8034ms",
+          "findSimilarNcr(IMM-02, injectionPressure, null, 5, 2026-11-24T18:26:02.873Z) situation=\"사출 압력이 단발적으로 1401.15 bar로 튀었으나 다른 센서는 정상이고 불량 발생 없음\" +의미검색 @20726ms",
+          "searchSop(\"사출 압력 단발성 급증 노이즈 센서 이상 점검\") → [SOP-INJ-013, SOP-INJ-012, SOP-INJ-010] @20782ms",
+          "  ↳ 토큰: 입력 25717, 출력 1062, 생각 -",
+          "verify#1(PASS) @51653ms"
+        ],
+        "latencyMs": 51676,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 2,
+    "case": "cooling_blockage",
+    "equipment": "IMM-02",
+    "runTag": "replay-1125034142-r2-cooling_blockage",
+    "expectedCause": "COOLING_ISSUE",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 900,
+    "firstDefectShot": 1016,
+    "diagnosed": true,
+    "diagnosisShot": 957,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 57,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 957,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 18,
+    "failed": 0,
+    "latencyMs": 105559,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 941,
+        "seedRule": "XBAR moldTemp",
+        "seedSensor": "",
+        "asOfShot": 941,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "COOLING_ISSUE",
+        "confidence": 72,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "금형 온도 최근 5 shot 평균의 61.5℃ 초과 지속 상승 여부",
+          "사이클 타임의 30.2초 초과 연장 여부",
+          "치수(DIMENSION) 또는 휨(WARPAGE) 불량 발생 여부"
+        ],
+        "reasoningSummary": "금형 온도의 관리 한계 이탈 및 사이클 타임 동반 상승이 확인되어 냉각 효율 저하 패턴이 뚜렷하며 과거 미실시된 냉각 채널 세척 권고 이력과 일치함. 그러나 첫 번째 경보 발생이고 아직 불량이 발생하지 않아 OBSERVE 판정을 내리고 현장 냉각 계통 사전 점검을 권고함.",
+        "similarCases": [
+          "NCR-2025-0021"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0021"
+        ],
+        "candidateCauses": [
+          "COOLING_ISSUE",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 27,
+        "numberVerified": 24,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          9721,
+          9781,
+          9792,
+          9797,
+          9804,
+          16465,
+          16964,
+          17036
+        ],
+        "tokens": {
+          "prompt": 25384,
+          "output": 1208,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:32.903Z) @9721ms",
+          "getSensorTrend(IMM-02, moldTemp, 300, 20, 2026-11-24T18:26:32.903Z) @9781ms",
+          "getSensorTrend(IMM-02, moldTemp, 60, 5, 2026-11-24T18:26:32.903Z) @9792ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:32.903Z) @9797ms",
+          "getMaintenanceHistory(IMM-02, 10) @9804ms",
+          "getSensorTrend(IMM-02, cycleTime, 300, 20, 2026-11-24T18:26:32.903Z) @16465ms",
+          "findSimilarNcr(IMM-02, moldTemp,cycleTime, null, 5, 2026-11-24T18:26:32.903Z) situation=\"금형 온도가 60도에서 61도 이상으로 점진적 상승하여 Xbar 관리 한계 이탈, 사이클 타임 다소 증가, 불량은 아직 없음\" +의미검색 @16964ms",
+          "searchSop(\"moldTemp 상승 금형 온도 냉각 문제 COOLING_ISSUE 냉각수 유량 채널 점검\") → [SOP-INJ-011, SOP-INJ-001, SOP-QC-041] @17036ms",
+          "  ↳ 토큰: 입력 25384, 출력 1208, 생각 -",
+          "verify#1(PASS) @56201ms"
+        ],
+        "latencyMs": 56224,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 957,
+        "seedRule": "XBAR cycleTime",
+        "seedSensor": "",
+        "asOfShot": 957,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "COOLING_ISSUE",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0142",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "금형 냉각 채널 세척 후 금형 온도가 기준치(60℃)로 회복되는지 확인",
+          "사이클 타임 5 shot 평균이 관리 범위(29.61~30.09 s) 내로 복귀하는지 점검",
+          "치수(DIMENSION) 및 휨(WARPAGE) 불량 발생 여부 지속 모니터링"
+        ],
+        "reasoningSummary": "직전 판단(shot 941, OBSERVE) 당시 추정한 COOLING_ISSUE 원인에 대해 제시했던 관찰 항목(사이클 타임 30.2초 초과 및 금형 온도 고온 유지)이 지속 진행되어 사이클 타임 X̄ 관리 한계 이탈 경보로 이어짐. 동반 센서(금형 온도-사이클 타임) 변화가 일치하고 과거 미실시 정비 권고 및 NCR-2025-0021 사례와 부합함. 불량 발생 전 예방 조치를 위해 연속 2회 동일 원인 확인에 따른 NCR_DRAFT로 판정을 상향함.",
+        "similarCases": [
+          "NCR-2025-0021"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0021"
+        ],
+        "candidateCauses": [
+          "COOLING_ISSUE",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 21,
+        "numberVerified": 20,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          8814,
+          8870,
+          8882,
+          8889,
+          8895,
+          8904,
+          14560,
+          15057,
+          15088,
+          49308
+        ],
+        "tokens": {
+          "prompt": 27721,
+          "output": 1184,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:33.802Z) @8814ms",
+          "getSensorTrend(IMM-02, cycleTime, 300, 20, 2026-11-24T18:26:33.802Z) @8870ms",
+          "getSensorTrend(IMM-02, cycleTime, 60, 5, 2026-11-24T18:26:33.802Z) @8882ms",
+          "getSensorTrend(IMM-02, moldTemp, 60, 5, 2026-11-24T18:26:33.802Z) @8889ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:33.802Z) @8895ms",
+          "getMaintenanceHistory(IMM-02, 10) @8904ms",
+          "getSensorTrend(IMM-02, moldTemp, 300, 20, 2026-11-24T18:26:33.802Z) @14560ms",
+          "findSimilarNcr(IMM-02, cycleTime,moldTemp, null, 5, 2026-11-24T18:26:33.802Z) situation=\"금형 온도와 사이클 타임이 함께 상승하고 있으며 사이클 타임 Xbar 경보 발생\" +의미검색 @15057ms",
+          "searchSop(\"금형 냉각 온도 상승 사이클 타임 연장 냉각 채널 세척 수처리 점검\") → [SOP-INJ-011, SOP-INJ-021, SOP-QC-041] @15088ms",
+          "  ↳ 토큰: 입력 27721, 출력 1184, 생각 -",
+          "verify#1(PASS) @49258ms",
+          "writeReport(ANALYSIS_TEXT) @49308ms"
+        ],
+        "latencyMs": 49335,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 2,
+    "case": "check_ring_wear",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r2-check_ring_wear",
+    "expectedCause": "CHECK_RING_WEAR",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 1200,
+    "firstDefectShot": 1239,
+    "diagnosed": true,
+    "diagnosisShot": 1239,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 39,
+    "defectsUntilDiagnosis": 1,
+    "lastAnalyzedShot": 1239,
+    "defectsUntilLastStep": 1,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 19,
+    "failed": 0,
+    "latencyMs": 105733,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 1236,
+        "seedRule": "XBAR cushion",
+        "seedSensor": "",
+        "asOfShot": 1236,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "CHECK_RING_WEAR",
+        "confidence": 60,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 5 shot 평균이 4.7 mm 이하로 추가 하락하거나 산포가 확대되는지 확인",
+          "사출 압력의 표준편차가 15 bar 이상으로 급격히 증가하는지 확인",
+          "미성형(SHORT_SHOT) 불량이 발생하는지 모니터링"
+        ],
+        "reasoningSummary": "지속성 경보(X̄ 이탈)가 발생하고 정비 이력상 체크 링 교체 주기가 도래했으나, 사출 압력 표준편차 급증이나 미성형 발생 등 체크 링 마모의 핵심 동반 신호가 없고 규격 여유(Cpk 4.36, 불량 0건)가 충분하므로 원인 코드를 CHECK_RING_WEAR로 두고 추이를 관찰합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "CHECK_RING_WEAR",
+          "UNKNOWN",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 19,
+        "numberVerified": 19,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          8655,
+          8722,
+          8733,
+          8740,
+          8747,
+          15756,
+          15791,
+          16175,
+          28460
+        ],
+        "tokens": {
+          "prompt": 41386,
+          "output": 1098,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:26:49.598Z) @8655ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:26:49.598Z) @8722ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:26:49.598Z) @8733ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:26:49.598Z) @8740ms",
+          "getMaintenanceHistory(IMM-01, 10) @8747ms",
+          "getSensorTrend(IMM-01, injectionPressure, 300, 20, 2026-11-24T18:26:49.598Z) @15756ms",
+          "getSensorTrend(IMM-01, holdingPressure, 300, 20, 2026-11-24T18:26:49.598Z) @15791ms",
+          "findSimilarNcr(IMM-01, cushion, null, 5, 2026-11-24T18:26:49.598Z) situation=\"쿠션량이 기준 5mm에서 4.76~4.78mm 수준으로 감소하며 Xbar 관리 한계 이탈\" +의미검색 @16175ms",
+          "searchSop(\"쿠션량 감소 체크 링 마모 사출 압력 점검\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-021] @28460ms",
+          "  ↳ 토큰: 입력 41386, 출력 1098, 생각 -",
+          "verify#1(PASS) @55463ms"
+        ],
+        "latencyMs": 55483,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 1239,
+        "seedRule": "INDIVIDUAL cushion",
+        "seedSensor": "",
+        "asOfShot": 1239,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "CHECK_RING_WEAR",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0143",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "체크 링 교체 후 쿠션량 관리 범위(4.64~5.28 mm) 및 기준값(5.0 mm) 정상 복귀 여부",
+          "사출 압력 표준편차 10 bar 이하로 안정화 여부",
+          "추가 미성형(SHORT_SHOT) 불량 발생 여부"
+        ],
+        "reasoningSummary": "이전 판단(shot 1236)에서 동일 원인(CHECK_RING_WEAR)을 1순위로 관찰하였으며, 이전 watchItems로 지정했던 쿠션량 추가 하락과 미성형(SHORT_SHOT) 불량 발생이 실제로 확인되었습니다. 사출 압력 산포 확대와 체크 링 교체 주기 경과가 부합하므로 OBSERVE를 종료하고 NCR_DRAFT를 발행합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT",
+          "HEATER_DEGRADATION"
+        ],
+        "numberClaims": 24,
+        "numberVerified": 20,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          10084,
+          10122,
+          10133,
+          10141,
+          10148,
+          16043,
+          16080,
+          16536,
+          20465,
+          50220
+        ],
+        "tokens": {
+          "prompt": 42599,
+          "output": 1196,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:26:49.770Z) @10084ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:26:49.770Z) @10122ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:26:49.770Z) @10133ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:26:49.770Z) @10141ms",
+          "getMaintenanceHistory(IMM-01, 10) @10148ms",
+          "getSensorTrend(IMM-01, injectionPressure, 300, 20, 2026-11-24T18:26:49.770Z) @16043ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:26:49.770Z) @16080ms",
+          "findSimilarNcr(IMM-01, cushion,injectionPressure, SHORT_SHOT, 5, 2026-11-24T18:26:49.770Z) situation=\"쿠션량이 지속적으로 감소하여 4.63mm까지 떨어졌고 최근 5 shot 평균이 4.74mm로 하락함. 미성형 1건 발생. 정비이력상 체크링 교체주기 24개월 경과(734일 전 교체).\" +의미검색 @16536ms",
+          "searchSop(\"체크 링 마모 쿠션량 하락 사출 압력 미성형 역류 점검 교체\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-010] @20465ms",
+          "  ↳ 토큰: 입력 42599, 출력 1196, 생각 -",
+          "verify#1(PASS) @50155ms",
+          "writeReport(ANALYSIS_TEXT) @50220ms"
+        ],
+        "latencyMs": 50250,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 2,
+    "case": "단발성 경보 (shot 1934 쿠션량)",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r2-noise-IMM-01-1934",
+    "expectedCause": "NOISE",
+    "expectedDecision": "OBSERVE",
+    "faultStart": null,
+    "firstDefectShot": null,
+    "diagnosed": true,
+    "diagnosisShot": 1934,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": null,
+    "defectsUntilDiagnosis": null,
+    "lastAnalyzedShot": 1934,
+    "defectsUntilLastStep": null,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 1,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 15,
+    "failed": 0,
+    "latencyMs": 111632,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 1934,
+        "seedRule": "INDIVIDUAL cushion",
+        "seedSensor": "",
+        "asOfShot": 1934,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "NOISE",
+        "confidence": 65,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 최근 5 shot 평균이 4.8 mm 이하로 연속 하락하는지",
+          "사출 압력 산포(표준편차)가 7.2 bar 대비 2배 이상 커지는지",
+          "미성형(SHORT_SHOT) 발생 빈도가 증가하는지"
+        ],
+        "reasoningSummary": "쿠션량 경보는 INDIVIDUAL(단발성 1 shot 이탈)이며, 최근 50 shot Cpk가 5.8로 매우 높고 사출 압력 변동 등 체크 링 마모의 전형적 동반 증상이 나타나지 않았습니다. 따라서 즉각적인 공정 격리보다는 단발성 변동(NOISE)으로 판단하고 추이를 관찰(OBSERVE)합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "NOISE",
+          "CHECK_RING_WEAR",
+          "MATERIAL"
+        ],
+        "numberClaims": 26,
+        "numberVerified": 25,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 7,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7363,
+          7401,
+          7409,
+          7413,
+          7418,
+          17503,
+          17544
+        ],
+        "tokens": {
+          "prompt": 23787,
+          "output": 1014,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:27:29.079Z) @7363ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:27:29.079Z) @7401ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:27:29.079Z) @7409ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:27:29.079Z) @7413ms",
+          "getMaintenanceHistory(IMM-01, 10) @7418ms",
+          "findSimilarNcr(IMM-01, cushion, null, 5, 2026-11-24T18:27:29.079Z) situation=\"쿠션량이 4.64mm로 단발성 개별값 관리한계 하한 이탈이 발생했고 다른 센서들은 정상 유지됨\" +의미검색 @17503ms",
+          "searchSop(\"cushion 쿠션량 변동 체크링 역류 점검 기준\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-001] @17544ms",
+          "  ↳ 토큰: 입력 23787, 출력 1014, 생각 -",
+          "verify#1(PASS) @47129ms"
+        ],
+        "latencyMs": 47146,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "RECHECK",
+        "seedShot": 1974,
+        "seedRule": "-",
+        "seedSensor": "",
+        "asOfShot": 1974,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "NOISE",
+        "confidence": 80,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 5 shot 이동평균이 4.8 mm 이하로 재하락하는지",
+          "사출 압력 5 shot 표준편차가 14 bar 이상으로 확대되는지"
+        ],
+        "reasoningSummary": "shot 1934의 쿠션량 단발 이탈(4.64 mm) 이후 40 shot 동안 이전 판단의 관찰 항목(쿠션량 4.8 mm 이하 하락, 사출 압력 산포 2배 증가, 미성형 발생)을 재확인한 결과, 쿠션량은 목표값(평균 4.96 mm)으로 복귀했고 사출 압력 산포(7.27 bar) 및 불량률(0%) 모두 정상입니다. 과거 체크 링 마모 사례(NCR-2024-0033)와 달리 사출 압력 급변이나 미성형이 없어 단발성 변동(NOISE)으로 평가하고 일상 관찰(OBSERVE)을 유지합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "NOISE",
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 22,
+        "numberVerified": 21,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          8668,
+          8708,
+          8720,
+          8727,
+          8741,
+          18374,
+          18785,
+          22320
+        ],
+        "tokens": {
+          "prompt": 38547,
+          "output": 1093,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:27:31.357Z) @8668ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:27:31.357Z) @8708ms",
+          "getMaintenanceHistory(IMM-01, 10) @8720ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:27:31.357Z) @8727ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:27:31.357Z) @8741ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:27:31.357Z) @18374ms",
+          "findSimilarNcr(IMM-01, cushion,injectionPressure, null, 5, 2026-11-24T18:27:31.357Z) situation=\"쿠션량 일시적 4.64mm 이탈 후 4.96mm 부근 정상 안정 유지, 불량 없음\" +의미검색 @18785ms",
+          "searchSop(\"쿠션량 일시적 이탈 단발성 노이즈 체크 링 점검\") → [SOP-INJ-012, SOP-INJ-013, SOP-INJ-021] @22320ms",
+          "  ↳ 토큰: 입력 38547, 출력 1093, 생각 -",
+          "verify#1(PASS) @64466ms"
+        ],
+        "latencyMs": 64486,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 3,
+    "case": "heater_degradation",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r3-heater_degradation",
+    "expectedCause": "HEATER_DEGRADATION",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 300,
+    "firstDefectShot": 368,
+    "diagnosed": true,
+    "diagnosisShot": 347,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 47,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 347,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 19,
+    "failed": 0,
+    "latencyMs": 113952,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 346,
+        "seedRule": "INDIVIDUAL barrelTemp",
+        "seedSensor": "",
+        "asOfShot": 346,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "HEATER_DEGRADATION",
+        "confidence": 70,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "실린더 온도가 관리 하한(226.25℃) 이하로 연속 이탈하거나 226.0℃ 미만으로 추가 하락하는지 여부",
+          "사출 압력(최근 5 shot 평균 1208.75 bar) 및 모터 전류(최근 5 shot 평균 45.21 A)의 상승세 지속 여부",
+          "차기 검사 구간에서 미성형(SHORT_SHOT) 등 품질 불량 발생 여부"
+        ],
+        "reasoningSummary": "실린더 온도 하락과 사출 압력 및 모터 전류의 동반 상승, 정비 이력(히터 점검 주기 경과)으로 볼 때 히터 열화(HEATER_DEGRADATION) 가능성이 높음. 다만 첫 경보 발생 시점이고 제품 불량이 아직 발생하지 않았으므로(0%), 조기 점검을 준비하며 추세를 확인하는 OBSERVE로 판정함.",
+        "similarCases": [
+          "NCR-2025-0012"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0012"
+        ],
+        "candidateCauses": [
+          "HEATER_DEGRADATION",
+          "MATERIAL",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 22,
+        "numberVerified": 21,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7543,
+          7584,
+          7591,
+          12547,
+          12568,
+          12574,
+          12579,
+          16638,
+          22286
+        ],
+        "tokens": {
+          "prompt": 49737,
+          "output": 1169,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:25:59.438Z) @7543ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:25:59.438Z) @7584ms",
+          "getMaintenanceHistory(IMM-01, 10) @7591ms",
+          "getSensorTrend(IMM-01, barrelTemp, 300, 20, 2026-11-24T18:25:59.438Z) @12547ms",
+          "getSensorTrend(IMM-01, barrelTemp, 60, 5, 2026-11-24T18:25:59.438Z) @12568ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:25:59.438Z) @12574ms",
+          "getSensorTrend(IMM-01, motorCurrent, 60, 5, 2026-11-24T18:25:59.438Z) @12579ms",
+          "findSimilarNcr(IMM-01, barrelTemp,injectionPressure, null, 5, 2026-11-24T18:25:59.438Z) situation=\"실린더 온도가 225도대로 하락하며 사출 압력과 모터 전류가 소폭 상승하는 추세\" +의미검색 @16638ms",
+          "searchSop(\"barrelTemp 실린더 온도 하락 사출 압력 모터 전류 상승 히터 밴드 열화 점검\") → [SOP-INJ-010, SOP-INJ-021, SOP-QC-041] @22286ms",
+          "  ↳ 토큰: 입력 49737, 출력 1169, 생각 -",
+          "verify#1(PASS) @63743ms"
+        ],
+        "latencyMs": 63764,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 347,
+        "seedRule": "XBAR barrelTemp",
+        "seedSensor": "",
+        "asOfShot": 347,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "HEATER_DEGRADATION",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0144",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "히터 점검 및 부품 교체 후 실린더 온도 5 shot 평균이 기준치(230℃)로 복귀하는지 여부",
+          "사출 압력(1200 bar) 및 모터 전류(45 A)의 정상 기준선 안정화 여부",
+          "차기 검사 구간에서 미성형(SHORT_SHOT) 등 품질 불량 발생 여부"
+        ],
+        "reasoningSummary": "직전 판정(shot 346)에서 HEATER_DEGRADATION을 유력 원인으로 관찰(OBSERVE)하였으나, 이후 온도가 227.02℃로 추가 하락하며 관리 한계 이탈이 연속 확인됨. 사출 압력(1208.32 bar)과 모터 전류(45.22 A)의 동반 상승 등 수지 점도 증가 반대 근거 점검 신호가 뚜렷하고 정비 이력 및 과거 사례(NCR-2025-0012)와 일치하므로, 불량 발생 전 선제적 예방 조치를 위해 NCR_DRAFT로 격상함",
+        "similarCases": [
+          "NCR-2025-0012"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0012"
+        ],
+        "candidateCauses": [
+          "HEATER_DEGRADATION",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 27,
+        "numberVerified": 23,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          10725,
+          10786,
+          10802,
+          10812,
+          10822,
+          16339,
+          16368,
+          16759,
+          16809,
+          50168
+        ],
+        "tokens": {
+          "prompt": 28062,
+          "output": 1287,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:25:59.499Z) @10725ms",
+          "getSensorTrend(IMM-01, barrelTemp, 300, 20, 2026-11-24T18:25:59.499Z) @10786ms",
+          "getSensorTrend(IMM-01, barrelTemp, 60, 5, 2026-11-24T18:25:59.499Z) @10802ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:25:59.499Z) @10812ms",
+          "getMaintenanceHistory(IMM-01, 10) @10822ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:25:59.499Z) @16339ms",
+          "getSensorTrend(IMM-01, motorCurrent, 60, 5, 2026-11-24T18:25:59.499Z) @16368ms",
+          "findSimilarNcr(IMM-01, barrelTemp,injectionPressure,motorCurrent, SHORT_SHOT, 5, 2026-11-24T18:25:59.499Z) situation=\"실린더 온도가 지속적으로 하락하고 사출 압력과 모터 전류가 동반 상승하고 있음\" +의미검색 @16759ms",
+          "searchSop(\"실린더 온도 barrelTemp 하락 사출 압력 모터 전류 상승 히터 열화 점검\") → [SOP-INJ-010, SOP-INJ-021, SOP-QC-041] @16809ms",
+          "  ↳ 토큰: 입력 28062, 출력 1287, 생각 -",
+          "verify#1(PASS) @50121ms",
+          "writeReport(ANALYSIS_TEXT) @50168ms"
+        ],
+        "latencyMs": 50188,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 3,
+    "case": "pressure_sensor_spike",
+    "equipment": "IMM-02",
+    "runTag": "replay-1125034142-r3-pressure_sensor_spike",
+    "expectedCause": "SENSOR_FAULT",
+    "expectedDecision": "SENSOR_CHECK",
+    "faultStart": 400,
+    "firstDefectShot": null,
+    "diagnosed": true,
+    "diagnosisShot": 407,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 7,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 407,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 1,
+    "rechecks": 0,
+    "llmCalls": 1,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 7,
+    "failed": 0,
+    "latencyMs": 66175,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 407,
+        "seedRule": "INDIVIDUAL injectionPressure",
+        "seedSensor": "",
+        "asOfShot": 407,
+        "alarmsInIncident": 1,
+        "decision": "SENSOR_CHECK",
+        "cause": "SENSOR_FAULT",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "사출 압력 단발 스파이크 재발 여부",
+          "센서 커넥터 재체결 후 사출 압력 측정값 안정화 여부",
+          "모터 전류 및 쿠션량 등 타 센서의 동반 변화 발생 여부"
+        ],
+        "reasoningSummary": "단일 shot 사출 압력 1401.15 bar 급상승 외에 타 공정 센서 변화 및 품질 불량(0%)이 전혀 없고 과거 동일 설비 커넥터 접촉 불량 이력(NCR-2026-0004)과 일치하여, 공정 이상이 아닌 센서 계통 문제로 판단하고 SENSOR_CHECK를 제안함.",
+        "similarCases": [
+          "NCR-2026-0004"
+        ],
+        "similarCasesReal": [
+          "NCR-2026-0004"
+        ],
+        "candidateCauses": [
+          "SENSOR_FAULT",
+          "NOISE",
+          "CHECK_RING_WEAR"
+        ],
+        "numberClaims": 19,
+        "numberVerified": 17,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 7,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          9511,
+          9558,
+          9572,
+          9578,
+          9586,
+          20380,
+          43128
+        ],
+        "tokens": {
+          "prompt": 37560,
+          "output": 1001,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:02.873Z) @9511ms",
+          "getSensorTrend(IMM-02, injectionPressure, 300, 20, 2026-11-24T18:26:02.873Z) @9558ms",
+          "getSensorTrend(IMM-02, injectionPressure, 60, 5, 2026-11-24T18:26:02.873Z) @9572ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:02.873Z) @9578ms",
+          "getMaintenanceHistory(IMM-02, 10) @9586ms",
+          "findSimilarNcr(IMM-02, injectionPressure, null, 5, 2026-11-24T18:26:02.873Z) situation=\"사출 압력이 1401.15 bar로 단발성 급상승하였으나 다른 센서와 품질 불량은 정상임\" +의미검색 @20380ms",
+          "searchSop(\"사출 압력 센서 이상 단발성 스파이크 커넥터 점검 SENSOR_FAULT\") → [SOP-INJ-013, SOP-INJ-012, SOP-INJ-010] @43128ms",
+          "  ↳ 토큰: 입력 37560, 출력 1001, 생각 -",
+          "verify#1(PASS) @66154ms"
+        ],
+        "latencyMs": 66175,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 3,
+    "case": "cooling_blockage",
+    "equipment": "IMM-02",
+    "runTag": "replay-1125034142-r3-cooling_blockage",
+    "expectedCause": "COOLING_ISSUE",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 900,
+    "firstDefectShot": 1016,
+    "diagnosed": true,
+    "diagnosisShot": 957,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 57,
+    "defectsUntilDiagnosis": 0,
+    "lastAnalyzedShot": 957,
+    "defectsUntilLastStep": 0,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 18,
+    "failed": 0,
+    "latencyMs": 102094,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 941,
+        "seedRule": "XBAR moldTemp",
+        "seedSensor": "",
+        "asOfShot": 941,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "COOLING_ISSUE",
+        "confidence": 75,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "금형 온도(moldTemp) 5 shot 평균의 61.5℃ 초과 지속 여부",
+          "사이클 타임(cycleTime)의 30.5s 초과 지속 여부",
+          "치수(DIMENSION) 불량 또는 휨 불량 발생 여부"
+        ],
+        "reasoningSummary": "금형 온도가 60℃ 부근에서 61.25℃까지 점진적으로 상승하며 X̄ 경보가 발생했고 사이클 타임도 동반 상승함. 과거 미실시된 냉각 채널 세척 이력 및 과거 스케일 누적 사례(NCR-2025-0021)와 일치함. 현재 규격 이탈 및 제품 불량은 없으므로 OBSERVE 단계에서 현장 냉각 계통 점검을 수행하고 추세를 모니터링함.",
+        "similarCases": [
+          "NCR-2025-0021"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0021"
+        ],
+        "candidateCauses": [
+          "COOLING_ISSUE",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 42,
+        "numberVerified": 39,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          6565,
+          6610,
+          6617,
+          6621,
+          6635,
+          14203,
+          14623,
+          19967
+        ],
+        "tokens": {
+          "prompt": 37104,
+          "output": 1346,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:32.903Z) @6565ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:32.903Z) @6610ms",
+          "getMaintenanceHistory(IMM-02, 10) @6617ms",
+          "getSensorTrend(IMM-02, moldTemp, 300, 20, 2026-11-24T18:26:32.903Z) @6621ms",
+          "getSensorTrend(IMM-02, moldTemp, 60, 5, 2026-11-24T18:26:32.903Z) @6635ms",
+          "getSensorTrend(IMM-02, cycleTime, 300, 20, 2026-11-24T18:26:32.903Z) @14203ms",
+          "findSimilarNcr(IMM-02, moldTemp,cycleTime, null, 5, 2026-11-24T18:26:32.903Z) situation=\"금형 온도가 60도 부근에서 61.25도까지 점진적으로 상승하며 Xbar 관리 한계를 이탈함. 사이클 타임도 다소 상승 추세.\" +의미검색 @14623ms",
+          "searchSop(\"moldTemp 상승 금형 냉각 채널 스케일 유량 COOLING_ISSUE\") → [SOP-INJ-011, SOP-INJ-001, SOP-QC-041] @19967ms",
+          "  ↳ 토큰: 입력 37104, 출력 1346, 생각 -",
+          "verify#1(PASS) @53577ms"
+        ],
+        "latencyMs": 53600,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 957,
+        "seedRule": "XBAR cycleTime",
+        "seedSensor": "",
+        "asOfShot": 957,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "COOLING_ISSUE",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0145",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "냉각 계통 조치 후 금형 온도(moldTemp) 60±1℃ 및 사이클 타임(cycleTime) 30.0s 복귀 여부",
+          "치수(DIMENSION) 및 휨(WARPAGE) 불량 발생 여부 전수 검사"
+        ],
+        "reasoningSummary": "직전 941 shot 판단(COOLING_ISSUE, OBSERVE)에 이어 금형 온도가 61.11℃로 고온 상태를 지속하고, 냉각 지연으로 인한 사이클 타임 상승이 가속화되며 X̄ 관리 상한(30.09s)을 이탈함. 과거 동일 설비의 스케일 누적 사례(NCR-2025-0021) 및 349일 전 미실시된 세척 권고 이력과 명확히 일치함. 현재 불량은 0건이나 동일 원인이 연속 2회 확인되었고 공정 변동이 누적되었으므로 불량 예방을 위해 NCR_DRAFT로 상향함.",
+        "similarCases": [
+          "NCR-2025-0021"
+        ],
+        "similarCasesReal": [
+          "NCR-2025-0021"
+        ],
+        "candidateCauses": [
+          "COOLING_ISSUE",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 24,
+        "numberVerified": 22,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 10,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          9237,
+          9284,
+          9307,
+          9318,
+          9329,
+          9344,
+          20449,
+          20527,
+          23836,
+          48470
+        ],
+        "tokens": {
+          "prompt": 44698,
+          "output": 1253,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-02, 50, 2026-11-24T18:26:33.802Z) @9237ms",
+          "getSensorTrend(IMM-02, cycleTime, 300, 20, 2026-11-24T18:26:33.802Z) @9284ms",
+          "getSensorTrend(IMM-02, cycleTime, 60, 5, 2026-11-24T18:26:33.802Z) @9307ms",
+          "getSensorTrend(IMM-02, moldTemp, 300, 20, 2026-11-24T18:26:33.802Z) @9318ms",
+          "getSensorTrend(IMM-02, moldTemp, 60, 5, 2026-11-24T18:26:33.802Z) @9329ms",
+          "getDefectSummary(IMM-02, 300, 50, 2026-11-24T18:26:33.802Z) @9344ms",
+          "findSimilarNcr(IMM-02, moldTemp,cycleTime, null, 5, 2026-11-24T18:26:33.802Z) situation=\"금형 온도가 60℃에서 61℃ 이상으로 점진적으로 상승하고, 사이클 타임도 30.1초 이상으로 동반 상승하며 Xbar 관리 한계를 이탈함.\" +의미검색 @20449ms",
+          "getMaintenanceHistory(IMM-02, 10) @20527ms",
+          "searchSop(\"moldTemp 금형 온도 상승 사이클 타임 냉각 채널 스케일 치수 불량\") → [SOP-INJ-011, SOP-QC-041, SOP-INJ-001] @23836ms",
+          "  ↳ 토큰: 입력 44698, 출력 1253, 생각 -",
+          "verify#1(PASS) @48427ms",
+          "writeReport(ANALYSIS_TEXT) @48470ms"
+        ],
+        "latencyMs": 48494,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 3,
+    "case": "check_ring_wear",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r3-check_ring_wear",
+    "expectedCause": "CHECK_RING_WEAR",
+    "expectedDecision": "NCR_DRAFT",
+    "faultStart": 1200,
+    "firstDefectShot": 1239,
+    "diagnosed": true,
+    "diagnosisShot": 1239,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": 39,
+    "defectsUntilDiagnosis": 1,
+    "lastAnalyzedShot": 1239,
+    "defectsUntilLastStep": 1,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 0,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 18,
+    "failed": 0,
+    "latencyMs": 97416,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 1236,
+        "seedRule": "XBAR cushion",
+        "seedSensor": "",
+        "asOfShot": 1236,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "CHECK_RING_WEAR",
+        "confidence": 60,
+        "correct": false,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 5 shot 평균이 4.70 mm 이하로 추가 하락하거나 편차가 확대되는지 여부",
+          "사출 압력 표준편차 상승 여부 및 미성형(SHORT_SHOT) 발생 여부",
+          "위치 센서 신호 접촉 및 측정 계통 이상 징후 발생 여부"
+        ],
+        "reasoningSummary": "쿠션량의 관리 한계 하한 이탈과 체크 링 교체 주기(24개월) 경과가 확인되었으나, 체크 링 마모 시 동반되어야 할 사출 압력 편차 증가 및 미성형 불량이 관찰되지 않았고 제품 규격 여유도 충분하므로 NCR 발행을 보류하고 OBSERVE로 관찰합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT",
+          "UNKNOWN"
+        ],
+        "numberClaims": 22,
+        "numberVerified": 22,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7149,
+          7200,
+          7210,
+          7216,
+          7221,
+          17998,
+          18035,
+          18457,
+          18494
+        ],
+        "tokens": {
+          "prompt": 27941,
+          "output": 1122,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:26:49.598Z) @7149ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:26:49.598Z) @7200ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:26:49.598Z) @7210ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:26:49.598Z) @7216ms",
+          "getMaintenanceHistory(IMM-01, 10) @7221ms",
+          "getSensorTrend(IMM-01, injectionPressure, 300, 20, 2026-11-24T18:26:49.598Z) @17998ms",
+          "getSensorTrend(IMM-01, holdingPressure, 300, 20, 2026-11-24T18:26:49.598Z) @18035ms",
+          "findSimilarNcr(IMM-01, cushion,injectionPressure, null, 5, 2026-11-24T18:26:49.598Z) situation=\"쿠션량의 5 shot 평균이 4.78mm로 관리범위 하한을 벗어나 하락하였고 체크링 교체주기 24개월이 경과함\" +의미검색 @18457ms",
+          "searchSop(\"쿠션량 감소 사출 압력 체크 링 마모 점검 절차\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-021] @18494ms",
+          "  ↳ 토큰: 입력 27941, 출력 1122, 생각 -",
+          "verify#1(PASS) @52663ms"
+        ],
+        "latencyMs": 52681,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "ALARM",
+        "seedShot": 1239,
+        "seedRule": "INDIVIDUAL cushion",
+        "seedSensor": "",
+        "asOfShot": 1239,
+        "alarmsInIncident": 1,
+        "decision": "NCR_DRAFT",
+        "cause": "CHECK_RING_WEAR",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": "AI-2026-0146",
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "체크 링 분해 점검 시 마모 및 유격 실측값 확인",
+          "부품 교체 후 쿠션량 기준값(5.0 mm) 회복 및 편차 안정화 여부",
+          "사출 압력 표준편차 안정화(10 bar 이하) 및 미성형 불량 재발 여부"
+        ],
+        "reasoningSummary": "직전 shot 1236 판단 시 체크 링 교체 주기 초과에도 동반 불량이 확인되지 않아 OBSERVE로 관찰 중이었으나, 이후 쿠션량이 4.742 mm까지 지속 하락하며 4.63 mm으로 관리 한계를 이탈하였고 감시 대상이던 미성형(SHORT_SHOT)이 실제로 발생하였습니다. 과거 동일 설비 사례(NCR-2024-0033)와 패턴이 일치하고 연속 2회 동일 원인이 지목되었으므로 NCR_DRAFT로 상향 발행합니다.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT",
+          "MATERIAL"
+        ],
+        "numberClaims": 23,
+        "numberVerified": 21,
+        "holdStatus": null,
+        "writerMode": "ANALYSIS_TEXT",
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 9,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          9576,
+          9667,
+          9686,
+          9694,
+          9701,
+          9724,
+          18906,
+          18963,
+          44713
+        ],
+        "tokens": {
+          "prompt": 28214,
+          "output": 1118,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:26:49.770Z) @9576ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:26:49.770Z) @9667ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:26:49.770Z) @9686ms",
+          "getSensorTrend(IMM-01, injectionPressure, 60, 5, 2026-11-24T18:26:49.770Z) @9694ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:26:49.770Z) @9701ms",
+          "getMaintenanceHistory(IMM-01, 10) @9724ms",
+          "findSimilarNcr(IMM-01, cushion,injectionPressure, SHORT_SHOT, 5, 2026-11-24T18:26:49.770Z) situation=\"쿠션량이 4.74mm 수준으로 지속 하락하며 개별 한계를 이탈하고 미성형 불량이 1건 발생함. 체크 링 교체 주기 24개월 경과.\" +의미검색 @18906ms",
+          "searchSop(\"쿠션량 감소 체크 링 마모 역류 미성형 short shot 점검 교체\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-021] @18963ms",
+          "  ↳ 토큰: 입력 28214, 출력 1118, 생각 -",
+          "verify#1(PASS) @44630ms",
+          "writeReport(ANALYSIS_TEXT) @44713ms"
+        ],
+        "latencyMs": 44735,
+        "error": null
+      }
+    ]
+  },
+  {
+    "run": 3,
+    "case": "단발성 경보 (shot 1934 쿠션량)",
+    "equipment": "IMM-01",
+    "runTag": "replay-1125034142-r3-noise-IMM-01-1934",
+    "expectedCause": "NOISE",
+    "expectedDecision": "OBSERVE",
+    "faultStart": null,
+    "firstDefectShot": null,
+    "diagnosed": true,
+    "diagnosisShot": 1934,
+    "diagnosisTrigger": "ALARM",
+    "shotsToDiagnosis": null,
+    "defectsUntilDiagnosis": null,
+    "lastAnalyzedShot": 1934,
+    "defectsUntilLastStep": null,
+    "wrongDrafts": 0,
+    "steps": 2,
+    "rechecks": 1,
+    "llmCalls": 2,
+    "verifyRetries": 0,
+    "verifyWeakFinal": 0,
+    "toolCalls": 15,
+    "failed": 0,
+    "latencyMs": 110098,
+    "stepDetails": [
+      {
+        "step": 1,
+        "trigger": "ALARM",
+        "seedShot": 1934,
+        "seedRule": "INDIVIDUAL cushion",
+        "seedSensor": "",
+        "asOfShot": 1934,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "NOISE",
+        "confidence": 70,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 최근 5 shot 평균이 4.8 mm 이하로 하락하는지 여부",
+          "사출 압력 표준편차 및 변동폭 확대 여부",
+          "미성형(SHORT_SHOT) 불량 재발 여부"
+        ],
+        "reasoningSummary": "단일 shot에서 발생한 개별값 관리 한계 이탈이며, 직전 29 shot 데이터와 최근 50 shot Cpk(5.8)가 안정적이고 사출 압력의 동반 이상이 없어 단발성 변동으로 판단함. 체크 링 교체 주기가 도래한 점을 감안하여 즉각적인 조치 대신 추가 추이를 관찰(OBSERVE)하기로 함.",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "NOISE",
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 21,
+        "numberVerified": 20,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 7,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          6773,
+          6810,
+          6821,
+          6828,
+          6832,
+          17200,
+          17231
+        ],
+        "tokens": {
+          "prompt": 23828,
+          "output": 1019,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:27:29.079Z) @6773ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:27:29.079Z) @6810ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:27:29.079Z) @6821ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:27:29.079Z) @6828ms",
+          "getMaintenanceHistory(IMM-01, 10) @6832ms",
+          "findSimilarNcr(IMM-01, cushion, null, 5, 2026-11-24T18:27:29.079Z) situation=\"쿠션량 개별값 관리한계 이탈 알람 발생했으나 규격 내이며 다른 센서는 정상 범위임.\" +의미검색 @17200ms",
+          "searchSop(\"cushion 쿠션량 관리한계 이탈 단발성 변동 점검\") → [SOP-INJ-012, SOP-INJ-013, SOP-QC-041] @17231ms",
+          "  ↳ 토큰: 입력 23828, 출력 1019, 생각 -",
+          "verify#1(PASS) @50422ms"
+        ],
+        "latencyMs": 50457,
+        "error": null
+      },
+      {
+        "step": 2,
+        "trigger": "RECHECK",
+        "seedShot": 1974,
+        "seedRule": "-",
+        "seedSensor": "",
+        "asOfShot": 1974,
+        "alarmsInIncident": 1,
+        "decision": "OBSERVE",
+        "cause": "NOISE",
+        "confidence": 85,
+        "correct": true,
+        "ncrNo": null,
+        "mergedIntoExistingNcr": false,
+        "watchItems": [
+          "쿠션량 5 shot 이동평균의 4.8 mm 이하 지속 하락 여부",
+          "사출 압력 구간 표준편차의 비정상적 확대(15 bar 초과) 여부",
+          "미성형(SHORT_SHOT) 등 품질 불량 발생 여부"
+        ],
+        "reasoningSummary": "shot 1934 관찰(OBSERVE) 판단 이후 40 shot 경과 시점의 watchItems를 재확인함. 쿠션량 5 shot 평균이 4.8 mm 이하로 하락하지 않고 4.926~4.996 mm로 안정 복귀하였으며, 사출 압력 변동폭 확대 및 미성형 불량(0건) 없이 전 센서 공정능력이 양호하여 shot 1934의 경보는 단발성 외란(NOISE)이었음이 확인됨. 체크 링 교체 주기를 고려하여 통상 모니터링을 유지함",
+        "similarCases": [
+          "NCR-2024-0033"
+        ],
+        "similarCasesReal": [
+          "NCR-2024-0033"
+        ],
+        "candidateCauses": [
+          "NOISE",
+          "CHECK_RING_WEAR",
+          "SENSOR_FAULT"
+        ],
+        "numberClaims": 31,
+        "numberVerified": 31,
+        "holdStatus": null,
+        "writerMode": null,
+        "writerNumberClaims": null,
+        "writerNumberUnsupported": null,
+        "toolCalls": 8,
+        "attempts": 1,
+        "verifyStatus": "PASS",
+        "verifyFails": [],
+        "jsonRepaired": false,
+        "toolTimesMs": [
+          7609,
+          7659,
+          7669,
+          7674,
+          16243,
+          16264,
+          21105,
+          26449
+        ],
+        "tokens": {
+          "prompt": 46937,
+          "output": 1178,
+          "thought": null
+        },
+        "toolTrace": [
+          "getSpcSummary(IMM-01, 50, 2026-11-24T18:27:31.357Z) @7609ms",
+          "getSensorTrend(IMM-01, cushion, 300, 20, 2026-11-24T18:27:31.357Z) @7659ms",
+          "getSensorTrend(IMM-01, cushion, 60, 5, 2026-11-24T18:27:31.357Z) @7669ms",
+          "getDefectSummary(IMM-01, 300, 50, 2026-11-24T18:27:31.357Z) @7674ms",
+          "getSensorTrend(IMM-01, injectionPressure, 100, 20, 2026-11-24T18:27:31.357Z) @16243ms",
+          "getMaintenanceHistory(IMM-01, 10) @16264ms",
+          "findSimilarNcr(IMM-01, cushion, null, 5, 2026-11-24T18:27:31.357Z) situation=\"쿠션량 단일 shot 일시적 하락(4.64 mm) 이후 40 shot 동안 추가 경보 및 불량 없이 4.96 mm 수준으로 안정 유지\" +의미검색 @21105ms",
+          "searchSop(\"cushion 쿠션량 변동 체크 링 마모 점검 기준\") → [SOP-INJ-012, SOP-QC-041, SOP-INJ-001] @26449ms",
+          "  ↳ 토큰: 입력 46937, 출력 1178, 생각 -",
+          "verify#1(PASS) @59604ms"
+        ],
+        "latencyMs": 59641,
+        "error": null
+      }
+    ]
+  }
+]
