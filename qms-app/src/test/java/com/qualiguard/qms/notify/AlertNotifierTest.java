@@ -82,7 +82,7 @@ class AlertNotifierTest {
         var nt = notifier("slack", startServer());
         nt.send(AlertNotice.hold("IMM-02", 7, "VERIFY_WEAK", "근거 부족"));
         Map<?, ?> body = om.readValue(bodies.get(0), Map.class);
-        assertThat(body.keySet()).containsExactly("text");
+        assertThat(body).hasSize(1).containsKey("text");
         assertThat((String) body.get("text")).contains("판단 보류").contains("<https://qms.example/qms/actions.html#hold/7|QMS 에서 열기>");
     }
 
