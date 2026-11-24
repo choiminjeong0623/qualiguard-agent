@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -56,7 +57,8 @@ public final class SopLibrary {
     private final Map<String, Integer> df = new HashMap<>();
     private final double avgLength;
 
-    /** 스프링: 기본 문서 + 설정한 폴더. */
+    /** 스프링: 기본 문서 + 설정한 폴더. 생성자가 둘이라 스프링이 쓸 쪽을 @Autowired 로 정한다. */
+    @Autowired
     public SopLibrary(@Value("${qg.knowledge.sop.dir:}") String dir) {
         this(load(dir));
     }
