@@ -707,14 +707,18 @@ public class IncidentAnalyzer {
     private AnalysisResult analyzeWith(String userPrompt, List<String> trace, QualityTools tools, long t0) {
         SopLibrary library = sop;
         ToolCallLimit limit = new ToolCallLimit(maxToolCalls);
+        SopTools sopTools = tools == null || library == null ? null : new SopTools(library, trace, t0).withLimit(limit);
         Object[] toolObjects = tools == null ? null
-                : library == null ? new Object[] {tools.withLimit(limit)}
-                : new Object[] {tools.withLimit(limit), new SopTools(library, trace, t0).withLimit(limit)};
+                : sopTools == null ? new Object[] {tools.withLimit(limit)}
+                : new Object[] {tools.withLimit(limit), sopTools};
         // 응답 전체 텍스트를 받아 직접 해석한다.
         // (Gemini 3 계열은 사고 요약이 마크다운으로 함께 올 수 있어 entity() 자동 변환이 실패할 수 있음)
         // 시간 제한·일시 장애 재시도 (로드맵 O4). 재시도하면 조사(도구 호출)를 처음부터 다시 한다
         ChatResponse response = llm.call("analysis", () -> {
             limit.reset();   // 재시도는 조사를 처음부터 다시 하므로 상한도 처음부터 센다
+            if (sopTools != null) {
+                sopTools.reset();   // SOP "분석당 1번"도 처음부터
+            }
             var spec = chatClient().prompt().system(AgentPrompts.SYSTEM).user(userPrompt);
             return (toolObjects == null ? spec : spec.tools(toolObjects)).call().chatResponse();
         }, trace);
