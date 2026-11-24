@@ -539,6 +539,34 @@ class MssqlInitScriptsContainerTest {
         }
     }
 
+    @Test
+    void 끝나지_않은_같은_조치에는_묶고_같은_분석은_한_번만_처리한다() throws Exception {
+        try (Connection c = connect()) {
+            var store = new com.qualiguard.qms.agent.action.ActionStore(
+                    new JdbcTemplate(new SingleConnectionDataSource(c, true)));
+            var approval = new com.qualiguard.qms.agent.action.ActionPolicy.Decision(
+                    com.qualiguard.qms.agent.action.ActionPolicy.Mode.APPROVAL, List.of("품질 영향 사건의 공정 설정 변경"));
+            int id = store.insert(3001, "IMM-02", "COOLING_ISSUE",
+                    com.qualiguard.qms.agent.action.ActionCatalog.COOLING_FLOW_INCREASE, approval, 1, null, 92, true);
+            assertThat(store.pendingSame("IMM-02", "COOLING_FLOW_INCREASE")).contains(id);
+            assertThat(store.pendingSame("IMM-01", "COOLING_FLOW_INCREASE")).isEmpty();
+            store.markRepeated(id, 3002, 97, true);
+            store.markRepeated(id, 3003, null, false);
+            assertThat(store.handled(3001)).isTrue();
+            assertThat(store.handled(3003)).isTrue();
+            assertThat(store.handled(3999)).isFalse();
+            Map<String, Object> row = store.recent(200).stream()
+                    .filter(r -> ((Number) r.get("action_id")).intValue() == id).findFirst().orElseThrow();
+            assertThat(((Number) row.get("repeat_count")).intValue()).isEqualTo(2);
+            assertThat(((Number) row.get("last_analysis_id")).intValue()).isEqualTo(3003);
+            assertThat(((Number) row.get("confidence")).intValue()).as("확신도가 없으면 앞 값 유지").isEqualTo(97);
+            assertThat(row.get("verified")).isEqualTo(false);
+            assertThat(row.get("last_seen_at")).isNotNull();
+            store.reject(id, "시험");
+            assertThat(store.pendingSame("IMM-02", "COOLING_FLOW_INCREASE")).as("반려되면 묶지 않음").isEmpty();
+        }
+    }
+
     private static void shotRow(PreparedStatement ps, String id, int shot, double barrel, String start, int sec)
             throws SQLException {
         ps.setString(1, id);
