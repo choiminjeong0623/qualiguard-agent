@@ -14,3 +14,4 @@
 | [08](08-local-dev-environment.md) | 로컬 개발 환경에서 평가·검증을 돌리며 겪은 문제들 | 포트 점유, `gradlew clean`으로 Streams 상태 삭제, 테스트의 소비자 그룹 간섭, 로컬·원격 불일치, 작업 중단 | [ADR-006](../decisions/ADR-006-kafka-streams-state.md) |
 | [09](09-cold-start-schema-order.md) | 빈 DB 에서 처음 띄우면 DB 초기화가 04 에서 멈춤 | `mssql-init` Exited (1), 05~19 미실행 → `02_schema.sql` 로 `cause_code` 를 옮겨 해결 | 로드맵 F1 |
 | [10](10-llm-timeout-retry.md) | LLM 이 응답하지 않으면 분석이 끝없이 기다림, 503 한 번에 바로 실패 | 90초 시간 제한 + 일시 장애만 재시도(지수 백오프) + 끝내 실패하면 FAILED·경보 복구 | 로드맵 O4 |
+| [11](11-action-loop-real-run.md) | 자동 조치·효과 확인 루프를 실제로 몇 시간 돌리니 생긴 문제 | 효과 확인 미시작(shot 번호 재시작), 같은 조치 26건 쌓임, 재분석이 관찰로 끝나면 멈춤 → PR #103·#104·#105 | 로드맵 F3, [ADR-016](../decisions/ADR-016-multi-agent-pipeline.md) |
