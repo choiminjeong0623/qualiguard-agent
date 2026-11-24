@@ -477,6 +477,79 @@ class MssqlInitScriptsContainerTest {
     }
 
     @Test
+    void 조치_효과_확인은_shot_번호가_아니라_실행_뒤_들어온_순서로_구간을_자른다() throws Exception {
+        // 시뮬레이터를 다시 돌리면 shot 번호가 1부터 다시 시작한다 (11/24 맥 F3 실행에서 발견)
+        try (Connection c = connect(); Statement st = c.createStatement()) {
+            st.execute("""
+                    INSERT INTO dbo.equipment (equipment_id, line_id, equipment_name, model, product_name, install_date)
+                    VALUES ('IT-EQ-01', 'LINE1', N'시험 설비', N'시험', N'시험', '2020-01-01');
+                    INSERT INTO dbo.sensor_spec (equipment_id, sensor_key, sensor_name, unit, lsl, target, usl)
+                    VALUES ('IT-EQ-01', 'barrelTemp', N'실린더 온도', N'℃', 220.0, 230.0, 240.0);
+                    """);
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO dbo.process_shot (message_id, line_id, equipment_id, shot_no, shot_ts, barrel_temp,
+                                                  inspection_result, created_at)
+                    VALUES (?, 'LINE1', 'IT-EQ-01', ?, SYSDATETIMEOFFSET(), ?, 'OK', CAST(? AS DATETIMEOFFSET(3)))
+                    """)) {
+                for (int shot = 1; shot <= 100; shot++) {   // 앞 실행: 1~100, 실린더 220
+                    shotRow(ps, "it-eff-a-" + shot, shot, 220.0, "2026-11-24T10:00:00+09:00", shot);
+                }
+                for (int shot = 1; shot <= 50; shot++) {    // 조치 뒤 새 실행: 번호가 다시 1부터, 실린더 229
+                    shotRow(ps, "it-eff-b-" + shot, shot, 229.0, "2026-11-24T11:00:00+09:00", shot);
+                }
+            }
+            st.execute("""
+                    INSERT INTO dbo.anomaly_event (anomaly_id, line_id, equipment_id, shot_no, detected_at, rule_code,
+                        rule_name, sensor_key, sensor_name, observed, message, evidence_json, created_at)
+                    VALUES
+                    ('it-eff-old', 'LINE1', 'IT-EQ-01', 10, SYSDATETIMEOFFSET(), 'XBAR', N'평균', 'barrelTemp', N'실린더', 1,
+                     N'앞 실행 경보 (같은 shot 번호지만 세면 안 됨)', '{}', '2026-11-24T10:00:10+09:00'),
+                    ('it-eff-in', 'LINE1', 'IT-EQ-01', 20, SYSDATETIMEOFFSET(), 'XBAR', N'평균', 'barrelTemp', N'실린더', 1,
+                     N'조치 뒤 구간 경보', '{}', '2026-11-24T11:00:20+09:00'),
+                    ('it-eff-spike', 'LINE1', 'IT-EQ-01', 21, SYSDATETIMEOFFSET(), 'INDIVIDUAL', N'개별', 'barrelTemp', N'실린더', 1,
+                     N'단발 튐 (목표 센서가 있으면 세지 않음)', '{}', '2026-11-24T11:00:21+09:00'),
+                    ('it-eff-late', 'LINE1', 'IT-EQ-01', 45, SYSDATETIMEOFFSET(), 'XBAR', N'평균', 'barrelTemp', N'실린더', 1,
+                     N'구간(40 shot) 뒤 경보', '{}', '2026-11-24T11:00:45+09:00');
+                    """);
+            int actionId;
+            try (ResultSet rs = st.executeQuery("""
+                    INSERT INTO dbo.agent_action (analysis_id, equipment_id, cause_code, action_code, risk, mode, status,
+                                                  base_shot, executed_at)
+                    OUTPUT INSERTED.action_id
+                    VALUES (0, 'IT-EQ-01', 'HEATER_DEGRADATION', 'HEATER_TEMP_COMPENSATE', 'MEDIUM', 'APPROVAL',
+                            'EXECUTED', 100, '2026-11-24T10:30:00+09:00')
+                    """)) {
+                rs.next();
+                actionId = rs.getInt(1);
+            }
+            var store = new com.qualiguard.qms.agent.action.ActionStore(
+                    new JdbcTemplate(new SingleConnectionDataSource(c, true)));
+
+            // 예전 기준(MAX(shot_no) >= base_shot + 40 = 140)이면 새 실행의 shot 50 으로는 영영 안 됐다
+            assertThat(store.dueForCheck(40)).anyMatch(r -> ((Number) r.get("action_id")).intValue() == actionId);
+            assertThat(store.dueForCheck(60)).noneMatch(r -> ((Number) r.get("action_id")).intValue() == actionId);
+
+            var w = store.window(actionId, "IT-EQ-01", "barrelTemp", 30, 40);
+            assertThat(w.shotsAfter()).isEqualTo(40);
+            assertThat(w.meanBefore()).as("앞 구간 = 실행 전 마지막 30 shot").isCloseTo(220.0, within(1e-9));
+            assertThat(w.meanAfter()).as("뒤 구간 = 실행 뒤 처음 40 shot (앞 실행의 같은 번호 섞이지 않음)")
+                    .isCloseTo(229.0, within(1e-9));
+            assertThat(w.target()).isEqualTo(230.0);
+            assertThat(w.alarmsAfter()).as("뒤 구간 안의 지속 경보 하나만").isEqualTo(1);
+        }
+    }
+
+    private static void shotRow(PreparedStatement ps, String id, int shot, double barrel, String start, int sec)
+            throws SQLException {
+        ps.setString(1, id);
+        ps.setLong(2, shot);
+        ps.setDouble(3, barrel);
+        ps.setString(4, java.time.OffsetDateTime.parse(start).plusSeconds(sec)
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX")));
+        ps.executeUpdate();
+    }
+
+    @Test
     void 운영_리포트_SQL_이_돌고_지연_P95_와_되돌림율을_낸다() throws Exception {
         String tag = "it-ops";
         try (Connection c = connect()) {

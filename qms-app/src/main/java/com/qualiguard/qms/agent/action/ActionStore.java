@@ -74,40 +74,58 @@ public class ActionStore {
                 """, parentAnalysisId).stream().findFirst();
     }
 
-    /** 실행했고, 실행 뒤 checkShots 만큼 shot 이 쌓인 조치들. */
+    /**
+     * 실행했고, 실행 뒤 checkShots 만큼 shot 이 쌓인 조치들.
+     * shot 번호는 시뮬레이터를 다시 돌리면 1부터 다시 시작하므로, 실행 시각(executed_at) 뒤에 들어온 shot 을 센다.
+     */
     public List<Map<String, Object>> dueForCheck(int checkShots) {
         return jdbc.queryForList("""
                 SELECT a.action_id, a.analysis_id, a.equipment_id, a.action_code, a.cause_code, a.attempt, a.base_shot
                 FROM dbo.agent_action AS a
-                WHERE a.status = 'EXECUTED' AND a.base_shot IS NOT NULL
-                  AND (SELECT MAX(shot_no) FROM dbo.process_shot WHERE equipment_id = a.equipment_id)
-                      >= a.base_shot + ?
+                WHERE a.status = 'EXECUTED' AND a.executed_at IS NOT NULL
+                  AND (SELECT COUNT(*) FROM dbo.process_shot AS p
+                        WHERE p.equipment_id = a.equipment_id AND p.created_at > a.executed_at) >= ?
                 ORDER BY a.action_id
                 """, checkShots);
     }
 
-    /** 조치 전(base 앞 before 개)·뒤(base 뒤 after 개) 구간의 센서 평균, 규격 목표, 뒤 구간 경보 수. */
-    public EffectEvaluator.Window window(String equipmentId, String sensorKey, long baseShot, int before, int after) {
-        int shotsAfter = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM dbo.process_shot WHERE equipment_id = ? AND shot_no > ? AND shot_no <= ?
-                """, Integer.class, equipmentId, baseShot, baseShot + after);
-        // 목표 센서가 있으면 지속 경보(평균 이동·산포·불량률)만, 없으면 단발 튐까지 센다
-        int alarms = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM dbo.anomaly_event
-                WHERE equipment_id = ? AND shot_no > ? AND shot_no <= ? AND (? = 1 OR rule_code <> 'INDIVIDUAL')
-                """, Integer.class, equipmentId, baseShot, baseShot + after, sensorKey == null ? 1 : 0);
+    /**
+     * 조치 전·뒤 구간의 센서 평균, 규격 목표, 뒤 구간 경보 수.
+     * 구간은 shot 번호가 아니라 들어온 순서로 자른다: 실행 시각 전에 들어온 마지막 before 개, 뒤에 들어온 처음 after 개.
+     * (shot 번호는 실행마다 1부터 다시 시작해, 번호로 자르면 이전 실행의 같은 번호 shot 이 섞인다)
+     */
+    public EffectEvaluator.Window window(int actionId, String equipmentId, String sensorKey, int before, int after) {
         String col = sensorKey == null ? null : COLUMNS.get(sensorKey);
+        String value = col == null ? "CAST(NULL AS FLOAT)" : "CAST(" + col + " AS FLOAT)";
+        Map<String, Object> r = jdbc.queryForMap("""
+                WITH act AS (SELECT executed_at FROM dbo.agent_action WHERE action_id = ?),
+                aft AS (SELECT TOP (?) p.created_at, {VALUE} AS v FROM dbo.process_shot AS p CROSS JOIN act
+                        WHERE p.equipment_id = ? AND p.created_at > act.executed_at ORDER BY p.shot_id),
+                bef AS (SELECT TOP (?) {VALUE} AS v FROM dbo.process_shot AS p CROSS JOIN act
+                        WHERE p.equipment_id = ? AND p.created_at <= act.executed_at ORDER BY p.shot_id DESC)
+                SELECT (SELECT COUNT(*) FROM aft) AS shots_after,
+                       (SELECT AVG(v) FROM bef) AS mean_before,
+                       (SELECT AVG(v) FROM aft) AS mean_after,
+                       (SELECT COUNT(*) FROM dbo.anomaly_event AS e CROSS JOIN act
+                         WHERE e.equipment_id = ? AND e.created_at > act.executed_at
+                           AND e.created_at <= (SELECT MAX(created_at) FROM aft)
+                           AND (? = 1 OR e.rule_code <> 'INDIVIDUAL')) AS alarms
+                """.replace("{VALUE}", value), actionId, after, equipmentId, before, equipmentId, equipmentId,
+                sensorKey == null ? 1 : 0);
+        int shotsAfter = ((Number) r.get("shots_after")).intValue();
+        int alarms = ((Number) r.get("alarms")).intValue();
         if (col == null) {
             return new EffectEvaluator.Window(null, null, null, alarms, shotsAfter);
         }
-        String avg = "SELECT CAST(AVG(" + col + ") AS FLOAT) FROM dbo.process_shot "
-                + "WHERE equipment_id = ? AND shot_no > ? AND shot_no <= ?";
-        Double meanBefore = jdbc.queryForObject(avg, Double.class, equipmentId, baseShot - before, baseShot);
-        Double meanAfter = jdbc.queryForObject(avg, Double.class, equipmentId, baseShot, baseShot + after);
         Double target = jdbc.queryForList("SELECT CAST(target AS FLOAT) FROM dbo.sensor_spec "
                 + "WHERE equipment_id = ? AND sensor_key = ?", Double.class, equipmentId, sensorKey)
                 .stream().findFirst().orElse(null);
-        return new EffectEvaluator.Window(meanBefore, meanAfter, target, alarms, shotsAfter);
+        return new EffectEvaluator.Window(toDouble(r.get("mean_before")), toDouble(r.get("mean_after")), target,
+                alarms, shotsAfter);
+    }
+
+    private static Double toDouble(Object o) {
+        return o == null ? null : ((Number) o).doubleValue();
     }
 
     public void markChecked(int actionId, String status, String detail) {
