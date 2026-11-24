@@ -38,7 +38,7 @@ import jakarta.annotation.PreDestroy;
  * 꺼져 있어도 분석·저장에는 영향이 없다. 실패는 경고 로그만 남긴다.
  */
 @Component
-public class AlertNotifier {
+public final class AlertNotifier {
 
     private static final Logger log = LoggerFactory.getLogger(AlertNotifier.class);
     private static final int RECENT_MAX = 20;
@@ -93,7 +93,7 @@ public class AlertNotifier {
         if (!enabled() || n == null) {
             return;
         }
-        executor.submit(() -> send(n));
+        executor.execute(() -> send(n));
     }
 
     /** 실제 전송 (시험에서 직접 부른다). 성공하면 true. */
