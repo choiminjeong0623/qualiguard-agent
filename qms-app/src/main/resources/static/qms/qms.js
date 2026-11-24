@@ -706,8 +706,22 @@
     if (!requireActor()) { return; }
     var body = {};
     Object.keys(ASSIGN).forEach(function (k) { body[k] = $('#assign-form [name="' + k + '"]').val(); });
+    // 조치 지정 저장은 담당자·기한·영향 로트만 바꾼다. 다시 그릴 때 아직 저장하지 않은 확정 원인 등 수정을 지우지 않게 되살린다
+    var before = editedFields();
     send('PUT', API + '/' + encodeURIComponent(state.selected) + '/assignment', body)
-      .done(function (d) { render(d); detailTabs.select('tab-assign'); msg('조치 지정을 저장했습니다.', 'ok'); loadCounts(); })
+      .done(function (d) {
+        render(d);
+        var server = editedFields(), kept = 0;
+        Object.keys(before).forEach(function (k) {
+          if (before[k] === server[k]) { return; }
+          var $el = $('[data-field="' + k + '"]').val(before[k]);
+          if ($el.prop('hidden')) { $el.prop('hidden', false).siblings('.v-val, .v-aitext').prop('hidden', true); }
+          kept += 1;
+        });
+        detailTabs.select('tab-assign');
+        msg('조치 지정을 저장했습니다.' + (kept ? ' 저장하지 않은 다른 수정 ' + kept + '건은 그대로 남아 있습니다. [저장]을 눌러 주세요.' : ''), 'ok');
+        loadCounts();
+      })
       .fail(function (xhr) { msg(errorText(xhr), 'err'); });
   });
 

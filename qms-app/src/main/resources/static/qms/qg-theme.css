@@ -305,6 +305,8 @@ textarea.v-input { height: auto; width: 100%; padding: 10px 12px; line-height: 2
 .v-ib { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; border-radius: 4px; background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
 .v-ib:hover { background: var(--sub); color: var(--primary); }
 .v-ib svg { width: 17px; height: 17px; }
+/* 날짜 칸: 직접 넣은 달력 버튼(#due-pick)만 보이게 브라우저 기본 달력 아이콘을 숨긴다 (Chrome·Edge) */
+.v-ibox input[type=date]::-webkit-calendar-picker-indicator { display: none; }
 .v-aigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .v-aibox { background: var(--sub); border: 1px solid var(--border); border-radius: 4px; padding: 12px 14px; }
 .v-aibox .v-flab { margin-bottom: 4px; }
