@@ -285,7 +285,7 @@ textarea.v-input { height: auto; width: 100%; padding: 10px 12px; line-height: 2
 .v-tbl td .v-t1 { color: var(--text); font-weight: 400; font-size: 13px; white-space: normal; }
 .v-tbl td .v-t2 { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .v-tbl tbody tr:hover td { background: #FAFBFE; cursor: pointer; }
-.v-r { text-align: right; }
+.v-r, .v-tbl th.v-r { text-align: right; }
 .v-conf { font-variant-numeric: tabular-nums; }
 
 /* 상세 */

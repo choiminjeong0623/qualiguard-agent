@@ -60,7 +60,12 @@ function initialState(role) {
   const holds = [
     { analysis_id: 1301, trigger_type: 'RECHECK', as_of_shot: 410, equipment_id: 'IMM-02', decision: 'OBSERVE',
       cause_code: 'UNKNOWN', confidence: 45, hold_reason: 'RECHECK_LIMIT', hold_detail: '재확인 2회 상한 도달',
-      summary: '압력 변동이 간헐적으로 반복되나 원인을 특정하지 못함', watch_items: '["injectionPressure","cushion"]', hold_brief: null },
+      summary: '압력 변동이 간헐적으로 반복되나 원인을 특정하지 못함', watch_items: '["injectionPressure","cushion"]', hold_brief: null,
+      created_at: '2026-11-15T08:20:00.000+00:00' },
+    { analysis_id: 1288, trigger_type: 'ALARM', as_of_shot: 1210, equipment_id: 'IMM-01', decision: 'NCR_DRAFT',
+      cause_code: 'COOLING_ISSUE', confidence: 58, hold_reason: 'VERIFY_WEAK', hold_detail: '검증 지적 1건 남은 채 경보 종료',
+      summary: '금형 온도가 오르지만 냉각수 유량 근거가 약함', watch_items: '["moldTemp"]', hold_brief: null,
+      created_at: '2026-11-15T06:05:00.000+00:00' },
   ];
   const links = [
     { confirmed_serial: 'SN-2026-000120', provisional_serial: 'TMP-000120', equipment_id: 'IMM-01', shot_no: 300,

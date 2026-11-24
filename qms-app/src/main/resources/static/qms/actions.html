@@ -6,8 +6,8 @@
 <title>조치·판단 보류 · QualiGuard QMS</title>
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
 <link rel="stylesheet" href="qg-tokens.css?v=4">
-<link rel="stylesheet" href="qms.css?v=8">
-<link rel="stylesheet" href="qg-theme.css?v=1">
+<link rel="stylesheet" href="qms.css?v=9">
+<link rel="stylesheet" href="qg-theme.css?v=2">
 <script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
@@ -57,21 +57,65 @@
     </div>
   </div>
 
-  <!-- ② 판단 보류: 사람이 확인하고 메모를 남긴다 -->
+  <!-- ② 판단 보류: 목록(순번·보류 사유·설비·시각) → 행을 누르면 상세(#hold/<분석 번호>) -->
   <div class="qg-tabpanel qg-tabpanel-flat" role="tabpanel" id="p-holds" aria-labelledby="tab-holds" hidden>
     <div class="qg-panel">
       <div class="qg-toolbar">
-        <span class="qg-help">재확인을 상한까지 해도 원인을 정하지 못했거나, 검증 지적이 남은 채 경보가 닫힌 분석입니다. 확인한 내용을 메모로 남겨 주세요.</span>
+        <span class="qg-help">재확인을 상한까지 해도 원인을 정하지 못했거나, 검증 지적이 남은 채 경보가 닫힌 분석입니다. 행을 눌러 내용을 보고 메모를 남겨 주세요.</span>
       </div>
-      <div class="table-responsive">
-        <table class="table card-table qg-table qg-table-holds">
-          <caption class="visually-hidden">판단 보류 목록</caption>
-          <thead><tr><th scope="col">보류 사유</th><th scope="col">설비</th><th scope="col">분석</th><th scope="col">에이전트 판단</th>
-            <th scope="col">요약 · 확인할 항목</th><th scope="col">검토</th></tr></thead>
-          <tbody id="hold-rows"><tr><td colspan="6" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
-        </table>
+      <div class="v-tbl"><div class="v-tbl-scroll table-responsive"><table class="qg-table-list qg-table-holds">
+        <caption class="visually-hidden" id="holds-title">판단 보류 목록</caption>
+        <thead><tr>
+          <th class="v-no" scope="col">순번</th>
+          <th scope="col">보류 사유</th>
+          <th scope="col">설비</th>
+          <th scope="col" class="v-r">시각</th>
+        </tr></thead>
+        <tbody id="hold-rows"><tr><td colspan="4" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
+      </table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 판단 보류 상세: 두 번째 띠(위치·제목) + 내용 카드 | 기본 정보 ══ -->
+<section id="view-hold" class="qg-view" aria-labelledby="h-title" hidden>
+  <div class="v-subhero">
+    <div class="v-hero-body">
+      <div>
+        <nav class="v-crumb" aria-label="위치"><a href="#holds" id="back-to-holds">판단 보류</a> / <span id="h-no" class="qg-mono" aria-current="page"></span></nav>
+        <h2 class="v-dtitle" id="h-title" tabindex="-1"><span id="h-title-text"></span> <span id="h-reason"></span></h2>
       </div>
     </div>
+  </div>
+  <p id="h-missing" class="msg err" role="status" hidden></p>
+
+  <div class="v-grid" id="h-body">
+    <div class="v-card">
+      <section aria-labelledby="h-judge">
+        <div class="v-sech"><h3 id="h-judge">에이전트 판단</h3><p>원인을 정하지 못하고 사람에게 넘긴 분석입니다</p></div>
+        <dl class="v-info" id="h-judgement"></dl>
+      </section>
+      <section aria-labelledby="h-sum" class="mt-4">
+        <div class="v-sech"><h3 id="h-sum">요약 · 확인할 항목</h3><p>에이전트가 남긴 분석 요약</p></div>
+        <p id="h-summary" class="qg-wrap"></p>
+        <p id="h-watch" class="muted" hidden></p>
+        <div id="h-brief"></div>
+      </section>
+      <section aria-labelledby="h-review" class="mt-4">
+        <div class="v-sech"><h3 id="h-review">검토</h3><p>무엇을 확인했고 어떻게 처리했는지 남기면 재분석에 전달됩니다</p></div>
+        <div id="h-review-body"></div>
+      </section>
+    </div>
+
+    <aside class="v-side" aria-label="기본 정보">
+      <div class="v-card">
+        <div class="v-chead">
+          <span class="v-cicon" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="3" width="12" height="14" rx="1.5"/><path d="M7 7h6M7 10h6M7 13h4"/></svg></span>
+          <div><h2>기본 정보</h2><p>판단 보류가 된 분석</p></div>
+        </div>
+        <dl class="v-info" id="h-meta"></dl>
+      </div>
+    </aside>
   </div>
 </section>
 
@@ -79,6 +123,6 @@
 </div>
 
 <script src="qg-common.js?v=6"></script>
-<script src="actions.js?v=4"></script>
+<script src="actions.js?v=5"></script>
 </body>
 </html>
