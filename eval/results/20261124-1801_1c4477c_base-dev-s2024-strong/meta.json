@@ -1,0 +1,83 @@
+{
+  "createdAt": "2026-11-24T18:01:14+09:00",
+  "mode": "base-dev-s2024-strong",
+  "args": {
+    "runs": 1,
+    "hide_matching_ncr": false,
+    "hide_maintenance": false,
+    "label": "dev-s2024-strong"
+  },
+  "gitCommit": "1c4477cb4d3503bb50576c7704c57fd1c8b57edc",
+  "gitDirty": false,
+  "agentConfig": {
+    "recheckShots": 40,
+    "recheckMax": 3,
+    "verifyMaxRetries": 1,
+    "chatProvider": "google-genai",
+    "model": "gemini-3.8-flash",
+    "temperature": "0.2",
+    "transport": "kafka",
+    "promptVersion": "analysis-v1@d54b8a16",
+    "analysisMode": "tools",
+    "writerMode": "analysis-text",
+    "vectorEnabled": true,
+    "actionEnabled": false,
+    "dailyTokenBudget": 1000000
+  },
+  "groundTruth": {
+    "sha256": "d73a26988349bc122aac33b62550ca09bc92522908865612611bb6fdc66c0c28",
+    "rows": 4000,
+    "simulatorMeta": {
+      "createdAt": "2026-11-24T17:35:47+09:00",
+      "config": "scenarios_eval.yaml",
+      "configSha256": "85b17eb9267a2b95174e465fc570b908ec514494242d611e738bbe599cda2b31",
+      "seed": 2024,
+      "evalRun": {
+        "suite": "e4-2026-11-24",
+        "id": "dev-s2024-strong",
+        "split": "dev",
+        "severityLevel": "strong",
+        "ambiguous": []
+      },
+      "shotsPerEquipment": 2000,
+      "equipment": [
+        "IMM-01",
+        "IMM-02"
+      ],
+      "faults": [
+        {
+          "name": "heater_degradation",
+          "equipment": "IMM-01",
+          "startShot": 300,
+          "duration": 500
+        },
+        {
+          "name": "pressure_sensor_spike",
+          "equipment": "IMM-02",
+          "startShot": 400,
+          "duration": 200
+        },
+        {
+          "name": "cooling_blockage",
+          "equipment": "IMM-02",
+          "startShot": 900,
+          "duration": 500
+        },
+        {
+          "name": "check_ring_wear",
+          "equipment": "IMM-01",
+          "startShot": 1200,
+          "duration": 600
+        },
+        {
+          "name": "sensor_drift",
+          "equipment": "IMM-02",
+          "startShot": 1550,
+          "duration": 400
+        }
+      ]
+    }
+  },
+  "cases": 7,
+  "runs": 1
+}
