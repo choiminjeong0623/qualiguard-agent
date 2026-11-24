@@ -25,9 +25,9 @@
 
 ### 데모 화면
 
-[![시연 영상 (3분 14초) — 클릭하면 mp4](docs/demo/qualiguard-demo.gif)](docs/demo/qualiguard-demo.mp4)
+[![시연 영상 (3분 34초) — 클릭하면 mp4](docs/demo/qualiguard-demo.gif)](docs/demo/qualiguard-demo.mp4)
 
-[사용자용 영상 mp4 (3분 14초, 자막 포함)](docs/demo/qualiguard-demo.mp4): 리디자인한 QMS 화면 — 데이터 흐름 → 담당자 휴대폰 알림(새 초안) → 검토 대기 목록·거르개 → 에이전트 흐름(ML 선판단, 애매하면 LLM) → AI 초안·근거·에이전트 분석 기록 → 확정 원인·조치 지정·승인 → MES/ERP 연계 → 판단 보류 알림 → 보류 검토 → 위험도 자동 조치·효과 검증 → 폐쇄망 모드. 화면 데이터는 시연용 예시이며, 자막은 1초에 7자 정도로 읽을 수 있게 맞췄습니다.
+[사용자용 영상 mp4 (3분 34초, 자막 포함)](docs/demo/qualiguard-demo.mp4): 리디자인한 QMS 화면 — 데이터 흐름 → 담당자 휴대폰 알림(새 초안) → 검토 대기 목록·거르개 → 에이전트 흐름(ML 선판단, 애매하면 LLM) → AI 초안·근거·에이전트 분석 기록 → 확정 원인·조치 지정·승인 → MES/ERP 연계 → 판단 보류 알림 → 보류 검토 → 위험도 자동 조치·효과 검증 → 폐쇄망 모드 → 마무리. 화면 데이터는 시연용 예시이며, 자막은 1초에 7자 정도로 읽을 수 있게 맞췄습니다.
 
 [개발자용 영상 mp4 (2분 34초, 시스템 뒤 흐름)](docs/demo/qualiguard-dev-demo.mp4): 인프라(docker compose)·센서 시뮬레이터 → Kafka UI(sensor.raw · sensor.clean · quality.anomaly) → 경보 1건 실시간 분석(분류 → 원인 분석 → 검증 → 초안, agent.* 토픽 · 사건 이벤트) → QMS 화면의 새 초안과 분석 기록
 

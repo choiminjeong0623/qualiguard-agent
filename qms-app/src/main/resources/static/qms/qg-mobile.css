@@ -132,7 +132,8 @@
   table.qg-table-list tr, table.qg-table tr, .v-tbl table tr { display: block; position: relative; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
   table.qg-table-list tr.pick, .v-tbl table tr.pick { cursor: pointer; }
   table.qg-table-list tr.v-sel { border: 2px solid var(--primary); background: var(--primary-50); }
-  table.qg-table-list tr.qg-row-attn { border-left: 6px solid var(--qg-color-warning); padding-left: 14px; }
+  /* 승인 대기 행: 카드에서는 왼쪽 띠 없이 상태 표시로만 구분 */
+  table.qg-table tr.qg-row-attn > td:first-child { box-shadow: none; }
   table.qg-table-list td, table.qg-table td, .v-tbl table td {
     display: block; position: relative; height: auto; min-height: 40px; padding: 8px 0 8px 112px !important; border: 0 !important;
     font-size: 17px !important; line-height: 1.5; white-space: normal !important; text-align: left !important;
@@ -189,7 +190,8 @@
   .v-hist li { font-size: 17px; } .v-hist .v-t2, .v-hist .v-hw { font-size: 15px; }
   .v-ri .v-t1 { font-size: 17px; } .v-ri a { font-size: 17px; }
   .v-banner, .v-note, .qg-note { font-size: 17px; line-height: 1.5; }
-  .v-toast { font-size: 17px; left: 16px; right: 16px; }
+  .v-toast { font-size: 17px; line-height: 1.5; left: 16px; right: 16px; bottom: 88px; text-align: center; transform: translateY(12px); }
+  .v-toast.v-on { transform: none; }
   .qg-facts dt { font-size: 15px; } .qg-facts dd { font-size: 17px; }
 
   /* 하단 고정 동작 바 */
