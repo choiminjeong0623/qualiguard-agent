@@ -71,7 +71,7 @@ class ActionLoopTest {
         }
 
         @Override
-        public EffectEvaluator.Window window(String equipmentId, String sensorKey, long baseShot, int before, int after) {
+        public EffectEvaluator.Window window(int actionId, String equipmentId, String sensorKey, int before, int after) {
             return window;
         }
 
@@ -85,6 +85,7 @@ class ActionLoopTest {
     /** 재분석 요청만 기록하는 파이프라인. */
     static class RecordingPipeline extends AgentPipeline {
         final List<String> retries = new ArrayList<>();
+        int inFlight;
 
         RecordingPipeline() {
             super(null, null, null);
@@ -98,7 +99,7 @@ class ActionLoopTest {
 
         @Override
         public int inFlight() {
-            return 0;
+            return inFlight;
         }
     }
 
@@ -167,5 +168,23 @@ class ActionLoopTest {
         assertThat(store.rows.get(2)).containsEntry("status", "ESCALATED");
         assertThat((String) store.rows.get(2).get("effect_detail")).contains("담당자 확인 필요", "되돌리기");
         assertThat(pipeline.retries).hasSize(1);
+    }
+
+    @Test
+    void 효과가_없는데_분석이_진행_중이면_재분석을_미루고_자동_분석에_자리를_달라고_알린다() {
+        agent.onRequested(analysisDone(30, null, "NCR_DRAFT", "HEATER_DEGRADATION", 85, "MEDIUM"));
+        store.window = new EffectEvaluator.Window(220.0, 221.0, 230.0, 3, 40);
+
+        pipeline.inFlight = 1;   // 밀린 경보 분석이 돌고 있음
+        checker.poll();
+        assertThat(store.rows.get(1)).containsEntry("status", "EXECUTED");
+        assertThat(pipeline.retries).isEmpty();
+        assertThat(checker.retryWaiting()).isTrue();
+
+        pipeline.inFlight = 0;   // 끝나면 다음 폴링에서 재분석을 먼저 시작
+        checker.poll();
+        assertThat(store.rows.get(1)).containsEntry("status", "NOT_RESOLVED");
+        assertThat(pipeline.retries).containsExactly("30:HEATER_DEGRADATION");
+        assertThat(checker.retryWaiting()).isFalse();
     }
 }

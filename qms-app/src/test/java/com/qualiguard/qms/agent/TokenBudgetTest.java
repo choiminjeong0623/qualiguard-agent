@@ -17,7 +17,10 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Optional;
 
+import com.qualiguard.qms.agent.action.EffectCheckScheduler;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.qualiguard.qms.agent.pipeline.AgentPipeline;
@@ -81,10 +84,33 @@ class TokenBudgetTest {
         when(analyzer.nextSeed()).thenReturn(Optional.of("a-1"));
         AgentProperties props = new AgentProperties(true, 5000, 100, 30, 60, 40, 3, 1);
 
-        new AgentScheduler(analyzer, pipeline, props, budget(100, 100)).poll();
+        new AgentScheduler(analyzer, pipeline, props, budget(100, 100), noEffectCheck()).poll();
         verify(pipeline, never()).startAlarm(anyString(), anyBoolean(), any());
 
-        new AgentScheduler(analyzer, pipeline, props, budget(100, 99)).poll();
+        new AgentScheduler(analyzer, pipeline, props, budget(100, 99), noEffectCheck()).poll();
         verify(pipeline).startAlarm("a-1", false, null);
+    }
+
+    @Test
+    void 조치_재분석이_자리를_기다리면_새_경보를_넣지_않는다() {
+        IncidentAnalyzer analyzer = mock(IncidentAnalyzer.class);
+        AgentPipeline pipeline = mock(AgentPipeline.class);
+        when(analyzer.nextSeed()).thenReturn(Optional.of("a-1"));
+        AgentProperties props = new AgentProperties(true, 5000, 100, 30, 60, 40, 3, 1);
+        EffectCheckScheduler check = mock(EffectCheckScheduler.class);
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("effectCheck", check);
+
+        when(check.retryWaiting()).thenReturn(true);
+        new AgentScheduler(analyzer, pipeline, props, budget(100, 0), beans.getBeanProvider(EffectCheckScheduler.class)).poll();
+        verify(pipeline, never()).startAlarm(anyString(), anyBoolean(), any());
+
+        when(check.retryWaiting()).thenReturn(false);
+        new AgentScheduler(analyzer, pipeline, props, budget(100, 0), beans.getBeanProvider(EffectCheckScheduler.class)).poll();
+        verify(pipeline).startAlarm("a-1", false, null);
+    }
+
+    private static ObjectProvider<EffectCheckScheduler> noEffectCheck() {
+        return new StaticListableBeanFactory().getBeanProvider(EffectCheckScheduler.class);
     }
 }
