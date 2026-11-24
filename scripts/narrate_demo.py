@@ -50,6 +50,26 @@ def duration(path):
     return float(r.stdout.strip())
 
 
+def fix_wav(path):
+    """Typecast 가 스트리밍으로 보낸 wav 는 머리의 길이 칸(RIFF·data)이 0 이나 0xFFFFFFFF 로 올 때가 있다.
+    afplay 는 끝까지 재생하지만 ffmpeg 는 길이 0 으로 읽어 영상에 소리가 안 들어간다 → 실제 파일 크기로 고쳐 쓴다."""
+    import struct
+    b = bytearray(open(path, 'rb').read())
+    if b[:4] != b'RIFF' or b[8:12] != b'WAVE':
+        return
+    pos = 12
+    while pos + 8 <= len(b):
+        cid, size = bytes(b[pos:pos + 4]), struct.unpack('<I', b[pos + 4:pos + 8])[0]
+        if cid == b'data':
+            real = len(b) - (pos + 8)
+            if size != real:
+                b[pos + 4:pos + 8] = struct.pack('<I', real)
+                b[4:8] = struct.pack('<I', len(b) - 8)
+                open(path, 'wb').write(b)
+            return
+        pos += 8 + size + (size & 1)
+
+
 def tts(text, key, voice, model, tempo, emotion, prev_text, next_text, out_path):
     prompt = {'emotion_type': 'smart', 'previous_text': prev_text, 'next_text': next_text} if emotion == 'smart' \
         else {'emotion_type': 'preset', 'emotion_preset': emotion, 'emotion_intensity': 1}
@@ -99,7 +119,10 @@ def main():
             next_text = spoken(caps[i + 1]['text']) if i + 1 < len(caps) else ''
             tts(say, key, voice, a.model, a.tempo, a.emotion, prev_text, next_text, wav)
             print(f'  [{i + 1}/{len(caps)}] {say}')
+        fix_wav(wav)
         d = duration(wav)
+        if d < 0.3:
+            sys.exit(f'음성 길이가 {d:.2f}초로 너무 짧습니다: {wav} (Typecast 응답을 확인하세요)')
         slot = (caps[i + 1]['start'] if i + 1 < len(caps) else total) - c['start'] - 0.15
         speed = 1.0
         if d > slot > 0:
@@ -107,20 +130,36 @@ def main():
             print(f'    {d:.2f}초 > 자리 {slot:.2f}초 → {speed:.2f}배' + ('  (그래도 조금 겹침)' if d / speed > slot else ''))
         clips.append((wav, c['start'], speed))
 
-    # 음성마다 시작 시각만큼 밀고(adelay), 필요한 줄만 빠르게(atempo) 한 뒤 하나로 섞는다
-    cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-i', a.video]
+    # 1) 영상 길이만큼 무음 바탕(anullsrc)을 깔고, 음성마다 깨끗한 PCM 으로 다시 읽어 시작 시각만큼 밀어(adelay)
+    #    필요한 줄만 빠르게(atempo) 한 뒤 바탕 길이에 맞춰 섞는다 → 내레이션 wav 하나 (ffmpeg 버전에 덜 민감)
+    track = os.path.join(a.keep_dir, 'narration_track.wav')
+    cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'lavfi', '-t', f'{total:.3f}',
+           '-i', 'anullsrc=channel_layout=mono:sample_rate=44100']
     parts = []
     for k, (wav, start, speed) in enumerate(clips):
         cmd += ['-i', wav]
         ms = int(start * 1000)
         tempo = f',atempo={speed:.3f}' if speed > 1.0 else ''
-        parts.append(f'[{k + 1}:a]aresample=44100{tempo},adelay={ms}|{ms}[a{k}]')
-    mix = ''.join(f'[a{k}]' for k in range(len(clips)))
-    fc = ';'.join(parts) + f';{mix}amix=inputs={len(clips)}:normalize=0,apad[aout]'
-    cmd += ['-filter_complex', fc, '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
-            '-t', f'{total:.3f}', '-movflags', '+faststart', a.out]
+        parts.append(f'[{k + 1}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono{tempo},'
+                     f'adelay=delays={ms}:all=1[a{k}]')
+    mix = '[0:a]' + ''.join(f'[a{k}]' for k in range(len(clips)))
+    fc = ';'.join(parts) + f';{mix}amix=inputs={len(clips) + 1}:duration=first:dropout_transition=0:normalize=0[aout]'
+    cmd += ['-filter_complex', fc, '-map', '[aout]', '-c:a', 'pcm_s16le', track]
     subprocess.run(cmd, check=True)
-    print('완료:', a.out)
+    tdur = duration(track)
+    if tdur < total * 0.9:
+        sys.exit(f'내레이션 트랙이 {tdur:.2f}초뿐입니다(영상 {total:.1f}초): {track}')
+
+    # 2) 영상은 다시 인코딩하지 않고 내레이션만 AAC 로 붙인다
+    cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-i', a.video, '-i', track, '-map', '0:v', '-map', '1:a',
+           '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-t', f'{total:.3f}', '-movflags', '+faststart', a.out]
+    subprocess.run(cmd, check=True)
+    r = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=duration',
+                        '-of', 'csv=p=0', a.out], capture_output=True, text=True)
+    adur = float(r.stdout.strip() or 0)
+    if adur < total * 0.9:
+        sys.exit(f'합친 음성 트랙이 {adur:.2f}초뿐입니다(영상 {total:.1f}초). 결과가 잘못됐습니다: {a.out}')
+    print(f'완료: {a.out} (음성 {adur:.1f}초)')
 
 
 if __name__ == '__main__':
