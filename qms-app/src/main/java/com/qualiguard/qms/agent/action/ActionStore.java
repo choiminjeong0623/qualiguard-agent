@@ -128,6 +128,26 @@ public class ActionStore {
         return o == null ? null : ((Number) o).doubleValue();
     }
 
+    /**
+     * 효과가 없어 재분석했는데 다음 조치가 생기지 않은 조치들 (재분석이 관찰·원인 불명·실패로 끝남).
+     * 재분석 결과가 저장되고 graceSeconds 가 지나도 다음 조치(parent_action_id)가 없으면 사람에게 넘길 대상.
+     */
+    public List<Map<String, Object>> stalledRetries(int graceSeconds) {
+        return jdbc.queryForList("""
+                SELECT a.action_id, a.action_code, a.attempt, a.effect_detail,
+                       g.analysis_id AS retry_analysis_id, g.decision AS retry_decision, g.cause_code AS retry_cause
+                FROM dbo.agent_action AS a
+                CROSS APPLY (SELECT TOP 1 x.analysis_id, x.decision, x.cause_code, x.created_at
+                             FROM dbo.agent_analysis AS x
+                             WHERE x.parent_analysis_id = a.analysis_id AND x.created_at >= a.checked_at
+                             ORDER BY x.analysis_id DESC) AS g
+                WHERE a.status = 'NOT_RESOLVED'
+                  AND g.created_at < DATEADD(SECOND, -?, SYSDATETIMEOFFSET())
+                  AND NOT EXISTS (SELECT 1 FROM dbo.agent_action AS c WHERE c.parent_action_id = a.action_id)
+                ORDER BY a.action_id
+                """, graceSeconds);
+    }
+
     public void markChecked(int actionId, String status, String detail) {
         jdbc.update("UPDATE dbo.agent_action SET status = ?, effect_detail = ?, checked_at = SYSDATETIMEOFFSET() "
                 + "WHERE action_id = ?", status, detail.length() > 500 ? detail.substring(0, 500) : detail, actionId);
