@@ -1,4 +1,4 @@
-/* QualiGuard QMS 디자인 토큰 — 콘셉트 A "Industrial Enterprise" (UI 리디자인 계획서 6.1, 2026-11-23 확정)
+/* QualiGuard QMS 디자인 토큰 — v3 테마 (UI 리디자인 계획서 "v3 테마" 장, 2026-11-24 확정). 처음 값은 콘셉트 A (6.1)
    이 파일만 색·크기 값을 가진다. 다른 CSS 는 var(--qg-*) 로만 쓴다.
    대비는 흰 바탕(또는 짝지은 옅은 배경) 기준으로 계산해 둔 값이다 (WCAG 2.2 AA 1.4.3 / 1.4.11). */
 
@@ -12,11 +12,11 @@
 
 :root {
   /* ── 브랜드: 누를 수 있는 것(버튼·링크·선택)에만 쓴다. 상태 표시에는 쓰지 않는다 ── */
-  --qg-color-primary: #1F5A96;          /* 흰 바탕 7.09:1 */
-  --qg-color-primary-hover: #184A7D;
-  --qg-color-primary-active: #123A63;
-  --qg-color-primary-subtle: #E6EEF6;   /* 선택된 행 배경, 그 위 파란 글자 6.05:1 */
-  --qg-color-shell: #14273E;            /* 상단 바·사이드 메뉴 */
+  --qg-color-primary: #315AF6;          /* v3 테마. 흰 바탕 5.35:1 */
+  --qg-color-primary-hover: #2A4FDB;
+  --qg-color-primary-active: #2242C2;
+  --qg-color-primary-subtle: #EAEFFD;   /* 선택된 행 배경 */
+  --qg-color-shell: #0A1E5A;            /* 머리 띠 시작색 */
   --qg-color-shell-hover: #1E3654;
   --qg-color-shell-line: #2C4361;
   --qg-color-shell-text: #FFFFFF;       /* 15.1:1 */
@@ -25,14 +25,14 @@
   --qg-color-secondary: #4F5B67;
 
   /* ── 중립 (cool gray) ── */
-  --qg-color-bg: #F3F5F7;
+  --qg-color-bg: #FFFFFF;               /* v3: 사이트 바탕 흰색 */
   --qg-color-surface: #FFFFFF;
-  --qg-color-surface-alt: #F8F9FA;      /* 표 머리, 동작 바 */
+  --qg-color-surface-alt: #F7F8FC;      /* 표 머리 */
   --qg-color-surface-sunken: #EEF1F4;   /* 코드·로그 블록, 읽기 전용 입력 */
-  --qg-color-border: #D5DBE1;           /* 구분선 */
+  --qg-color-border: #E3E7EF;           /* 구분선 */
   --qg-color-border-strong: #8A96A3;    /* 입력 테두리, 흰 바탕 3.01:1 */
-  --qg-color-text: #1B2733;             /* 15.2:1 */
-  --qg-color-text-2: #4F5B67;           /* 6.94:1 */
+  --qg-color-text: #1B1E2B;             /* 16.5:1 */
+  --qg-color-text-2: #4A4F5E;           /* 8.1:1 */
   --qg-color-text-disabled: #8A96A3;
 
   /* ── 상태 5종: 글자·아이콘 / 옅은 배경 / 테두리. 모양+문구와 함께만 쓴다 ── */
@@ -56,8 +56,9 @@
   --qg-space-5: 20px; --qg-space-6: 24px; --qg-space-7: 32px; --qg-space-8: 48px;
 
   /* ── 모양 ── */
-  --qg-radius-sm: 2px;   /* 입력·버튼·상태 표시 */
-  --qg-radius-md: 4px;   /* 패널·대화상자 */
+  --qg-radius-sm: 4px;   /* 입력·버튼·상태 표시 (v3: 아주 작게) */
+  --qg-radius-md: 6px;   /* 카드·패널·대화상자 */
+  --qg-radius-lg: 16px;  /* 머리 띠·상세 두 번째 띠 */
   --qg-shadow-overlay: 0 4px 16px rgb(20 39 62 / .16);   /* 대화상자·드로어·펼친 메뉴에만 */
   --qg-focus-ring: 0 0 0 2px var(--qg-color-surface), 0 0 0 4px var(--qg-color-primary);
 
@@ -77,14 +78,14 @@
 
   /* ── Tabler(Bootstrap) 변수를 토큰에 연결 ── */
   --tblr-primary: var(--qg-color-primary);
-  --tblr-primary-rgb: 31, 90, 150;
+  --tblr-primary-rgb: 49, 90, 246;
   --tblr-primary-text-emphasis: var(--qg-color-primary-active);
   --tblr-link-color: var(--qg-color-primary);
-  --tblr-link-color-rgb: 31, 90, 150;
+  --tblr-link-color-rgb: 49, 90, 246;
   --tblr-link-hover-color: var(--qg-color-primary-hover);
   --tblr-body-bg: var(--qg-color-bg);
   --tblr-body-color: var(--qg-color-text);
-  --tblr-body-color-rgb: 27, 39, 51;
+  --tblr-body-color-rgb: 27, 30, 43;
   --tblr-secondary: var(--qg-color-text-2);
   --tblr-secondary-color: var(--qg-color-text-2);
   --tblr-border-color: var(--qg-color-border);
@@ -105,6 +106,30 @@
   --tblr-shadow-card: none;
   --tblr-font-sans-serif: var(--qg-font-sans);
   --tblr-body-font-size: var(--qg-fs-md);
+}
+
+:root {
+  /* ── v3 테마 (계획서 "v3 테마" 장, 2026-11-24 확정 목업) — qg-theme.css 가 쓴다 ──
+  /* 브랜드·히어로 */
+  --brand-900: #0A1E5A;   /* LS BLUE, 히어로 시작색 */
+  --brand-700: #142C7A;   /* 가장 진한 데이터색 */
+  --hero-end: #2347AC;
+  --primary: #315AF6; --primary-hover: #2A4FDB; --primary-active: #2242C2;
+  --primary-200: #94B2F1; --primary-50: #EAEFFD;
+  /* 면 */
+  --page: #FFFFFF; --card: #FFFFFF; --sub: #F7F8FC;
+  --border: #E3E7EF; --divider: #EDF0F5; --input: #8A93A6;
+  /* 글자 */
+  --text: #1B1E2B; --text-2: #4A4F5E; --muted: #646A7A;
+  --on-hero: #FFFFFF; --on-hero-2: #C3CEF2;
+  /* 의미 */
+  --ok: #1E6B45; --ok-bg: #E7F4ED;
+  --warn: #8A4B00; --warn-icon: #C27A12; --warn-bg: #FFF1E0;
+  --err: #B42318; --err-bg: #FDECEA;
+  --agent: #3048B0; --agent-bg: #EAEFFD;
+  --neutral: #4E5566; --neutral-bg: #EFF1F6;
+  --badge: #D63F2A;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-reduced-motion: reduce) {

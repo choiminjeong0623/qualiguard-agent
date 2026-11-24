@@ -4,187 +4,238 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>부적합 검토 · QualiGuard QMS</title>
-<!-- 스타일: Tabler CSS(앱에 포함) + 디자인 토큰(qg-tokens.css). UI 리디자인 계획서 7.2, ADR-009 -->
+<!-- 스타일: Tabler CSS(앱에 포함) + 디자인 토큰(qg-tokens.css) + v3 테마(qg-theme.css). UI 리디자인 계획서 "v3 테마" 장 -->
 <link rel="stylesheet" href="vendor/tabler/tabler.min.css?v=1.4.0">
-<link rel="stylesheet" href="qg-tokens.css?v=3">
+<link rel="stylesheet" href="qg-tokens.css?v=4">
 <link rel="stylesheet" href="qms.css?v=8">
+<link rel="stylesheet" href="qg-theme.css?v=1">
 <script src="vendor/jquery/jquery.min.js?v=3.7.1"></script>
 </head>
 <body>
-<!-- 공통 셸: 상단 바와 사이드 메뉴는 qg-common.js 가 그린다 -->
+<!-- 공통 셸: 머리 띠(이름·주 메뉴·사용자)는 qg-common.js 가 그리고, data-hero 제목 줄을 그 안으로 옮긴다 -->
 <header class="qg-shell" data-active="ncr"></header>
 <div class="qg-app">
-<nav class="qg-side" id="qg-side"></nav>
-<div class="qg-side-scrim" id="qg-side-scrim" aria-hidden="true"></div>
 <main class="qg-main">
 
-<!-- ══ 목록 (List Report): 제목줄(상태 탭·지표) + 툴바 + 전체 폭 표 ══ -->
-<section id="view-list" class="qg-view" aria-labelledby="list-h1">
-  <div class="qg-titlebar">
-    <h1 class="qg-h1" id="list-h1">부적합 검토</h1>
-    <div class="qg-status-tabs" id="tiles" role="tablist" aria-label="상태별 부적합">
-      <button type="button" class="qg-tile tab active" role="tab" aria-selected="true" data-status="DRAFT"><span class="qg-tile-label">검토 대기</span><span class="qg-tile-num" data-count="DRAFT">–</span></button>
-      <button type="button" class="qg-tile tab" role="tab" aria-selected="false" data-status="APPROVED"><span class="qg-tile-label">승인</span><span class="qg-tile-num" data-count="APPROVED">–</span></button>
-      <button type="button" class="qg-tile tab" role="tab" aria-selected="false" data-status="CLOSED"><span class="qg-tile-label">조치 완료</span><span class="qg-tile-num" data-count="CLOSED">–</span></button>
-      <button type="button" class="qg-tile tab" role="tab" aria-selected="false" data-status="REJECTED"><span class="qg-tile-label">반려</span><span class="qg-tile-num" data-count="REJECTED">–</span></button>
-      <button type="button" class="qg-tile tab" role="tab" aria-selected="false" data-status=""><span class="qg-tile-label">전체</span><span class="qg-tile-num" data-count="">–</span></button>
+<div class="v-hero-body" data-hero>
+  <div>
+    <div class="v-crumb">품질 관리 / 부적합 검토</div>
+    <h1 class="v-h1">부적합 검토 <span id="hero-draft"></span></h1>
+    <p>AI 에이전트가 만든 부적합 초안을 확인하고 원인을 확정합니다 · 마지막 갱신 <span id="hero-time">–</span></p>
+  </div>
+</div>
+
+<!-- ══ 목록: 검토 현황 + 부적합 목록(거르개 한 줄, 검색 한 줄, 표, 페이지) ══ -->
+<section id="view-list" class="qg-view" aria-label="부적합 목록 화면">
+  <div class="v-card">
+    <div class="v-chead">
+      <span class="v-cicon v-agent" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v2.5"/><circle cx="10" cy="2.3" r=".9" fill="currentColor" stroke="none"/><rect x="4" y="5" width="12" height="9.5" rx="2.5"/><path d="M2.5 9v3M17.5 9v3"/><circle cx="7.6" cy="9.2" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.4" cy="9.2" r="1.1" fill="currentColor" stroke="none"/><path d="M8 12h4"/><path d="M7 14.5v2.5M13 14.5v2.5"/></svg></span>
+      <div><h2>검토 현황</h2><p>오늘 처리할 일과 AI 초안 검토 품질</p></div>
+      <span class="v-sp"></span><span class="v-pill" id="kb-pill" hidden></span>
     </div>
-    <span class="qg-toolbar-spacer"></span>
-    <!-- 지식저장소·AI 초안 검토 지표 (로드맵 P2·P3) -->
-    <dl class="qg-kpis" id="kpis" aria-label="검토 지표"></dl>
+    <!-- 검토 지표 (로드맵 P2·P3) -->
+    <div class="v-subgrid" id="kpis">
+      <div style="--dot: var(--warn-icon)"><div class="v-lab">검토 대기</div><div class="v-big"><span class="v-cnt" data-count="DRAFT">–</span>건 <small id="oldest"></small></div><div class="v-foot"><a href="#" id="oldest-link" hidden>가장 오래된 것부터 검토</a></div></div>
+      <div style="--dot: var(--primary)" data-kpi="asis"><div class="v-lab">그대로 승인</div><div class="v-big"><span class="v-cnt">–</span></div><div class="v-bar"><i></i></div><div class="v-foot"><span data-r="sub"></span><span data-r="side"></span></div></div>
+      <div style="--dot: var(--brand-700)" data-kpi="full"><div class="v-lab">필수 항목 충족</div><div class="v-big"><span class="v-cnt">–</span></div><div class="v-bar"><i></i></div><div class="v-foot"><span data-r="sub"></span><span data-r="side"></span></div></div>
+    </div>
+    <div class="v-aisum" id="sum-list" aria-busy="false">
+      <div class="v-aisum-h">
+        <span class="v-tile-ai" aria-hidden="true"><svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2.2l1.6 4.6a2 2 0 0 0 1.2 1.2L17.5 9.6l-4.7 1.6a2 2 0 0 0-1.2 1.2L10 17l-1.6-4.6a2 2 0 0 0-1.2-1.2L2.5 9.6l4.7-1.6a2 2 0 0 0 1.2-1.2z"/><path d="M16 2.5l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5z" opacity=".7"/></svg></span>
+        <b>요약</b><span class="v-ai">지표로 자동 작성 · 참고용</span>
+        <span class="v-sp"></span><span class="v-aisum-state" data-r="state"></span>
+      </div>
+      <div class="v-aisum-skel" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="v-aisum-text" data-r="text" aria-live="polite"></p>
+    </div>
   </div>
 
-  <div class="qg-panel">
-    <div class="qg-toolbar">
-      <input id="search" class="form-control form-control-sm qg-search" type="search" placeholder="번호·설비·제목 검색" aria-label="목록 검색">
-      <label class="qg-filter">원인
-        <select id="f-cause" class="form-select form-select-sm"><option value="">전체</option></select></label>
-      <label class="qg-filter">설비
-        <select id="f-equip" class="form-select form-select-sm"><option value="">전체</option></select></label>
-      <span class="qg-toolbar-spacer"></span>
-      <span class="qg-count" id="list-count" aria-live="polite"></span>
+  <div class="v-card">
+    <div class="v-chead">
+      <span class="v-cicon" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h12M4 10h12M4 15h8"/></svg></span>
+      <div><h2>부적합 목록</h2><p>행을 누르면 상세로 이동합니다</p></div>
     </div>
-    <div class="table-responsive qg-table-wrap">
-      <table class="table table-vcenter card-table table-hover qg-table qg-table-list">
-        <caption class="visually-hidden" id="list-title">검토 대기</caption>
-        <thead><tr>
-          <th scope="col" data-sort="status">상태</th>
-          <th scope="col" data-sort="ncr_no">번호</th>
-          <th scope="col" data-sort="equipment_id">설비</th>
-          <th scope="col" data-sort="title">제목</th>
-          <th scope="col" data-sort="cause_code">원인</th>
-          <th scope="col" data-sort="confidence" class="text-end">확신도</th>
-          <th scope="col" class="qg-col-opt">작성</th>
-          <th scope="col" data-sort="created_at" class="qg-col-opt">작성 시각</th>
-        </tr></thead>
-        <tbody id="rows"><tr><td colspan="8" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
-      </table>
+    <div class="v-filters">
+      <div class="v-f"><label for="f-status">상태</label><select class="v-input" id="f-status">
+        <option value="DRAFT" data-label="검토 대기">검토 대기</option><option value="APPROVED" data-label="승인">승인</option>
+        <option value="CLOSED" data-label="조치 완료">조치 완료</option><option value="REJECTED" data-label="반려">반려</option>
+        <option value="" data-label="전체">전체</option></select></div>
+      <div class="v-f"><label for="f-cause">원인</label><select class="v-input" id="f-cause"><option value="">원인 전체</option></select></div>
+      <div class="v-f"><label for="f-equip">설비</label><select class="v-input" id="f-equip"><option value="">설비 전체</option></select></div>
+      <div class="v-f"><label for="f-key">검색 대상</label><select class="v-input" id="f-key">
+        <option value="">전체</option><option value="ncr_no">번호</option><option value="equipment_id">설비</option><option value="title">제목</option></select></div>
     </div>
+    <form class="v-searchrow" role="search" id="search-form">
+      <input class="v-input" id="search" type="search" placeholder="번호·설비·제목으로 검색" aria-label="목록 검색">
+      <button class="v-btn v-pri" type="submit"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2L17 17"/></svg>검색</button>
+    </form>
+    <div class="v-listmeta">
+      <span class="v-selcount" id="selcount"></span><span class="v-sp"></span>
+      <span class="v-count" id="list-count" aria-live="polite"></span>
+      <label class="v-psize"><span class="visually-hidden">페이지당 건수</span><select class="v-input" id="page-size">
+        <option value="10">10건씩</option><option value="30">30건씩</option><option value="50">50건씩</option></select></label>
+      <button class="v-sbtn" type="button" data-export="xlsx" data-scope="list"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9M6 8.5l4 4 4-4M4 16h12"/></svg><span>엑셀</span></button>
+      <button class="v-sbtn" type="button" data-export="csv" data-scope="list"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9M6 8.5l4 4 4-4M4 16h12"/></svg><span>CSV</span></button>
+    </div>
+    <div class="v-tbl"><div class="v-tbl-scroll table-responsive"><table class="qg-table-list">
+      <caption class="visually-hidden" id="list-title">부적합 목록</caption>
+      <thead><tr>
+        <th class="v-ck" scope="col"><input type="checkbox" id="ck-all" aria-label="이 페이지 모두 선택"></th>
+        <th class="v-no" scope="col">순번</th>
+        <th scope="col" data-sort="title">제목</th>
+        <th scope="col" data-sort="ncr_no">번호</th>
+        <th scope="col" data-sort="status">상태</th>
+        <th scope="col" data-sort="equipment_id">설비</th>
+        <th scope="col" data-sort="cause_code">원인</th>
+        <th scope="col" data-sort="confidence" class="v-r">확신도</th>
+        <th scope="col" data-sort="created_at" class="v-r">작성 시각</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="qg-empty-cell">불러오는 중…</td></tr></tbody>
+    </table></div></div>
+    <nav class="v-pager" aria-label="페이지" id="pager"></nav>
   </div>
 </section>
 
-<!-- ══ 상세 (Object Page): 머리(key facts·처리 단계) + 탭 + 하단 고정 동작 바 ══ -->
+<!-- ══ 상세: 두 번째 띠(제목·내려받기·흐름도·요약) + 탭 카드 | 기본 정보 + 동작 바 ══ -->
 <section id="view-detail" class="qg-view" aria-labelledby="d-title" hidden>
-  <div class="qg-objhead">
-    <nav class="qg-breadcrumb" aria-label="위치">
-      <a href="#" id="back-to-list">부적합 검토</a><span aria-hidden="true">/</span><span id="d-no" class="qg-mono" aria-current="page"></span>
-      <span class="qg-toolbar-spacer"></span>
-      <button type="button" class="btn btn-sm" id="btn-prev" title="목록의 이전 건">이전</button>
-      <button type="button" class="btn btn-sm" id="btn-next" title="목록의 다음 건">다음</button>
-    </nav>
-    <div class="qg-objtitle">
-      <h1 class="qg-h1" id="d-title"></h1>
-      <span id="d-status"></span>
+  <div class="v-subhero">
+    <div class="v-hero-body">
+      <div>
+        <nav class="v-crumb" aria-label="위치"><a href="#" id="back-to-list">부적합 검토</a> / <span id="d-no" class="qg-mono" aria-current="page"></span></nav>
+        <h2 class="v-dtitle" id="d-title" tabindex="-1"><span id="d-title-text"></span> <span id="d-status"></span></h2>
+      </div>
+      <span class="v-sp"></span>
+      <div class="v-hacts">
+        <button class="v-hbtn" type="button" data-export="xlsx" data-scope="detail"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9M6 8.5l4 4 4-4M4 16h12"/></svg>엑셀</button>
+        <button class="v-hbtn v-ghost" type="button" data-export="csv" data-scope="detail"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9M6 8.5l4 4 4-4M4 16h12"/></svg>CSV</button>
+      </div>
     </div>
-    <dl class="qg-facts" id="d-meta"></dl>
-    <ol class="qg-progress" id="d-progress" aria-label="처리 단계"></ol>
-    <p class="qg-note" id="d-kb" hidden>지식저장소에 반영됨 — 승인 시각 이후의 분석에서 유사 사례로 검색됩니다.</p>
-  </div>
-
-  <div class="qg-tabs" role="tablist" aria-label="부적합 상세">
-    <button type="button" role="tab" id="tab-content" aria-controls="p-content" aria-selected="true">부적합 내용</button>
-    <button type="button" role="tab" id="tab-evidence" aria-controls="p-evidence" aria-selected="false" tabindex="-1">근거 <span class="qg-tab-count" id="e-count"></span></button>
-    <button type="button" role="tab" id="tab-int" aria-controls="p-int" aria-selected="false" tabindex="-1">MES/ERP 연계 <span id="int-flag"></span></button>
-    <button type="button" role="tab" id="tab-hist" aria-controls="p-hist" aria-selected="false" tabindex="-1">이력</button>
-  </div>
-
-  <!-- ① 부적합 내용: 편집 폼 + 조치 지정 -->
-  <div class="qg-tabpanel" role="tabpanel" id="p-content" aria-labelledby="tab-content">
-    <form id="edit-form" class="qg-section" autocomplete="off">
-      <div class="qg-section-head"><h2 class="qg-h2">부적합 내용</h2><span class="qg-section-meta" id="edit-state"></span></div>
-      <div class="qg-form-grid">
-        <label class="form-label qg-span-4">원인 코드
-          <select name="causeCode" class="form-select">
-            <option value="HEATER_DEGRADATION">히터 열화 (HEATER_DEGRADATION)</option><option value="COOLING_ISSUE">냉각 이상 (COOLING_ISSUE)</option>
-            <option value="CHECK_RING_WEAR">체크 링 마모 (CHECK_RING_WEAR)</option><option value="SENSOR_FAULT">센서 이상 (SENSOR_FAULT)</option>
-            <option value="MATERIAL">원재료 (MATERIAL)</option><option value="NOISE">단발성 노이즈 (NOISE)</option><option value="UNKNOWN">원인 미상 (UNKNOWN)</option>
-          </select>
-        </label>
-        <label class="form-label qg-span-3">불량 유형 <input name="defectType" class="form-control" maxlength="20"></label>
-        <label class="form-label qg-span-5">관련 센서 <input name="relatedSensors" class="form-control qg-mono" maxlength="200" placeholder="barrelTemp,injectionPressure"></label>
-        <label class="form-label qg-span-12">제목 <input name="title" class="form-control" maxlength="200"></label>
-        <label class="form-label qg-span-6">현상 <textarea name="phenomenon" class="form-control" rows="4"></textarea></label>
-        <label class="form-label qg-span-6">추정 원인 <span class="qg-ai-mark">AI 초안</span> <textarea name="suspectedCause" class="form-control" rows="4"></textarea></label>
-        <label class="form-label qg-span-12 qg-key">확정 원인<span class="qg-req"> * 필수</span>
-          <span class="form-hint">승인하려면 필요합니다. 다음 분석의 유사 사례로 쓰입니다.</span>
-          <textarea name="rootCause" class="form-control" rows="3"></textarea></label>
-        <label class="form-label qg-span-6">근거 <textarea name="evidence" class="form-control qg-mono" rows="5"></textarea></label>
-        <label class="form-label qg-span-6">권고 조치 <textarea name="recommendedAction" class="form-control" rows="5"></textarea></label>
+    <ol class="v-flow" id="d-progress" aria-label="처리 단계"></ol>
+    <div class="v-aisum v-in-band" id="sum-detail" aria-busy="false">
+      <div class="v-aisum-h">
+        <span class="v-tile-ai" aria-hidden="true"><svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2.2l1.6 4.6a2 2 0 0 0 1.2 1.2L17.5 9.6l-4.7 1.6a2 2 0 0 0-1.2 1.2L10 17l-1.6-4.6a2 2 0 0 0-1.2-1.2L2.5 9.6l4.7-1.6a2 2 0 0 0 1.2-1.2z"/><path d="M16 2.5l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5z" opacity=".7"/></svg></span>
+        <b>요약</b><span class="v-ai">기록으로 자동 작성 · 참고용</span>
+        <span class="v-sp"></span><span class="v-aisum-state" data-r="state"></span>
       </div>
-    </form>
+      <div class="v-aisum-skel" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="v-aisum-text" data-r="text" aria-live="polite"></p>
+    </div>
+  </div>
 
-    <!-- 조치 지정 (로드맵 P2): 담당자·기한은 사람이 정한다. 비어 있어도 승인은 되지만 필수 항목에서 "빠짐"으로 보인다 -->
-    <form id="assign-form" class="qg-section" autocomplete="off">
-      <div class="qg-section-head"><h2 class="qg-h2">조치 지정</h2><span class="qg-section-meta" id="assign-state"></span></div>
-      <div class="qg-form-grid">
-        <label class="form-label qg-span-4">담당자 <input name="actionOwner" class="form-control" maxlength="50" placeholder="예: 성형1팀 김반장"></label>
-        <label class="form-label qg-span-3">조치 기한 <input name="actionDueDate" type="date" class="form-control"></label>
-        <label class="form-label qg-span-5">영향 로트 <span class="qg-auto-mark">자동</span>
-          <input name="affectedLots" class="form-control qg-mono" maxlength="400" placeholder="L261123-IMM-01-03,L261123-IMM-01-04"></label>
+  <div class="v-grid">
+    <div class="v-card v-tabcard">
+      <div class="v-dtabs" role="tablist" aria-label="부적합 상세">
+        <button type="button" role="tab" id="tab-review" aria-controls="p-review" aria-selected="true">검토·확정 <em class="v-must" id="b-review" hidden></em></button>
+        <button type="button" role="tab" id="tab-assign" aria-controls="p-assign" aria-selected="false" tabindex="-1">분류·조치 지정 <em class="v-miss" id="b-assign" hidden></em></button>
+        <button type="button" role="tab" id="tab-evidence" aria-controls="p-evidence" aria-selected="false" tabindex="-1">근거 <b id="e-count"></b></button>
+        <button type="button" role="tab" id="tab-hist" aria-controls="p-hist" aria-selected="false" tabindex="-1">이력 <b id="h-count"></b> <span id="int-flag"></span></button>
       </div>
-      <div class="qg-section-foot">
-        <span class="qg-help">영향 로트는 첫 경보부터 분석 시점까지 생산된 로트로 자동으로 채워집니다. 고칠 수 있습니다.</span>
-        <span class="qg-toolbar-spacer"></span>
-        <button type="submit" id="btn-assign" class="btn">조치 지정 저장</button>
+
+      <!-- ① 검토·확정: AI 제안(줄마다 수정) → 확정 원인 -->
+      <div class="v-tp" role="tabpanel" id="p-review" aria-labelledby="tab-review">
+        <section class="v-sec">
+          <div class="v-sech"><h3>AI 제안 <span class="v-ai" id="ai-state"></span></h3><p id="ai-sub"></p></div>
+          <div class="v-ailist" id="ai-rows"></div>
+        </section>
+        <section class="v-sec">
+          <div class="v-sech"><h3 id="root-h">확정 원인 <span class="v-req">필수</span></h3><p>사람이 정합니다 · 다음 분석의 유사 사례로 쓰입니다</p></div>
+          <textarea class="v-input" rows="3" id="root-cause" data-field="rootCause" aria-labelledby="root-h" placeholder="현장에서 확인한 원인을 적어 주세요. 예: 2번 존 히터 밴드 저항이 정상 대비 35% 높음"></textarea>
+        </section>
       </div>
-    </form>
+
+      <!-- ② 분류·조치 지정: 라벨|값 표. 고를 수 있는 것만 입력칸, 나머지는 글자 + [수정] -->
+      <div class="v-tp" role="tabpanel" id="p-assign" aria-labelledby="tab-assign" hidden>
+        <section class="v-sec">
+          <div class="v-sech"><h3>분류</h3><p>원인 코드는 AI 제안에서 미리 채워졌습니다 · 고치면 수정으로 기록됩니다</p></div>
+          <div class="v-fgrid">
+            <div class="v-fr"><label class="v-fl" for="f-causeCode">원인 코드</label><div class="v-fv"><select class="v-input" id="f-causeCode" data-field="causeCode">
+              <option value="HEATER_DEGRADATION">히터 열화</option><option value="COOLING_ISSUE">냉각 이상</option>
+              <option value="CHECK_RING_WEAR">체크 링 마모</option><option value="SENSOR_FAULT">센서 이상</option>
+              <option value="MATERIAL">원재료</option><option value="NOISE">단발성 노이즈</option><option value="UNKNOWN">원인 미상</option></select></div></div>
+            <div class="v-fr" data-edit="defectType" data-label="불량 유형"></div>
+            <div class="v-fr" data-edit="relatedSensors" data-label="관련 센서" data-mono="1"></div>
+            <div class="v-fr" data-edit="title" data-label="제목"></div>
+          </div>
+        </section>
+        <!-- 조치 지정 (로드맵 P2): 담당자·기한은 사람이 정한다. 비어 있어도 승인은 되지만 "빠짐"으로 보인다 -->
+        <form class="v-sec" id="assign-form" autocomplete="off">
+          <div class="v-sech"><h3>조치 지정</h3><p>승인을 막지 않습니다 · 영향 로트는 자동으로 채워집니다</p></div>
+          <div class="v-fgrid">
+            <div class="v-fr"><label class="v-fl" for="a-owner">담당자 <span class="v-miss-dot" data-miss="담당자" hidden>빠짐</span></label><div class="v-fv"><div class="v-ibox">
+              <input class="v-input" id="a-owner" name="actionOwner" maxlength="50" placeholder="예: 성형1팀 김반장" list="owner-list">
+              <button class="v-ib" type="button" id="owner-find" title="담당자 찾기"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5"/><path d="M13 13l3.5 3.5"/></svg><span class="visually-hidden">이전에 지정한 사람에서 고르기</span></button>
+              <datalist id="owner-list"></datalist></div></div></div>
+            <div class="v-fr"><label class="v-fl" for="a-due">조치 기한 <span class="v-miss-dot" data-miss="조치 기한" hidden>빠짐</span></label><div class="v-fv"><div class="v-ibox">
+              <input class="v-input" id="a-due" name="actionDueDate" type="date">
+              <button class="v-ib" type="button" id="due-pick" title="달력 열기"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="1.5"/><path d="M3.5 8.5h13M7 3v3M13 3v3"/></svg><span class="visually-hidden">달력에서 날짜 고르기</span></button></div></div></div>
+            <div class="v-fr" data-edit="affectedLots" data-label="영향 로트" data-mono="1" data-assign="1"></div>
+          </div>
+          <div class="v-secfoot"><button class="v-sbtn v-pri" type="submit" id="btn-assign"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h9.5L16 6.5V16H4z"/><path d="M7 4v4h6V4M7 16v-5h6v5"/></svg><span>조치 지정 저장</span></button></div>
+        </form>
+      </div>
+
+      <!-- ③ 근거: 연결된 경보 + 에이전트 분석 기록 -->
+      <div class="v-tp" role="tabpanel" id="p-evidence" aria-labelledby="tab-evidence" hidden>
+        <section class="v-sec">
+          <div class="v-sech"><h3>연결된 경보 <b class="v-muted" id="a-count"></b></h3><p>에이전트가 이 부적합을 만들 때 쓴 경보입니다</p></div>
+          <div class="v-route" id="anomalies"></div>
+        </section>
+        <section class="v-sec">
+          <div class="v-sech"><h3>에이전트 분석 기록 <b class="v-muted" id="g-count"></b></h3><p>분석·검증 결과와 단계별 시간</p></div>
+          <div id="analyses"></div>
+        </section>
+      </div>
+
+      <!-- ④ 이력: MES/ERP 연계 + 검토 이력 -->
+      <div class="v-tp" role="tabpanel" id="p-hist" aria-labelledby="tab-hist" hidden>
+        <section class="v-sec">
+          <div class="v-sech"><h3>MES/ERP 연계</h3><p>승인 → 전송 → 시스템별 응답</p></div>
+          <ol class="qg-steps" id="flow" aria-label="연계 진행 단계"></ol>
+          <ul id="integration" class="qg-list-plain"></ul>
+          <div class="v-secfoot"><button type="button" id="btn-retry" class="v-sbtn" hidden><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a6 6 0 1 0 2-4.5M4 3v3h3"/></svg><span>실패한 연계 다시 보내기</span></button></div>
+        </section>
+        <section class="v-sec">
+          <div class="v-sech"><h3>검토 이력</h3><p>누가 언제 무엇을 바꿨는지 · 최신순</p></div>
+          <ol id="history" class="v-hist"></ol>
+        </section>
+      </div>
+    </div>
+
+    <aside class="v-side" aria-label="기본 정보">
+      <div class="v-card">
+        <div class="v-chead">
+          <span class="v-cicon" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="4" y="3" width="12" height="14" rx="1.5"/><path d="M7 7h6M7 10h6M7 13h4"/></svg></span>
+          <div><h2>기본 정보</h2><p>탭을 바꿔도 늘 보입니다</p></div>
+        </div>
+        <dl class="v-info" id="d-meta"></dl>
+        <p class="v-note" id="d-kb" hidden>지식저장소에 반영됨 — 승인 시각 이후의 분석에서 유사 사례로 검색됩니다.</p>
+      </div>
+    </aside>
   </div>
 
-  <!-- ② 근거: 연결된 경보 + 에이전트 분석 기록 -->
-  <div class="qg-tabpanel" role="tabpanel" id="p-evidence" aria-labelledby="tab-evidence" hidden>
-    <section class="qg-section">
-      <div class="qg-section-head"><h2 class="qg-h2">연결된 경보</h2><span class="qg-section-meta" id="a-count"></span></div>
-      <div class="table-responsive"><table class="table table-sm card-table qg-table">
-        <caption class="visually-hidden">연결된 경보</caption>
-        <thead><tr><th scope="col" class="text-end">shot</th><th scope="col">규칙</th><th scope="col">센서</th><th scope="col">내용</th></tr></thead>
-        <tbody id="anomalies"></tbody></table></div>
-    </section>
-    <section class="qg-section">
-      <div class="qg-section-head"><h2 class="qg-h2">에이전트 분석 기록</h2><span class="qg-section-meta" id="g-count"></span></div>
-      <div id="analyses"></div>
-    </section>
-  </div>
-
-  <!-- ③ MES/ERP 연계: 승인 → 전송 → 시스템별 응답 -->
-  <div class="qg-tabpanel" role="tabpanel" id="p-int" aria-labelledby="tab-int" hidden>
-    <section class="qg-section">
-      <div class="qg-section-head"><h2 class="qg-h2">MES/ERP 연계</h2>
-        <span class="qg-toolbar-spacer"></span>
-        <button type="button" id="btn-retry" class="btn btn-sm btn-outline-danger" hidden>실패한 연계 다시 보내기</button></div>
-      <ol class="qg-steps" id="flow" aria-label="연계 진행 단계"></ol>
-      <ul id="integration" class="qg-list-plain"></ul>
-    </section>
-  </div>
-
-  <!-- ④ 이력 -->
-  <div class="qg-tabpanel" role="tabpanel" id="p-hist" aria-labelledby="tab-hist" hidden>
-    <section class="qg-section">
-      <div class="qg-section-head"><h2 class="qg-h2">검토 이력</h2></div>
-      <ol id="history" class="qg-history"></ol>
-    </section>
-  </div>
-
-  <!-- 하단 고정 동작 바: 왼쪽 결과 메시지, 오른쪽 동작 (주 동작은 하나) -->
-  <div class="qg-actionbar" role="region" aria-label="동작">
+  <!-- 하단 동작 바: 왼쪽 결과 메시지, 오른쪽 동작 (주 동작은 하나) -->
+  <div class="v-actionbar" role="region" aria-label="동작">
     <p id="msg" class="msg" role="status"></p>
-    <span class="qg-toolbar-spacer"></span>
-    <div class="qg-actionbar-group" id="draft-actions">
-      <button type="button" id="btn-reject" class="btn btn-outline-danger">반려…</button>
-      <button type="submit" id="btn-save" class="btn" form="edit-form">수정 저장</button>
-      <button type="button" id="btn-approve" class="btn btn-primary">승인</button>
+    <span class="v-sp"></span>
+    <div class="v-actionbar-group" id="draft-actions">
+      <button type="button" id="btn-reject" class="v-btn">반려…</button>
+      <button type="button" id="btn-save" class="v-btn v-opt">저장</button>
+      <button type="button" id="btn-approve" class="v-btn v-pri">승인</button>
     </div>
-    <div class="qg-actionbar-group" id="close-box" hidden>
+    <div class="v-actionbar-group" id="close-box" hidden>
       <label class="visually-hidden" for="action-taken">실제로 한 조치</label>
-      <input id="action-taken" class="form-control" maxlength="1000" placeholder="실제로 한 조치 (예: 2번 존 히터 밴드 교체 후 불량률 정상화)">
-      <button type="button" id="btn-close" class="btn btn-primary">조치 완료</button>
+      <input id="action-taken" class="v-input" maxlength="1000" placeholder="실제로 한 조치 (예: 2번 존 히터 밴드 교체 후 불량률 정상화)">
+      <button type="button" id="btn-close" class="v-btn v-pri">조치 완료</button>
     </div>
   </div>
 </section>
 
 </main>
 </div>
+<div class="v-toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="qg-common.js?v=5"></script>
-<script src="qms.js?v=5"></script>
+<script src="qg-common.js?v=6"></script>
+<script src="qg-export.js?v=1"></script>
+<script src="qms.js?v=6"></script>
 </body>
 </html>
