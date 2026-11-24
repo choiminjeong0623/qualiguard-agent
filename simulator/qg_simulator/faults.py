@@ -36,6 +36,8 @@ FAULT_CATALOG = {
     "material_moisture": "원료 수분 과다(건조 불량) — 가수분해로 점도가 떨어져 사출 압력이 내려가고 흔들린다. 실린더 온도는 정상. 버 증가.",
     "nozzle_clog": "노즐 막힘 — 흐름이 막혀 사출 압력·모터 전류가 오르고 쿠션량이 늘어난다(히터 열화와 닮았지만 실린더 온도는 정상). 미성형 증가.",
     "mold_wear": "금형 파팅면 마모 — 센서 값은 거의 그대로인데 틈으로 수지가 새어 버가 늘어난다. 보압이 조금 흔들린다.",
+    # ── E4 평가 묶음(scenarios_eval.yaml)에서만 쓰는 센서 고장 ──
+    "sensor_drift": "실린더 온도 센서 드리프트 — 온도 측정값만 서서히 내려간다(히터 열화와 닮음). 실제 온도·압력·전류는 정상이라 품질 영향 없음.",
 }
 
 # ML 학습·기본 평가에 쓰지 않는 새 고장
@@ -66,6 +68,10 @@ def effects_for(fault: Fault, shot_no: int, rng: random.Random) -> tuple[dict[st
         if rng.random() < 0.06 * k:
             add["injectionPressure"] = rng.choice([1, -1]) * rng.uniform(150, 350)
             add["_sensorOnlyKeys"] = ["injectionPressure"]  # type: ignore[assignment]
+    elif fault.name == "sensor_drift":
+        drift = min(12.0 * k, 0.03 * k * t)     # 측정값만 shot당 0.03℃씩, 최대 12℃ 내려간다
+        add["barrelTemp"] = -drift
+        add["_sensorOnlyKeys"] = ["barrelTemp"]  # type: ignore[assignment]  # 품질 판정은 실제 온도로
     elif fault.name == "material_moisture":
         fall = min(70.0 * k, 0.2 * k * t)       # 점도 저하 → 사출 압력 하락
         add["injectionPressure"] = -fall

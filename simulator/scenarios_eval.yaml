@@ -1,0 +1,62 @@
+# 에이전트 평가 묶음 (로드맵 E4, 2026-11-24 민정 결정)
+# 기본 설정(scenarios.yaml)은 그대로 두고, 실행마다 seed·세기·고장 목록만 바꾼다.
+#   uv run qg-simulator --suite scenarios_eval.yaml --run dev-s7-weak --interval 0.05
+# 정답 메타(ground_truth.meta.json)의 evalRun 에 id·split 이 남고, evaluate_agent.py 가 그 고장 목록으로 채점한다.
+#
+# 왜 이렇게 나눴나 (면접용 한 줄):
+#   seed 42 로 프롬프트·규칙을 고쳐 왔기 때문에, 고치는 동안 한 번도 보지 않은 seed(777)와
+#   처음 보는 고장(모호 사례 3)을 홀드아웃으로 떼어 마지막에 한 번만 재서 "시험 문제에 맞춘 점수"를 피한다.
+#
+# 구성: seed 3 × 세기 2 × 고장 4 = 24 + 센서 드리프트 1 + 모호 사례 3 = 28 사례 (실행 7번)
+#   개발셋(dev)  : seed 7·2024 × 세기 2 × 고장 4 = 16 + 센서 드리프트 1 = 17 사례 → 오답 분류(E6)·개선에 쓴다
+#   홀드아웃     : seed 777 × 세기 2 × 고장 4 = 8 + 모호 사례 3 = 11 사례 → 개발이 끝난 뒤 한 번만, 결과로 고치지 않는다
+#   seed 42(지금까지 평가)·1~5(탐지 평가·ML 시험)·101~130(ML 학습)은 쓰지 않는다.
+name: e4-2026-11-24
+
+# 세기 = 고장이 진행되는 속도·최대 크기 배율 (faults.py severity)
+#   weak   0.6 : 관리 한계 경계 근처에서 천천히 변함 (무작위 시나리오에서 이미 쓴 범위의 아래 끝)
+#   strong 1.0 : 기본 시나리오와 같은 확실한 이상
+severity_levels:
+  weak: 0.6
+  strong: 1.0
+
+# 고장 4종 (scenarios.yaml 과 같은 설비·시점)
+default_faults:
+  - {name: heater_degradation,    equipment: IMM-01, start_shot: 300,  duration: 500}
+  - {name: pressure_sensor_spike, equipment: IMM-02, start_shot: 400,  duration: 200}
+  - {name: cooling_blockage,      equipment: IMM-02, start_shot: 900,  duration: 500}
+  - {name: check_ring_wear,       equipment: IMM-01, start_shot: 1200, duration: 600}
+
+runs:
+  # ── 개발셋 ──
+  - {id: dev-s7-weak,      split: dev, seed: 7,    severity: weak}
+  - {id: dev-s7-strong,    split: dev, seed: 7,    severity: strong}
+  - {id: dev-s2024-weak,   split: dev, seed: 2024, severity: weak}
+  - id: dev-s2024-strong
+    split: dev
+    seed: 2024
+    severity: strong
+    faults:   # 고장 4종 + IMM-02 의 빈 구간(냉각 막힘 뒤)에 센서 드리프트
+      - {name: heater_degradation,    equipment: IMM-01, start_shot: 300,  duration: 500}
+      - {name: pressure_sensor_spike, equipment: IMM-02, start_shot: 400,  duration: 200}
+      - {name: cooling_blockage,      equipment: IMM-02, start_shot: 900,  duration: 500}
+      - {name: check_ring_wear,       equipment: IMM-01, start_shot: 1200, duration: 600}
+      - {name: sensor_drift,          equipment: IMM-02, start_shot: 1550, duration: 400}
+
+  # ── 홀드아웃 (개발 중에는 돌리지 않는다) ──
+  - {id: holdout-s777-weak,   split: holdout, seed: 777, severity: weak}
+  - {id: holdout-s777-strong, split: holdout, seed: 777, severity: strong}
+  - id: holdout-ambiguous
+    split: holdout
+    seed: 777
+    severity: strong
+    faults:   # 에이전트가 원인 코드로 배운 적 없는 고장 3종 (ML 시험의 새 고장)
+      - {name: nozzle_clog,       equipment: IMM-01, start_shot: 300,  duration: 500}
+      - {name: material_moisture, equipment: IMM-02, start_shot: 400,  duration: 500}
+      - {name: mold_wear,         equipment: IMM-01, start_shot: 1100, duration: 600}
+    # 무엇이 모호한가 (돌리기 전에 정한 채점 기준). 정답 = 틀린 원인으로 단정하지 않기
+    #   (관찰·판단 보류, 또는 아래 허용 원인 코드의 초안). 다른 원인 코드로 초안을 쓰거나 센서 탓으로 넘기면 오답.
+    ambiguous:
+      nozzle_clog: "사출 압력·모터 전류가 올라 히터 열화와 닮았지만 실린더 온도는 그대로 → 온도를 보고 히터 열화로 단정하지 않는지"
+      material_moisture: "사출 압력이 내려가고 흔들려 센서 이상처럼 보이지만 버(FLASH) 불량이 실제로 는다 → 센서 탓으로 넘기지 않는지 (원료 MATERIAL 초안은 허용)"
+      mold_wear: "센서는 거의 그대로인데 버 불량만 는다 → 근거가 약하니 단정하지 않고 보류·관찰하는지"
