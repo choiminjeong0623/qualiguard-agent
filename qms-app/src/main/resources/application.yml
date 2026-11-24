@@ -129,6 +129,12 @@ qg:
       ollama-url: http://localhost:11434
       model: qwen2.5:1.5b             # 로컬 소형 모델 (M1 8GB: 4bit 1.5B, docs/03)
       timeout-seconds: 120            # 넘으면 클라우드로 넘기지 않고 근거 표 초안으로 (F-13)
+  notify:                             # 담당자 모바일 경보 알림 (새 부적합 초안·판단 보류, AlertNotifier)
+    mode: ${QG_NOTIFY_MODE:off}       # off(기본) / log(로그만) / ntfy(ntfy 앱 푸시, 공장 안 서버도 가능) / slack(Incoming Webhook)
+    url: ${QG_NOTIFY_URL:}            # ntfy: 서버 주소(예: https://ntfy.sh) / slack: 웹훅 주소
+    topic: ${QG_NOTIFY_TOPIC:}        # ntfy 토픽 (휴대폰 ntfy 앱에서 같은 토픽을 구독)
+    token: ${QG_NOTIFY_TOKEN:}        # ntfy 접근 토큰 (서버에 인증을 걸었을 때)
+    qms-base-url: ${QG_QMS_BASE_URL:http://localhost:8080}   # 알림을 누르면 열 QMS 주소
   quality:
     mewma:
       # 다변량 이상 탐지(MEWMA). off / shadow (로그·지표 qg.spc.mewma_shadow_alarms 만, 경보는 지금 SPC 규칙 그대로)
