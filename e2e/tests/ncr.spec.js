@@ -192,3 +192,30 @@ test('상세: 이 부적합 한 건을 엑셀로 내려받는다', async ({ page
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '엑셀' }).click()]);
   expect(dl.suggestedFilename()).toMatch(/^AI-2026-0110-\d{8}-\d{4}\.xlsx$/);
 });
+
+test('조치 지정을 저장해도 아직 저장하지 않은 확정 원인은 남는다', async ({ page }) => {
+  const s = await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await page.locator('#root-cause').fill('2번 존 히터 밴드 저항 35% 높음');
+  await page.getByRole('tab', { name: /분류·조치 지정/ }).click();
+  await page.locator('#a-owner').fill('성형1팀 박반장');
+  await page.getByRole('button', { name: '조치 지정 저장' }).click();
+  await expect(page.getByText(/저장하지 않은 다른 수정 1건은 그대로 남아 있습니다/)).toBeVisible();
+  await expect(page.locator('#root-cause')).toHaveValue('2번 존 히터 밴드 저항 35% 높음');
+  await page.locator('#btn-approve').click();
+  await page.locator('dialog[open]').getByRole('button', { name: '승인' }).click();
+  await expect(page.getByText(/승인했습니다/)).toBeVisible();
+  expect(calls(s, 'PUT', '/AI-2026-0110')[0].body.fields.rootCause).toBe('2번 존 히터 밴드 저항 35% 높음');
+});
+
+test('조치 기한 칸에는 달력 버튼이 하나만 보인다', async ({ page }) => {
+  await open(page, '/qms/index.html');
+  await page.getByRole('row', { name: /AI-2026-0110/ }).click();
+  await page.getByRole('tab', { name: /분류·조치 지정/ }).click();
+  await expect(page.locator('#due-pick')).toBeVisible();
+  // 브라우저 기본 달력 아이콘을 숨기는 규칙이 실제로 실렸는지 확인 (가상 요소는 계산 스타일로 읽을 수 없다)
+  const hidden = await page.evaluate(() => [...document.styleSheets].some((sh) => {
+    try { return [...sh.cssRules].some((r) => /calendar-picker-indicator/.test(r.selectorText || '') && r.style.display === 'none'); } catch (e) { return false; }
+  }));
+  expect(hidden).toBe(true);
+});
