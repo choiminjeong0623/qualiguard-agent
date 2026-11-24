@@ -160,6 +160,8 @@ public class IncidentAnalyzer {
     /** 분석 1회 안의 도구 호출 수 상한 (가드레일 G-03). 0 이하이면 상한 없음. */
     private volatile int maxToolCalls = DEFAULT_MAX_TOOL_CALLS;
     static final int DEFAULT_MAX_TOOL_CALLS = 15;
+    /** 분석 프롬프트 (qg.agent.prompt, 기본 analysis-v2). */
+    private volatile AgentPrompts.Set prompts = AgentPrompts.DEFAULT;
 
     /** 시험용: LLM 호출 보호는 기본값(90초, 재시도 1회). */
     private AlertNotifier notifier;
@@ -210,6 +212,17 @@ public class IncidentAnalyzer {
     @Autowired(required = false)
     public void setMaxToolCalls(@Value("${qg.agent.max-tool-calls:" + DEFAULT_MAX_TOOL_CALLS + "}") int max) {
         this.maxToolCalls = max;
+    }
+
+    /** 분석 프롬프트 파일 (qg.agent.prompt, 예: analysis-v1 로 이전 판과 비교). 없는 파일이면 시작할 때 실패한다. */
+    @Autowired(required = false)
+    public void setPrompt(@Value("${qg.agent.prompt:" + AgentPrompts.DEFAULT_FILE + "}") String file) {
+        this.prompts = file == null || file.isBlank() ? AgentPrompts.DEFAULT : AgentPrompts.of(file.strip());
+        log.info("분석 프롬프트: {}", prompts.version());
+    }
+
+    public String promptVersion() {
+        return prompts.version();
     }
 
     /** 가장 오래된 미처리 경보 (같은 경보로 2번 실패했으면 건너뛴다). */
@@ -719,7 +732,7 @@ public class IncidentAnalyzer {
             if (sopTools != null) {
                 sopTools.reset();   // SOP "분석당 1번"도 처음부터
             }
-            var spec = chatClient().prompt().system(AgentPrompts.SYSTEM).user(userPrompt);
+            var spec = chatClient().prompt().system(prompts.system()).user(userPrompt);
             return (toolObjects == null ? spec : spec.tools(toolObjects)).call().chatResponse();
         }, trace);
         trace.add(Tokens.of(response).traceLine());
@@ -729,7 +742,7 @@ public class IncidentAnalyzer {
             // 형식만 다시 요청 (도구 없이 1회 — 조사를 반복하지 않으므로 비용이 적다)
             trace.add("repairJsonFormat()");
             ChatResponse repairResponse = llm.call("repair", () -> chatClient().prompt()
-                    .system(AgentPrompts.REPAIR)
+                    .system(prompts.repair())
                     .user(text)
                     .call()
                     .chatResponse(), trace);
@@ -949,7 +962,7 @@ public class IncidentAnalyzer {
                 error == null ? null : truncate(error, 1000), job.tag(), job.trigger(), job.asOf(), job.asOfShot(),
                 job.parentId(), attempts, verification == null ? null : verification.status(),
                 verification == null ? null : objectMapper.writeValueAsString(verification), incidentId, pipelineJson,
-                tokens.prompt(), tokens.output(), tokens.thought(), AgentPrompts.VERSION);
+                tokens.prompt(), tokens.output(), tokens.thought(), prompts.version());
     }
 
     @SuppressWarnings("unchecked")

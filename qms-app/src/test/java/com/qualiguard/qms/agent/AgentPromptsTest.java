@@ -17,7 +17,31 @@ class AgentPromptsTest {
 
     @Test
     void 버전은_파일_이름과_해시_8자리() {
-        assertThat(AgentPrompts.VERSION).matches("analysis-v1@[0-9a-f]{8}");
+        assertThat(AgentPrompts.VERSION).matches("analysis-v2@[0-9a-f]{8}");
+        assertThat(AgentPrompts.of("analysis-v1").version()).matches("analysis-v1@[0-9a-f]{8}");
+    }
+
+    @Test
+    void v1_도_그대로_남아_비교할_수_있다() {
+        AgentPrompts.Set v1 = AgentPrompts.of("analysis-v1");
+        assertThat(v1.system()).doesNotContain("(v2)");
+        assertThat(v1.version()).isNotEqualTo(AgentPrompts.VERSION);
+        assertThat(v1.repair()).isEqualTo(AgentPrompts.REPAIR);
+    }
+
+    /** E6 원칙: 개발셋 오답으로 고치되, 특정 고장 이름을 힌트로 넣지 않는다 (v1 에 있던 원인 코드 목록·SOP 예시는 그대로). */
+    @Test
+    void v2_는_세_원칙을_담고_새_고장_힌트는_넣지_않는다() {
+        String v2 = AgentPrompts.SYSTEM;
+        assertThat(v2).contains("[원인을 고르는 순서] (v2)", "[원인을 확정하기 전 반대 근거 확인] (v2)", "초안으로 넘어가는 기준 (v2)");
+        String v1 = AgentPrompts.of("analysis-v1").system();
+        for (String fault : new String[] {"히터", "냉각", "체크 링", "드리프트", "HEATER", "COOLING", "CHECK_RING"}) {
+            assertThat(count(v2, fault)).as(fault).isEqualTo(count(v1, fault));
+        }
+    }
+
+    private static int count(String text, String word) {
+        return text.split(java.util.regex.Pattern.quote(word), -1).length - 1;
     }
 
     @Test

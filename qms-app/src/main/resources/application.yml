@@ -99,6 +99,7 @@ qg:
     merge-minutes: 60                 # 같은 설비·같은 원인 초안이 60분 안에 있으면 그 초안에 연결
     recheck-shots: 40                 # 관찰(OBSERVE) 판단 뒤 새 경보가 없어도 40 shot 이 지나면 다시 분석
     recheck-max: 3                    # 새 경보 없이 이어지는 재확인 최대 횟수 (LLM 비용 상한)
+    prompt: ${QG_AGENT_PROMPT:analysis-v2}   # 분석 프롬프트 파일 (resources/prompts, 로드맵 E6). analysis-v1 로 바꾸면 이전 판과 비교
     analysis-mode: tools              # 분석 방식 (로드맵 A1): tools(모델이 도구를 골라 부름) / prefetch(도구 1~5를 정해진 인자로 미리 조회 + LLM 1회, 비교용)
     verify-max-retries: 1             # 검증 에이전트가 근거 부족으로 되돌리면 다시 분석하는 최대 횟수 (ADR-016)
     max-tool-calls: 15                # 분석 1회(LLM 호출 1번) 안의 도구 호출 상한. 넘으면 조회하지 않고 "지금 근거로 결론" 오류를 돌려줌 (docs/agent/guardrail-policy.md G-03). 0 이면 끔
