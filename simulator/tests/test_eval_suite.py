@@ -14,14 +14,14 @@ BASE = yaml.safe_load((ROOT / "scenarios.yaml").read_text(encoding="utf-8"))
 SUITE = yaml.safe_load((ROOT / "scenarios_eval.yaml").read_text(encoding="utf-8"))
 
 
-def test_묶음은_28사례_개발셋_17_홀드아웃_11():
+def test_묶음은_44사례_개발셋_17_홀드아웃_27():
     counts = {"dev": 0, "holdout": 0}
     for run in SUITE["runs"]:
         cfg = apply_suite_run(BASE, SUITE, run["id"])
         for f in cfg["faults"]:
             assert f["name"] in FAULT_CATALOG
         counts[run["split"]] += len(cfg["faults"])
-    assert counts == {"dev": 17, "holdout": 11}
+    assert counts == {"dev": 17, "holdout": 27}
 
 
 def test_이미_쓴_seed_는_쓰지_않고_홀드아웃_seed_는_개발셋에_없다():
