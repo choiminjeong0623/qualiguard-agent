@@ -211,7 +211,7 @@ Kafka 메시지 key 는 부적합 번호.
                               └─애매·처음 보는 패턴→ 원인 분석(LLM, 아래 ①~⑤) ─┘   └─WEAK→ 지적을 붙여 되돌림 (최대 1회)
 ```
 
-**ML 선판단 (ML 먼저, 애매하면 LLM)**: 시뮬레이터 고장으로 학습한 랜덤 포레스트(`CauseForest`, 경보 시점 특징 66개)가 먼저 원인 확률을 냅니다. 확률이 0.9 이상이고 학습한 경보들과 많이 다르지 않으면(novelty-check) LLM 을 부르지 않고 그 판단을 씁니다. 애매하거나 처음 보는 패턴, 단발성(NOISE)은 LLM 원인 분석으로 넘깁니다. 시뮬레이션 측정에서 경보 93~95% 가 LLM 없이 처리됐고 오답은 0건, 학습하지 않은 새 고장은 95% 를 LLM 으로 넘겼습니다([eval/ml_cascade_report.md](../eval/ml_cascade_report.md), [eval/ml_novel_report.md](../eval/ml_novel_report.md)). 기본은 꺼져 있고(`qg.agent.ml-triage.mode=off`), shadow 로 먼저 일치율을 본 뒤 skip 으로 켭니다.
+**ML 선판단 (ML 먼저, 애매하면 LLM)**: 시뮬레이터 고장으로 학습한 랜덤 포레스트(`CauseForest`, 경보 시점 특징 66개)가 먼저 원인 확률을 냅니다. 확률이 0.9 이상이고 학습한 경보들과 많이 다르지 않으면(novelty-check) LLM 을 부르지 않고 그 판단을 씁니다. 애매하거나 처음 보는 패턴, 단발성(NOISE)은 LLM 원인 분석으로 넘깁니다. 시뮬레이션 측정에서 경보 93~95% 가 LLM 없이 처리됐고 오답은 0건, 학습하지 않은 새 고장은 95% 를 LLM 으로 넘겼습니다([eval/ml_cascade_report.md](../eval/ml_cascade_report.md), [eval/ml_novel_report.md](../eval/ml_novel_report.md)). 기본은 켜져 있고(`qg.agent.ml-triage.mode=skip`, 2026-11-25), LLM 만의 시간을 재는 평가처럼 끌 때는 `QG_AGENT_ML_TRIAGE_MODE=off`, 일치율만 기록할 때는 `shadow` 를 씁니다. 11/25 E3 재측정에서 skip 은 15/15 를 유지하며 분석 1단계 평균을 52.7초(끔)에서 27.2초로 줄였습니다.
 
 **담당자 모바일 알림**: 새 부적합 초안이나 판단 보류가 저장되면 `AlertNotifier` 가 웹훅으로 알립니다. ntfy(휴대폰 앱 푸시, 공장 안 서버로도 운영 가능) 또는 Slack 을 고르고(`qg.notify.mode`), 알림을 누르면 해당 초안·보류 화면이 열립니다. 저장이 끝난 뒤 별도 스레드에서 보내므로 알림 서버가 꺼져 있어도 분석에는 영향이 없습니다. 확인: `GET /api/qms/notifications`, 시험 알림 `POST /api/qms/notifications/test`.
 

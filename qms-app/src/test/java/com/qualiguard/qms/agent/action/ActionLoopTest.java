@@ -40,6 +40,7 @@ class ActionLoopTest {
             r.put("cause_code", causeCode);
             r.put("action_code", a.code());
             r.put("mode", d.mode().name());
+            r.put("reasons", String.join(", ", d.reasons()));
             r.put("status", d.mode() == ActionPolicy.Mode.AUTO ? "EXECUTED" : "WAITING_APPROVAL");
             r.put("attempt", attempt);
             r.put("parent_action_id", parentActionId);
@@ -124,13 +125,21 @@ class ActionLoopTest {
 
     @Test
     void 저위험_조치는_자동_실행되고_효과가_있으면_해소로_끝난다() {
-        agent.onRequested(analysisDone(10, null, "SENSOR_CHECK", "SENSOR_FAULT", 70, "LOW"));
+        agent.onRequested(analysisDone(10, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
         assertThat(store.rows.get(1)).containsEntry("mode", "AUTO").containsEntry("status", "EXECUTED");
 
         store.window = new EffectEvaluator.Window(null, null, null, 0, 40);
         checker.poll();
         assertThat(store.rows.get(1)).containsEntry("status", "RESOLVED");
         assertThat(pipeline.retries).isEmpty();
+    }
+
+    @Test
+    void 저위험_조치라도_확신도_80_미만이면_승인_대기() {
+        // E7: v2 홀드아웃에서 확신도 50~69 의 실제 적중은 27%, 70~79 는 80% → 자동 실행 기준을 80 으로
+        agent.onRequested(analysisDone(13, null, "SENSOR_CHECK", "SENSOR_FAULT", 79, "LOW"));
+        assertThat(store.rows.get(1)).containsEntry("mode", "APPROVAL").containsEntry("status", "WAITING_APPROVAL");
+        assertThat((String) store.rows.get(1).get("reasons")).contains("확신도 79 < 기준 80");
     }
 
     @Test
