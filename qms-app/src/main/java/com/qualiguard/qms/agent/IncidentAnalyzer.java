@@ -331,20 +331,42 @@ public class IncidentAnalyzer {
         }
         String equipmentId = (String) parent.get("equipment_id");
         long baseShot = ((Number) parent.get("base_shot")).longValue();
-        long target = asOfShot != null ? asOfShot
-                : excludedCause != null ? latestShot(equipmentId) : baseShot + props.recheckShots();
-        if (target <= baseShot) {
-            throw new IllegalArgumentException("재확인 shot 은 관찰 기준 shot(" + baseShot + ")보다 뒤여야 합니다");
+        long target;
+        String asOf;
+        Long shotsSince = null;
+        if (asOfShot == null && excludedCause != null) {
+            // 조치 효과가 없을 때의 재분석: '지금' 시점 = 가장 최근에 들어온 shot.
+            // shot 번호는 시뮬레이터를 다시 돌리면 1부터 다시 시작하므로 MAX(shot_no) 를 쓰면 이전 실행의
+            // 큰 번호(이미 지난 구간)를 고르게 된다. 들어온 순서(created_at)로 고르고, 시각으로 앞뒤를 확인한다.
+            List<Map<String, Object>> latest = jdbc.queryForList("""
+                    SELECT TOP 1 shot_no, CONVERT(VARCHAR(33), shot_ts, 127) AS ts FROM dbo.process_shot
+                    WHERE equipment_id = ? AND shot_ts > CAST(? AS DATETIMEOFFSET(3))
+                    ORDER BY created_at DESC, shot_id DESC
+                    """, equipmentId, parent.get("base_ts"));
+            if (latest.isEmpty()) {
+                throw new IllegalStateException(equipmentId + " 의 관찰 기준 시각 뒤 shot 데이터가 아직 없습니다");
+            }
+            target = ((Number) latest.get(0).get("shot_no")).longValue();
+            asOf = (String) latest.get(0).get("ts");
+            shotsSince = jdbc.queryForObject("""
+                    SELECT COUNT_BIG(*) FROM dbo.process_shot
+                    WHERE equipment_id = ? AND shot_ts > CAST(? AS DATETIMEOFFSET(3)) AND shot_ts <= CAST(? AS DATETIMEOFFSET(3))
+                    """, Long.class, equipmentId, parent.get("base_ts"), asOf);
+        } else {
+            target = asOfShot != null ? asOfShot : baseShot + props.recheckShots();
+            if (target <= baseShot) {
+                throw new IllegalArgumentException("재확인 shot 은 관찰 기준 shot(" + baseShot + ")보다 뒤여야 합니다");
+            }
+            List<String> shotTs = jdbc.queryForList("""
+                    SELECT TOP 1 CONVERT(VARCHAR(33), shot_ts, 127) FROM dbo.process_shot
+                    WHERE equipment_id = ? AND shot_no = ? AND shot_ts > CAST(? AS DATETIMEOFFSET(3))
+                    ORDER BY shot_ts
+                    """, String.class, equipmentId, target, parent.get("base_ts"));
+            if (shotTs.isEmpty()) {
+                throw new IllegalStateException(equipmentId + " shot " + target + " 데이터가 아직 없습니다");
+            }
+            asOf = shotTs.get(0);
         }
-        List<String> shotTs = jdbc.queryForList("""
-                SELECT TOP 1 CONVERT(VARCHAR(33), shot_ts, 127) FROM dbo.process_shot
-                WHERE equipment_id = ? AND shot_no = ? AND shot_ts > CAST(? AS DATETIMEOFFSET(3))
-                ORDER BY shot_ts
-                """, String.class, equipmentId, target, parent.get("base_ts"));
-        if (shotTs.isEmpty()) {
-            throw new IllegalStateException(equipmentId + " shot " + target + " 데이터가 아직 없습니다");
-        }
-        String asOf = shotTs.get(0);
 
         String ids = (String) parent.get("anomaly_ids");
         List<String> anomalyIds = ids == null || ids.isBlank() ? List.of() : List.of(ids.split(","));
@@ -358,7 +380,7 @@ public class IncidentAnalyzer {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("observedAtShot", baseShot);
         info.put("currentShot", target);
-        info.put("shotsSinceObservation", target - baseShot);
+        info.put("shotsSinceObservation", shotsSince != null ? shotsSince : target - baseShot);
         info.put("recheckCount", depth + 1);
         if (excludedCause != null) {
             info.put("excludedCause", excludedCause);
@@ -366,12 +388,6 @@ public class IncidentAnalyzer {
         return new Job("RECHECK", equipmentId, (String) parent.get("seed_anomaly_id"),
                 (String) parent.get("seed_ts"), observedAlarms, anomalyIds, false, null, asOf, target, asOf,
                 parentAnalysisId, (String) parent.get("run_tag"), info);
-    }
-
-    private long latestShot(String equipmentId) {
-        Long max = jdbc.queryForObject("SELECT MAX(shot_no) FROM dbo.process_shot WHERE equipment_id = ?", Long.class,
-                equipmentId);
-        return max == null ? 0 : max;
     }
 
     /**

@@ -616,6 +616,65 @@ class MssqlInitScriptsContainerTest {
         }
     }
 
+    @Test
+    void 효과_없음_뒤_재분석은_shot_번호가_아니라_가장_최근에_들어온_shot_을_기준으로_한다() throws Exception {
+        try (Connection c = connect(); Statement st = c.createStatement()) {
+            st.execute("""
+                    INSERT INTO dbo.equipment (equipment_id, line_id, equipment_name, model, product_name, install_date)
+                    VALUES ('IT-EQ-RT', 'LINE1', N'시험 설비', N'시험', N'시험', '2020-01-01');
+                    """);
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO dbo.process_shot (message_id, line_id, equipment_id, shot_no, shot_ts, barrel_temp,
+                                                  inspection_result, created_at)
+                    VALUES (?, 'LINE1', 'IT-EQ-RT', ?, CAST(? AS DATETIMEOFFSET(3)), ?, 'OK', CAST(? AS DATETIMEOFFSET(3)))
+                    """)) {
+                for (int shot = 1; shot <= 100; shot++) {   // 앞 실행: 1~100 (번호가 더 큼)
+                    retryShot(ps, "it-rt-a-" + shot, shot, "2026-11-24T10:00:00+09:00", shot);
+                }
+                for (int shot = 1; shot <= 50; shot++) {    // 조치 뒤 새 실행: 번호가 다시 1부터
+                    retryShot(ps, "it-rt-b-" + shot, shot, "2026-11-24T11:00:00+09:00", shot);
+                }
+            }
+            st.execute("""
+                    INSERT INTO dbo.anomaly_event (anomaly_id, line_id, equipment_id, shot_no, detected_at, rule_code,
+                        rule_name, sensor_key, sensor_name, observed, message, evidence_json)
+                    VALUES ('it-rt-seed', 'LINE1', 'IT-EQ-RT', 10, '2026-11-24T11:00:10+09:00', 'XBAR', N'평균',
+                            'barrelTemp', N'실린더', 1, N'새 실행 경보', '{}')
+                    """);
+            int parent;
+            try (ResultSet rs = st.executeQuery("""
+                    INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, trigger_type,
+                                                    as_of, as_of_shot)
+                    OUTPUT INSERTED.analysis_id
+                    VALUES ('IT-EQ-RT', 'it-rt-seed', 'it-rt-seed', 'NCR_DRAFT', 'ALARM', '2026-11-24T11:00:10+09:00', 10)
+                    """)) {
+                rs.next();
+                parent = rs.getInt(1);
+            }
+            var jdbc = new JdbcTemplate(new SingleConnectionDataSource(c, true));
+            var analyzer = new IncidentAnalyzer(jdbc, JsonMapper.builder().build(), null,
+                    new com.qualiguard.qms.agent.AgentProperties(false, 5000, 100, 30, 60, 40, 3, 1), null, "test", null);
+
+            // 예전(MAX(shot_no) = 100)에는 앞 실행의 shot 100 을 찾다가 '데이터가 아직 없다'로 실패하거나 지난 구간을 봤다
+            IncidentAnalyzer.Job job = analyzer.prepareRetry(parent, "HEATER_DEGRADATION");
+            assertThat(job.asOfShot()).as("새 실행의 마지막 shot").isEqualTo(50L);
+            assertThat(job.asOf()).startsWith("2026-11-24T02:00:50");
+            assertThat(job.recheckInfo()).containsEntry("excludedCause", "HEATER_DEGRADATION")
+                    .containsEntry("shotsSinceObservation", 40L);
+        }
+    }
+
+    private static void retryShot(PreparedStatement ps, String id, int shot, String start, int sec) throws SQLException {
+        String ts = java.time.OffsetDateTime.parse(start).plusSeconds(sec)
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"));
+        ps.setString(1, id);
+        ps.setLong(2, shot);
+        ps.setString(3, ts);
+        ps.setDouble(4, 225.0);
+        ps.setString(5, ts);
+        ps.executeUpdate();
+    }
+
     private static void shotRow(PreparedStatement ps, String id, int shot, double barrel, String start, int sec)
             throws SQLException {
         ps.setString(1, id);
