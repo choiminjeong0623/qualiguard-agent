@@ -1,0 +1,77 @@
+{
+  "createdAt": "2026-11-25T14:19:47+09:00",
+  "mode": "base-v2-holdout-s888-strong",
+  "args": {
+    "runs": 1,
+    "hide_matching_ncr": false,
+    "hide_maintenance": false,
+    "label": "v2-holdout-s888-strong"
+  },
+  "gitCommit": "ce2b17d5c828486cbc62823b07fbca0401fbb9f7",
+  "gitDirty": false,
+  "agentConfig": {
+    "recheckShots": 40,
+    "recheckMax": 3,
+    "verifyMaxRetries": 1,
+    "chatProvider": "google-genai",
+    "model": "gemini-3.8-flash",
+    "temperature": "0.2",
+    "transport": "kafka",
+    "promptVersion": "analysis-v2@941e709b",
+    "analysisMode": "tools",
+    "writerMode": "analysis-text",
+    "vectorEnabled": true,
+    "actionEnabled": false,
+    "dailyTokenBudget": 1000000
+  },
+  "groundTruth": {
+    "sha256": "28c67a3f476272c701ffb0720cadde1d4d255f8117b2eba70a6769d9650a4a28",
+    "rows": 4000,
+    "simulatorMeta": {
+      "createdAt": "2026-11-25T13:59:05+09:00",
+      "config": "scenarios_eval.yaml",
+      "configSha256": "f99c1c18735102f0d0e1cb5942e0aeaac21e536334eb7b3fed6a972f6b32bca9",
+      "seed": 888,
+      "evalRun": {
+        "suite": "e4-2026-11-24",
+        "id": "holdout-s888-strong",
+        "split": "holdout",
+        "severityLevel": "strong",
+        "ambiguous": []
+      },
+      "shotsPerEquipment": 2000,
+      "equipment": [
+        "IMM-01",
+        "IMM-02"
+      ],
+      "faults": [
+        {
+          "name": "heater_degradation",
+          "equipment": "IMM-01",
+          "startShot": 300,
+          "duration": 500
+        },
+        {
+          "name": "pressure_sensor_spike",
+          "equipment": "IMM-02",
+          "startShot": 400,
+          "duration": 200
+        },
+        {
+          "name": "cooling_blockage",
+          "equipment": "IMM-02",
+          "startShot": 900,
+          "duration": 500
+        },
+        {
+          "name": "check_ring_wear",
+          "equipment": "IMM-01",
+          "startShot": 1200,
+          "duration": 600
+        }
+      ]
+    }
+  },
+  "cases": 7,
+  "runs": 1
+}
