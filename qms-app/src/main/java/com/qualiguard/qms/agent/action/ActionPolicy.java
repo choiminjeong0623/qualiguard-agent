@@ -13,7 +13,7 @@ import com.qualiguard.qms.agent.action.ActionCatalog.Risk;
  * 하나라도 걸리면 사람 승인 (이유를 모두 남긴다):
  *  1. 위험도 HIGH (라인 정지·자재 처분)
  *  2. 검증 에이전트가 통과시키지 않은 분석
- *  3. 확신도가 기준 미만 (LOW 조치 50, MEDIUM 조치 80)
+ *  3. 확신도가 기준 미만 (LOW·MEDIUM 모두 80. E7 홀드아웃에서 80 미만은 적중이 크게 떨어짐, ADR-022)
  *  4. 이미 제품에 영향이 난 사건(심각도 HIGH)에서 공정 설정을 바꾸는 MEDIUM 조치
  *  5. 같은 설비에서 최근 24시간 자동 실행 횟수가 한도 이상 (에이전트 폭주 방지)
  */
@@ -33,6 +33,12 @@ public class ActionPolicy {
     public record Decision(Mode mode, List<String> reasons) {
     }
 
+    /**
+     * 자동 실행 확신도 기준. 예전에는 LOW 조치만 50 이었으나, v2 홀드아웃 E7 에서
+     * 확신도 50~69 구간의 실제 원인 적중이 27%(3/11), 80 이상은 97~100% 라 80 으로 맞췄다 (ADR-022).
+     */
+    static final int MIN_CONFIDENCE = 80;
+
     private final int maxAutoPerDay;
 
     public ActionPolicy(int maxAutoPerDay) {
@@ -48,7 +54,7 @@ public class ActionPolicy {
         if (!c.verified()) {
             reasons.add("검증 에이전트 미통과");
         }
-        int min = risk == Risk.LOW ? 50 : 80;
+        int min = MIN_CONFIDENCE;
         if (c.confidence() < min) {
             reasons.add("확신도 " + c.confidence() + " < 기준 " + min);
         }
