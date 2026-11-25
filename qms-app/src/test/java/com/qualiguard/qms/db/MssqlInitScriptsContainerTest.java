@@ -567,6 +567,55 @@ class MssqlInitScriptsContainerTest {
         }
     }
 
+    @Test
+    void 재분석_뒤_다음_조치가_없으면_사람에게_넘길_대상이_된다() throws Exception {
+        try (Connection c = connect(); Statement st = c.createStatement()) {
+            var store = new com.qualiguard.qms.agent.action.ActionStore(
+                    new JdbcTemplate(new SingleConnectionDataSource(c, true)));
+            int parent = insertAnalysis(st, null, "NCR_DRAFT", "-5");
+            int stuck;
+            try (ResultSet rs = st.executeQuery("""
+                    INSERT INTO dbo.agent_action (analysis_id, equipment_id, cause_code, action_code, risk, mode, status,
+                                                  effect_detail, checked_at)
+                    OUTPUT INSERTED.action_id
+                    VALUES (%d, 'IMM-01', 'HEATER_DEGRADATION', 'HEATER_TEMP_COMPENSATE', 'MEDIUM', 'APPROVAL',
+                            'NOT_RESOLVED', N'조치 뒤에도 경보 13건', DATEADD(MINUTE, -4, SYSDATETIMEOFFSET()))
+                    """.formatted(parent))) {
+                rs.next();
+                stuck = rs.getInt(1);
+            }
+            java.util.function.IntPredicate listed = id -> store.stalledRetries(60).stream()
+                    .anyMatch(r -> ((Number) r.get("action_id")).intValue() == id);
+            assertThat(listed.test(stuck)).as("재분석 전에는 대상 아님").isFalse();
+            int retry = insertAnalysis(st, parent, "OBSERVE", "-3");   // 3분 전 재분석이 관찰로 끝남
+            assertThat(listed.test(stuck)).isTrue();
+            assertThat(store.stalledRetries(60)).anyMatch(r -> ((Number) r.get("retry_analysis_id")).intValue() == retry
+                    && "OBSERVE".equals(r.get("retry_decision")));
+            assertThat(store.stalledRetries(300).stream() // 유예(300초) 안이면 아직 아님
+                    .anyMatch(r -> ((Number) r.get("action_id")).intValue() == stuck)).isFalse();
+            // 다음 조치가 생기면 대상에서 빠진다
+            st.execute("""
+                    INSERT INTO dbo.agent_action (analysis_id, equipment_id, cause_code, action_code, risk, mode, status,
+                                                  attempt, parent_action_id)
+                    VALUES (%d, 'IMM-01', 'COOLING_ISSUE', 'COOLING_FLOW_INCREASE', 'MEDIUM', 'APPROVAL',
+                            'WAITING_APPROVAL', 2, %d)
+                    """.formatted(retry, stuck));
+            assertThat(listed.test(stuck)).isFalse();
+        }
+    }
+
+    private static int insertAnalysis(Statement st, Integer parent, String decision, String minutesAgo) throws SQLException {
+        try (ResultSet rs = st.executeQuery("""
+                INSERT INTO dbo.agent_analysis (equipment_id, seed_anomaly_id, anomaly_ids, decision, parent_analysis_id,
+                                                created_at)
+                OUTPUT INSERTED.analysis_id
+                VALUES ('IMM-01', 'it-stall', 'it-stall', '%s', %s, DATEADD(MINUTE, %s, SYSDATETIMEOFFSET()))
+                """.formatted(decision, parent == null ? "NULL" : parent.toString(), minutesAgo))) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
     private static void shotRow(PreparedStatement ps, String id, int shot, double barrel, String start, int sec)
             throws SQLException {
         ps.setString(1, id);

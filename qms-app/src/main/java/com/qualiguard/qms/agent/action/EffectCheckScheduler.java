@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 /**
  * 실행한 조치의 효과를 주기적으로 확인한다.
  * 해소 → RESOLVED, 미해소 → 그 원인을 빼고 재분석, 시도 한도 초과 → ESCALATED(담당자 확인).
+ * 재분석이 다음 조치를 정하지 못하면(관찰·원인 불명·실패) 그 자리에서 멈추지 않도록 ESCALATED 로 넘긴다.
  */
 @Component
 @ConditionalOnProperty(name = "qg.agent.action.enabled", havingValue = "true")
@@ -19,6 +20,8 @@ public class EffectCheckScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(EffectCheckScheduler.class);
     private static final int BEFORE_SHOTS = 30;
+    /** 재분석 결과가 저장된 뒤 조치 에이전트가 다음 조치를 만들 때까지 기다리는 시간 (이벤트 전달 여유). */
+    private static final int RETRY_GRACE_SECONDS = 60;
 
     private final ActionStore store;
     private final AgentPipeline pipeline;
@@ -54,6 +57,13 @@ public class EffectCheckScheduler {
                 log.warn("조치 효과 확인 실패 action_id={}: {}", row.get("action_id"), e.toString());
             }
         }
+        try {
+            for (Map<String, Object> row : store.stalledRetries(RETRY_GRACE_SECONDS)) {
+                escalateStalled(row);
+            }
+        } catch (Exception e) {
+            log.warn("재분석 뒤 멈춘 조치 확인 실패: {}", e.toString());
+        }
     }
 
     private void check(Map<String, Object> row) {
@@ -69,6 +79,21 @@ public class EffectCheckScheduler {
             case RESOLVED -> store.markChecked(actionId, "RESOLVED", effect.detail());
             case NOT_RESOLVED -> notResolved(row, actionId, action, effect.detail());
         }
+    }
+
+    /** 효과 없음 → 재분석 → 다음 조치가 안 생김: 사람에게 넘긴다 (11/25 맥 F3 실행에서 재분석이 OBSERVE 로 끝나 멈춘 사례). */
+    private void escalateStalled(Map<String, Object> row) {
+        int actionId = ((Number) row.get("action_id")).intValue();
+        ActionCatalog.Action action = ActionCatalog.byCode((String) row.get("action_code"));
+        String rollback = action == null ? "-" : action.rollback();
+        String decision = (String) row.get("retry_decision");
+        String cause = (String) row.get("retry_cause");
+        String prev = (String) row.get("effect_detail");
+        String detail = "재분석(분석 #" + row.get("retry_analysis_id") + ")이 " + decision
+                + (cause == null ? "" : "/" + cause) + " 로 끝나 다음 조치를 정하지 못함 → 담당자 확인 필요."
+                + (prev == null ? "" : " 앞 결과: " + prev.replaceAll(" / 되돌리기: .*$", "")) + " / 되돌리기: " + rollback;
+        store.markChecked(actionId, "ESCALATED", detail);
+        log.info("[조치] 조치 {} 재분석 뒤 다음 조치 없음 ({}) → 사람에게 넘김", actionId, decision);
     }
 
     private void notResolved(Map<String, Object> row, int actionId, ActionCatalog.Action action, String detail) {

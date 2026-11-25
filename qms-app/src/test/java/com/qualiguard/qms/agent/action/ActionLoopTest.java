@@ -100,6 +100,14 @@ class ActionLoopTest {
             return window;
         }
 
+        final List<Map<String, Object>> stalled = new ArrayList<>();
+
+        @Override
+        public List<Map<String, Object>> stalledRetries(int graceSeconds) {
+            return stalled.stream().filter(r -> "NOT_RESOLVED".equals(rows.get((Integer) r.get("action_id")).get("status")))
+                    .toList();
+        }
+
         @Override
         public void markChecked(int actionId, String status, String detail) {
             rows.get(actionId).put("status", status);
@@ -250,5 +258,24 @@ class ActionLoopTest {
         agent.onRequested(analysisDone(50, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
         assertThat(store.rows).hasSize(1);
         assertThat(store.autoCount).isZero();
+    }
+
+    @Test
+    void 효과가_없어_재분석했는데_관찰로_끝나면_사람에게_넘긴다() {
+        agent.onRequested(analysisDone(70, null, "NCR_DRAFT", "HEATER_DEGRADATION", 85, "MEDIUM"));
+        store.window = new EffectEvaluator.Window(220.0, 221.0, 230.0, 13, 40);
+        checker.poll();
+        assertThat(store.rows.get(1)).containsEntry("status", "NOT_RESOLVED");
+
+        // 재분석(분석 71)이 OBSERVE/UNKNOWN → 조치 에이전트가 아무것도 만들지 않음
+        agent.onRequested(analysisDone(71, 70, "OBSERVE", "UNKNOWN", 40, "MEDIUM"));
+        assertThat(store.rows).hasSize(1);
+        store.stalled.add(Map.of("action_id", 1, "action_code", "HEATER_TEMP_COMPENSATE", "attempt", 1,
+                "effect_detail", "조치 뒤에도 경보 13건 / 되돌리기: x", "retry_analysis_id", 71,
+                "retry_decision", "OBSERVE", "retry_cause", "UNKNOWN"));
+        checker.poll();
+        assertThat(store.rows.get(1)).containsEntry("status", "ESCALATED");
+        assertThat((String) store.rows.get(1).get("effect_detail"))
+                .contains("분석 #71", "OBSERVE/UNKNOWN", "담당자 확인 필요", "앞 결과: 조치 뒤에도 경보 13건", "되돌리기");
     }
 }
