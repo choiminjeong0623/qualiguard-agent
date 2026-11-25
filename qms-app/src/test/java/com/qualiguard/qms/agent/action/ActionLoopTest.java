@@ -31,7 +31,7 @@ class ActionLoopTest {
 
         @Override
         public int insert(int analysisId, String equipmentId, String causeCode, ActionCatalog.Action a,
-                ActionPolicy.Decision d, int attempt, Integer parentActionId) {
+                ActionPolicy.Decision d, int attempt, Integer parentActionId, Integer confidence, boolean verified) {
             int id = rows.size() + 1;
             Map<String, Object> r = new HashMap<>();
             r.put("action_id", id);
@@ -43,8 +43,33 @@ class ActionLoopTest {
             r.put("status", d.mode() == ActionPolicy.Mode.AUTO ? "EXECUTED" : "WAITING_APPROVAL");
             r.put("attempt", attempt);
             r.put("parent_action_id", parentActionId);
+            r.put("confidence", confidence);
+            r.put("repeat_count", 0);
             rows.put(id, r);
             return id;
+        }
+
+        @Override
+        public Optional<Integer> pendingSame(String equipmentId, String actionCode) {
+            return rows.values().stream()
+                    .filter(r -> equipmentId.equals(r.get("equipment_id")) && actionCode.equals(r.get("action_code"))
+                            && List.of("WAITING_APPROVAL", "EXECUTED").contains(r.get("status"))
+                            && Integer.valueOf(1).equals(r.get("attempt")))
+                    .map(r -> (Integer) r.get("action_id")).findFirst();
+        }
+
+        @Override
+        public void markRepeated(int actionId, int analysisId, Integer confidence, boolean verified) {
+            Map<String, Object> r = rows.get(actionId);
+            r.put("repeat_count", (Integer) r.get("repeat_count") + 1);
+            r.put("last_analysis_id", analysisId);
+            r.put("confidence", confidence);
+        }
+
+        @Override
+        public boolean handled(int analysisId) {
+            return rows.values().stream().anyMatch(r -> Integer.valueOf(analysisId).equals(r.get("analysis_id"))
+                    || Integer.valueOf(analysisId).equals(r.get("last_analysis_id")));
         }
 
         @Override
@@ -132,13 +157,22 @@ class ActionLoopTest {
 
     @Test
     void 저위험_조치는_자동_실행되고_효과가_있으면_해소로_끝난다() {
-        agent.onRequested(analysisDone(10, null, "SENSOR_CHECK", "SENSOR_FAULT", 70, "LOW"));
+        agent.onRequested(analysisDone(10, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
         assertThat(store.rows.get(1)).containsEntry("mode", "AUTO").containsEntry("status", "EXECUTED");
 
         store.window = new EffectEvaluator.Window(null, null, null, 0, 40);
         checker.poll();
         assertThat(store.rows.get(1)).containsEntry("status", "RESOLVED");
         assertThat(pipeline.retries).isEmpty();
+    }
+
+    @Test
+    void 저위험_조치도_확신도_80_미만이면_승인_대기() {
+        agent.onRequested(analysisDone(13, null, "SENSOR_CHECK", "SENSOR_FAULT", 70, "LOW"));
+        assertThat(store.rows.get(1)).containsEntry("mode", "APPROVAL").containsEntry("status", "WAITING_APPROVAL");
+        ActionPolicy.Decision d = new ActionPolicy(3).decide(new ActionPolicy.Context(
+                ActionCatalog.forCause("SENSOR_CHECK", "SENSOR_FAULT"), "LOW", 79, true, 0));
+        assertThat(d.reasons()).containsExactly("확신도 79 < 기준 80");
     }
 
     @Test
@@ -194,6 +228,36 @@ class ActionLoopTest {
         assertThat(store.rows.get(1)).containsEntry("status", "NOT_RESOLVED");
         assertThat(pipeline.retries).containsExactly("30:HEATER_DEGRADATION");
         assertThat(checker.retryWaiting()).isFalse();
+    }
+
+    @Test
+    void 같은_설비_같은_조치가_승인_대기면_새로_만들지_않고_묶는다() {
+        agent.onRequested(analysisDone(40, null, "NCR_DRAFT", "COOLING_ISSUE", 90, "HIGH"));
+        agent.onRequested(analysisDone(41, null, "NCR_DRAFT", "COOLING_ISSUE", 97, "HIGH"));
+        agent.onRequested(analysisDone(42, null, "NCR_DRAFT", "COOLING_ISSUE", 95, "HIGH"));
+        assertThat(store.rows).hasSize(1);
+        assertThat(store.rows.get(1)).containsEntry("status", "WAITING_APPROVAL").containsEntry("repeat_count", 2)
+                .containsEntry("last_analysis_id", 42).containsEntry("confidence", 95);
+
+        // 다른 조치(히터)는 따로
+        agent.onRequested(analysisDone(43, null, "NCR_DRAFT", "HEATER_DEGRADATION", 95, "HIGH"));
+        assertThat(store.rows).hasSize(2);
+    }
+
+    @Test
+    void 효과_확인_중인_자동_조치는_다시_실행하지_않고_묶는다() {
+        agent.onRequested(analysisDone(60, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
+        agent.onRequested(analysisDone(61, null, "SENSOR_CHECK", "SENSOR_FAULT", 88, "LOW"));
+        assertThat(store.rows).hasSize(1);
+        assertThat(store.rows.get(1)).containsEntry("status", "EXECUTED").containsEntry("repeat_count", 1);
+    }
+
+    @Test
+    void 같은_분석의_조치_요청이_다시_와도_한_번만_처리한다() {
+        agent.onRequested(analysisDone(50, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
+        agent.onRequested(analysisDone(50, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
+        assertThat(store.rows).hasSize(1);
+        assertThat(store.autoCount).isZero();
     }
 
     @Test

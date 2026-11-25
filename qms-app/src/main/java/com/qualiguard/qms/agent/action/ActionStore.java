@@ -23,16 +23,46 @@ public class ActionStore {
     }
 
     public int insert(int analysisId, String equipmentId, String causeCode, ActionCatalog.Action a,
-            ActionPolicy.Decision d, int attempt, Integer parentActionId) {
+            ActionPolicy.Decision d, int attempt, Integer parentActionId, Integer confidence, boolean verified) {
         boolean auto = d.mode() == ActionPolicy.Mode.AUTO;
         return jdbc.queryForObject("""
                 INSERT INTO dbo.agent_action (analysis_id, equipment_id, cause_code, action_code, risk, mode, reasons,
-                                              status, attempt, parent_action_id, decided_by)
+                                              status, attempt, parent_action_id, decided_by, confidence, verified)
                 OUTPUT INSERTED.action_id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, Integer.class, analysisId, equipmentId, causeCode, a.code(), a.risk().name(), d.mode().name(),
                 String.join(" / ", d.reasons()), auto ? "EXECUTED" : "WAITING_APPROVAL", attempt, parentActionId,
-                auto ? "AGENT" : null);
+                auto ? "AGENT" : null, confidence, verified);
+    }
+
+    /**
+     * 같은 설비·같은 조치가 아직 끝나지 않은 첫 시도 (승인 대기, 또는 실행해서 효과 확인 중).
+     * 있으면 새로 만들지 않고 묶는다: 승인자가 같은 요청을 여러 번 보지 않고, 효과 확인 중인 조치를 또 실행하지 않는다.
+     */
+    public Optional<Integer> pendingSame(String equipmentId, String actionCode) {
+        return jdbc.queryForList("""
+                SELECT TOP 1 action_id FROM dbo.agent_action
+                WHERE equipment_id = ? AND action_code = ? AND status IN ('WAITING_APPROVAL', 'EXECUTED') AND attempt = 1
+                ORDER BY action_id
+                """, Integer.class, equipmentId, actionCode).stream().findFirst();
+    }
+
+    /** 끝나지 않은 조치에 같은 판단을 하나 더 묶는다. 확신도·검증은 마지막 분석 값으로 바꾼다. */
+    public void markRepeated(int actionId, int analysisId, Integer confidence, boolean verified) {
+        jdbc.update("""
+                UPDATE dbo.agent_action
+                SET repeat_count = repeat_count + 1, last_analysis_id = ?, last_seen_at = SYSDATETIMEOFFSET(),
+                    confidence = COALESCE(?, confidence), verified = ?
+                WHERE action_id = ? AND status IN ('WAITING_APPROVAL', 'EXECUTED')
+                """, analysisId, confidence, verified, actionId);
+    }
+
+    /** 이 분석으로 이미 조치를 만들었거나 묶었는지 (같은 이벤트가 다시 와도 한 번만 처리). */
+    public boolean handled(int analysisId) {
+        Integer n = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM dbo.agent_action WHERE analysis_id = ? OR last_analysis_id = ?
+                """, Integer.class, analysisId, analysisId);
+        return n != null && n > 0;
     }
 
     /** 실행 표시: 지금 설비의 마지막 shot 을 효과 확인 구간의 시작으로 잡는다. */
@@ -157,7 +187,9 @@ public class ActionStore {
         return jdbc.queryForList("""
                 SELECT TOP (?) a.action_id, a.analysis_id, a.equipment_id, a.cause_code, a.action_code, a.risk, a.mode,
                        a.reasons, a.status, a.attempt, a.parent_action_id, a.base_shot, a.effect_detail, a.decided_by,
+                       a.confidence, a.verified, a.repeat_count, a.last_analysis_id,
                        CONVERT(VARCHAR(33), a.created_at, 127) AS created_at,
+                       CONVERT(VARCHAR(33), a.last_seen_at, 127) AS last_seen_at,
                        CONVERT(VARCHAR(33), a.checked_at, 127) AS checked_at
                 FROM dbo.agent_action AS a ORDER BY a.action_id DESC
                 """, top);

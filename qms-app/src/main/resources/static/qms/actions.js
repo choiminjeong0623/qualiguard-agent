@@ -34,11 +34,28 @@
       });
       draw();
       var waiting = rows.filter(function (r) { return matches(r, 'WAITING_APPROVAL'); }).length;
+      QG.refreshBadges();   // 위쪽 메뉴 배지도 같은 주기로 맞춘다
       $('#action-count').text(waiting || '').attr('title', waiting ? '승인 대기 ' + waiting + '건' : null)
         .toggleClass('qg-tab-count-attn', waiting > 0);
     }).fail(function (xhr) { msg(QG.errorText(xhr), 'err'); });
   }
   function msg(text, kind) { $('#msg').text(text || '').attr('class', 'msg qg-page-msg ' + (kind || 'info')); }
+
+  // 근거: 제안한 분석의 확신도·검증, 언제·어느 분석에서 나왔는지, 승인 대기 중 같은 판단이 더 온 횟수
+  function evidence(r) {
+    var parts = [];
+    if (r.confidence != null) { parts.push('확신도 ' + r.confidence); }
+    if (r.verified != null) { parts.push(r.verified ? '검증 통과' : '검증 미통과'); }
+    parts.push('분석 #' + r.analysis_id);
+    if (r.created_at) { parts.push(QG.time(r.created_at)); }
+    var html = '<div>' + esc(parts.join(' · ')) + '</div>';
+    if (r.repeat_count > 0) {
+      html += '<div class="qg-repeat">같은 판단 ' + r.repeat_count + '번 더'
+        + (r.last_analysis_id ? ' · 마지막 분석 #' + r.last_analysis_id : '')
+        + (r.last_seen_at ? ' · ' + esc(QG.time(r.last_seen_at)) : '') + '</div>';
+    }
+    return html;
+  }
 
   function draw() {
     var rows = state.rows.filter(function (r) { return matches(r, state.filter); });
@@ -48,7 +65,8 @@
         ? '<button class="btn btn-sm btn-primary" data-act="approve" data-id="' + r.action_id + '">승인·실행</button> '
           + '<button class="btn btn-sm btn-outline-danger" data-act="reject" data-id="' + r.action_id + '">반려</button>'
         : '';
-      var note = (r.reasons ? '<div class="muted">' + esc(r.reasons) + '</div>' : '')
+      var note = evidence(r)
+        + (r.reasons ? '<div class="muted">' + esc(r.reasons) + '</div>' : '')
         + (r.effect_detail ? '<div>' + esc(r.effect_detail) + '</div>' : '');
       return '<tr' + (r.status === 'WAITING_APPROVAL' ? ' class="qg-row-attn"' : '') + '>'
         + '<td>' + QG.stateTag('action', r.status, STATUS_LABEL[r.status]) + '</td>'

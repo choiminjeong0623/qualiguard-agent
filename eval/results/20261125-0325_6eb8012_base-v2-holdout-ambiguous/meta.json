@@ -1,0 +1,75 @@
+{
+  "createdAt": "2026-11-25T03:25:38+09:00",
+  "mode": "base-v2-holdout-ambiguous",
+  "args": {
+    "runs": 1,
+    "hide_matching_ncr": false,
+    "hide_maintenance": false,
+    "label": "v2-holdout-ambiguous"
+  },
+  "gitCommit": "6eb801261b3a64478c2e9e4b42429b530b63d97e",
+  "gitDirty": false,
+  "agentConfig": {
+    "recheckShots": 40,
+    "recheckMax": 3,
+    "verifyMaxRetries": 1,
+    "chatProvider": "google-genai",
+    "model": "gemini-3.8-flash",
+    "temperature": "0.2",
+    "transport": "kafka",
+    "promptVersion": "analysis-v2@941e709b",
+    "analysisMode": "tools",
+    "writerMode": "analysis-text",
+    "vectorEnabled": true,
+    "actionEnabled": false,
+    "dailyTokenBudget": 1000000
+  },
+  "groundTruth": {
+    "sha256": "877b3d06561dea84b5da676ebc78ee3f29d9a6bef3a3ed67ea2ab6e890429b32",
+    "rows": 4000,
+    "simulatorMeta": {
+      "createdAt": "2026-11-25T02:33:38+09:00",
+      "config": "scenarios_eval.yaml",
+      "configSha256": "85b17eb9267a2b95174e465fc570b908ec514494242d611e738bbe599cda2b31",
+      "seed": 777,
+      "evalRun": {
+        "suite": "e4-2026-11-24",
+        "id": "holdout-ambiguous",
+        "split": "holdout",
+        "severityLevel": "strong",
+        "ambiguous": [
+          "material_moisture",
+          "mold_wear",
+          "nozzle_clog"
+        ]
+      },
+      "shotsPerEquipment": 2000,
+      "equipment": [
+        "IMM-01",
+        "IMM-02"
+      ],
+      "faults": [
+        {
+          "name": "nozzle_clog",
+          "equipment": "IMM-01",
+          "startShot": 300,
+          "duration": 500
+        },
+        {
+          "name": "material_moisture",
+          "equipment": "IMM-02",
+          "startShot": 400,
+          "duration": 500
+        },
+        {
+          "name": "mold_wear",
+          "equipment": "IMM-01",
+          "startShot": 1100,
+          "duration": 600
+        }
+      ]
+    }
+  },
+  "cases": 13,
+  "runs": 1
+}

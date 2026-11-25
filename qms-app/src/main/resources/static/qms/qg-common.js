@@ -264,6 +264,7 @@
     });
     wireA11y();
     loadBadges();
+    setInterval(loadBadges, 30000);   // 열어 둔 화면에서도 배지가 옛 숫자에 머물지 않게
   }
 
   // 메뉴 배지: 사람이 처리할 건수 (부적합 검토 대기, 승인 대기 조치 + 판단 보류)
@@ -293,7 +294,8 @@
   }
 
   window.QG = { csrf: csrf, esc: esc, errorText: errorText, time: time, label: label, labelWithCode: labelWithCode,
-    stateTag: stateTag, tone: tone, confirm: confirmDialog, tabs: tabs, me: me, LABELS: LABELS, svg: svg, badge: badge };
+    stateTag: stateTag, tone: tone, confirm: confirmDialog, tabs: tabs, me: me, LABELS: LABELS, svg: svg, badge: badge,
+    refreshBadges: loadBadges };
 
   renderShell();
   watchTables();

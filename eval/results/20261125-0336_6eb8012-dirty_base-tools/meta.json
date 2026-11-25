@@ -1,0 +1,70 @@
+{
+  "createdAt": "2026-11-25T03:36:32+09:00",
+  "mode": "base-tools",
+  "args": {
+    "runs": 1,
+    "hide_matching_ncr": false,
+    "hide_maintenance": false,
+    "label": "tools"
+  },
+  "gitCommit": "6eb801261b3a64478c2e9e4b42429b530b63d97e",
+  "gitDirty": true,
+  "agentConfig": {
+    "recheckShots": 40,
+    "recheckMax": 3,
+    "verifyMaxRetries": 1,
+    "chatProvider": "google-genai",
+    "model": "gemini-3.8-flash",
+    "temperature": "0.2",
+    "transport": "kafka",
+    "promptVersion": "analysis-v2@941e709b",
+    "analysisMode": "tools",
+    "writerMode": "analysis-text",
+    "vectorEnabled": true,
+    "actionEnabled": false,
+    "dailyTokenBudget": 1000000
+  },
+  "groundTruth": {
+    "sha256": "8880448309488bca9a2887ab08305ad42bc333602c4175f725c58f3c44dd01da",
+    "rows": 4000,
+    "simulatorMeta": {
+      "createdAt": "2026-11-25T03:25:39+09:00",
+      "config": "scenarios.yaml",
+      "configSha256": "dd4dc20b3c64a114a3698f534fe95c9e139efb1bdb685a596bee37074ef9ff87",
+      "seed": 42,
+      "shotsPerEquipment": 2000,
+      "equipment": [
+        "IMM-01",
+        "IMM-02"
+      ],
+      "faults": [
+        {
+          "name": "heater_degradation",
+          "equipment": "IMM-01",
+          "startShot": 300,
+          "duration": 500
+        },
+        {
+          "name": "pressure_sensor_spike",
+          "equipment": "IMM-02",
+          "startShot": 400,
+          "duration": 200
+        },
+        {
+          "name": "cooling_blockage",
+          "equipment": "IMM-02",
+          "startShot": 900,
+          "duration": 500
+        },
+        {
+          "name": "check_ring_wear",
+          "equipment": "IMM-01",
+          "startShot": 1200,
+          "duration": 600
+        }
+      ]
+    }
+  },
+  "cases": 5,
+  "runs": 1
+}
