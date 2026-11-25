@@ -149,13 +149,22 @@ class ActionLoopTest {
 
     @Test
     void 저위험_조치는_자동_실행되고_효과가_있으면_해소로_끝난다() {
-        agent.onRequested(analysisDone(10, null, "SENSOR_CHECK", "SENSOR_FAULT", 70, "LOW"));
+        agent.onRequested(analysisDone(10, null, "SENSOR_CHECK", "SENSOR_FAULT", 85, "LOW"));
         assertThat(store.rows.get(1)).containsEntry("mode", "AUTO").containsEntry("status", "EXECUTED");
 
         store.window = new EffectEvaluator.Window(null, null, null, 0, 40);
         checker.poll();
         assertThat(store.rows.get(1)).containsEntry("status", "RESOLVED");
         assertThat(pipeline.retries).isEmpty();
+    }
+
+    @Test
+    void 저위험_조치도_확신도_80_미만이면_승인_대기() {
+        agent.onRequested(analysisDone(13, null, "SENSOR_CHECK", "SENSOR_FAULT", 70, "LOW"));
+        assertThat(store.rows.get(1)).containsEntry("mode", "APPROVAL").containsEntry("status", "WAITING_APPROVAL");
+        ActionPolicy.Decision d = new ActionPolicy(3).decide(new ActionPolicy.Context(
+                ActionCatalog.forCause("SENSOR_CHECK", "SENSOR_FAULT"), "LOW", 79, true, 0));
+        assertThat(d.reasons()).containsExactly("확신도 79 < 기준 80");
     }
 
     @Test

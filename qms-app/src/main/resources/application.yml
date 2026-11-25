@@ -111,7 +111,7 @@ qg:
       daily-tokens: 1000000           # 오늘(0시부터) 입력+출력+생각 토큰 합이 넘으면 자동 분석 중지. 수동 분석은 가능. 0 이면 끔
       zone: Asia/Seoul
     ml-triage:                        # ML 먼저, 애매하면 LLM (실험 기능, eval/ml_cascade_report.md)
-      mode: "off"                    # skip(기본, 2026-11-24 켬: 학습한 고장 원인을 threshold 이상이면 LLM 생략) / shadow(ML 판단을 기록만) / off(끄기: QG_AGENT_ML_TRIAGE_MODE=off)
+      mode: "skip"                    # skip(기본, 2026-11-24 켬, 11-25 ADR-022 로 확정: 학습한 고장 원인을 threshold 이상이면 LLM 생략) / shadow(ML 판단을 기록만) / off(끄기: QG_AGENT_ML_TRIAGE_MODE=off)
       threshold: 0.9                  # skip 기준 확률. 단발성(NOISE)은 확률과 관계없이 LLM 으로 넘긴다
       model: classpath:ml/cause-forest.json   # scripts/ml_cascade.sh 가 만든 모델 (시뮬레이터 학습)
       novelty-check: true             # 고른 원인의 학습 경보들과 많이 다른 '낯선 경보'는 확률이 높아도 LLM 으로 (eval/ml_novel_report.md)

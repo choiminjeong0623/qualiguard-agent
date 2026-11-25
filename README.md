@@ -41,7 +41,7 @@
 - [문제 정의](docs/01-problem-definition.md) — 누구의 어떤 문제를 풀려는가
 - [아키텍처](docs/02-architecture.md) — 구성 요소, 메시지 형식, 전달 보장 설계
 - [시스템 설계도](docs/04-architecture-diagram.md) — 전체 시스템, 에이전트 파이프라인, 사건 상태, 승인·연계 순서 그림
-- [의사결정 기록](docs/decisions/README.md) — ADR-001 ~ 015
+- [의사결정 기록](docs/decisions/README.md) — ADR-001 ~ 022
 - [장애 분석](docs/troubleshooting/README.md) — 개발 중 겪은 문제와 해결 과정 (평가 방식의 허점을 찾은 과정 포함)
 - [평가 결과](docs/evaluation.md) — 측정 방법, 결과, 한계
 - [품질 담당자용 요약](docs/for-quality-team.md) — 기술 용어 없이 쓴 한 장 소개
