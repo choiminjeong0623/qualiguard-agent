@@ -10,6 +10,13 @@ test('조치 목록과 필터별 건수가 보인다', async ({ page }) => {
   await expect(page.locator('[data-count="ESCALATED"]').first()).toHaveText('1');
 });
 
+test('승인 대기 행에 근거(확신도·검증·분석 번호)와 묶인 같은 판단 수가 보인다', async ({ page }) => {
+  await open(page, '/qms/actions.html');
+  const row = page.locator('#rows tr', { hasText: '라인 정지·체크 링 교체' });
+  await expect(row).toContainText('확신도 97 · 검증 통과 · 분석 #2101');
+  await expect(row).toContainText('같은 판단 3번 더 · 마지막 분석 #2109');
+});
+
 test('고위험 조치를 승인하면 승인 API 를 부른다', async ({ page }) => {
   const s = await open(page, '/qms/actions.html');
   await page.getByRole('button', { name: '승인·실행' }).click();

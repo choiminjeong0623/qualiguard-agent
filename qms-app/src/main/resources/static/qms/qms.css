@@ -309,6 +309,7 @@ a { color: var(--qg-color-primary); }
 .qg-seg [aria-pressed="true"] [data-count] { color: inherit; }
 .qg-table td.qg-wrap { white-space: normal; min-width: 180px; }
 .qg-note-cell { max-width: 360px; font-size: var(--qg-fs-xs); line-height: var(--qg-lh-xs); }
+.qg-note-cell .qg-repeat { display: inline-block; margin-top: 2px; padding: 0 6px; border-radius: 4px; background: var(--qg-color-warning-subtle); font-weight: 600; }
 .qg-table tr.qg-row-attn > td:first-child { box-shadow: inset 3px 0 0 var(--qg-color-warning); }
 .qg-brief { margin-top: var(--qg-space-2); padding: var(--qg-space-2) var(--qg-space-3); border-left: 3px solid var(--qg-color-info);
   background: var(--qg-color-info-subtle); font-size: var(--qg-fs-xs); line-height: var(--qg-lh-xs); }

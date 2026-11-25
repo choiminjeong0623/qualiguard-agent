@@ -43,18 +43,32 @@ public class ActionAgent {
         }
         String equipmentId = str(d.get("equipmentId"));
         int analysisId = num(d.get("analysisId"));
-        int confidence = d.get("confidence") == null ? 0 : num(d.get("confidence"));
+        Integer confidence = d.get("confidence") == null ? null : num(d.get("confidence"));
         boolean verified = Boolean.TRUE.equals(d.get("verified"));
+        if (store.handled(analysisId)) {
+            return;   // 같은 이벤트가 다시 왔다 (Kafka 재전달 등): 한 번만 처리
+        }
 
         // 효과가 없어 다시 분석한 결과면 몇 번째 조치인지 이어 센다
         var prev = store.retriedFrom(d.get("parentAnalysisId") == null ? null : num(d.get("parentAnalysisId")));
         int attempt = prev.map(p -> num(p.get("attempt")) + 1).orElse(1);
         Integer parentActionId = prev.map(p -> num(p.get("action_id"))).orElse(null);
 
+        // 같은 설비·같은 조치가 아직 끝나지 않았으면(승인 대기·효과 확인 중) 새로 만들지 않고 묶는다
+        if (attempt == 1) {
+            var waiting = store.pendingSame(equipmentId, action.code());
+            if (waiting.isPresent()) {
+                store.markRepeated(waiting.get(), analysisId, confidence, verified);
+                log.info("[조치] {} {} → {} 이미 진행 중 (조치 {}) — 같은 판단으로 묶음", equipmentId,
+                        d.get("causeCode"), action.code(), waiting.get());
+                return;
+            }
+        }
+
         ActionPolicy.Decision decision = policy.decide(new ActionPolicy.Context(action, str(d.get("severity")),
-                confidence, verified, store.autoCountLast24h(equipmentId)));
+                confidence == null ? 0 : confidence, verified, store.autoCountLast24h(equipmentId)));
         int actionId = store.insert(analysisId, equipmentId, str(d.get("causeCode")), action, decision, attempt,
-                parentActionId);
+                parentActionId, confidence, verified);
         if (decision.mode() == ActionPolicy.Mode.AUTO) {
             store.markExecuted(actionId, null);
         }
